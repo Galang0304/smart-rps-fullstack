@@ -1,0 +1,889 @@
+--
+-- PostgreSQL database dump
+--
+
+\restrict IeuXPEDTuYyNwMxQZWTYh0LeLzA47YLYN7pS5tyHD442hKj73twtMgUlgtVOWIM
+
+-- Dumped from database version 16.11
+-- Dumped by pg_dump version 16.11
+
+-- Started on 2025-12-08 00:08:17
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- TOC entry 219 (class 1259 OID 17225)
+-- Name: courses; Type: TABLE; Schema: public; Owner: smart_rps_user
+--
+
+CREATE TABLE public.courses (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    program_id uuid,
+    code text NOT NULL,
+    title text NOT NULL,
+    credits bigint,
+    semester bigint,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    deleted_at timestamp with time zone,
+    prodi_id uuid
+);
+
+
+ALTER TABLE public.courses OWNER TO smart_rps_user;
+
+--
+-- TOC entry 224 (class 1259 OID 17343)
+-- Name: dosen_courses; Type: TABLE; Schema: public; Owner: smart_rps_user
+--
+
+CREATE TABLE public.dosen_courses (
+    dosen_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    course_id uuid DEFAULT gen_random_uuid() NOT NULL
+);
+
+
+ALTER TABLE public.dosen_courses OWNER TO smart_rps_user;
+
+--
+-- TOC entry 223 (class 1259 OID 17305)
+-- Name: dosen_rps_accesses; Type: TABLE; Schema: public; Owner: smart_rps_user
+--
+
+CREATE TABLE public.dosen_rps_accesses (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    dosen_id uuid NOT NULL,
+    generated_rps_id uuid NOT NULL,
+    access_level text DEFAULT 'read'::text NOT NULL,
+    granted_by uuid,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    deleted_at timestamp with time zone
+);
+
+
+ALTER TABLE public.dosen_rps_accesses OWNER TO smart_rps_user;
+
+--
+-- TOC entry 218 (class 1259 OID 17201)
+-- Name: dosens; Type: TABLE; Schema: public; Owner: smart_rps_user
+--
+
+CREATE TABLE public.dosens (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid,
+    prodi_id uuid,
+    n_id_n text NOT NULL,
+    nama_lengkap text NOT NULL,
+    email text NOT NULL,
+    no_telepon text,
+    jabatan_fungsional text,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    deleted_at timestamp with time zone
+);
+
+
+ALTER TABLE public.dosens OWNER TO smart_rps_user;
+
+--
+-- TOC entry 222 (class 1259 OID 17280)
+-- Name: generated_rps; Type: TABLE; Schema: public; Owner: smart_rps_user
+--
+
+CREATE TABLE public.generated_rps (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    template_version_id uuid,
+    course_id uuid,
+    generated_by uuid,
+    status text DEFAULT 'draft'::text,
+    result jsonb,
+    exported_file_url text,
+    ai_metadata jsonb,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    deleted_at timestamp with time zone
+);
+
+
+ALTER TABLE public.generated_rps OWNER TO smart_rps_user;
+
+--
+-- TOC entry 216 (class 1259 OID 17168)
+-- Name: prodis; Type: TABLE; Schema: public; Owner: smart_rps_user
+--
+
+CREATE TABLE public.prodis (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid,
+    kode_prodi text NOT NULL,
+    nama_prodi text NOT NULL,
+    fakultas text NOT NULL,
+    jenjang text NOT NULL,
+    email_kaprodi text NOT NULL,
+    nama_kaprodi text NOT NULL,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    deleted_at timestamp with time zone,
+    program_id uuid
+);
+
+
+ALTER TABLE public.prodis OWNER TO smart_rps_user;
+
+--
+-- TOC entry 217 (class 1259 OID 17185)
+-- Name: programs; Type: TABLE; Schema: public; Owner: smart_rps_user
+--
+
+CREATE TABLE public.programs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    prodi_id uuid,
+    code text NOT NULL,
+    name text NOT NULL,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    deleted_at timestamp with time zone
+);
+
+
+ALTER TABLE public.programs OWNER TO smart_rps_user;
+
+--
+-- TOC entry 221 (class 1259 OID 17261)
+-- Name: template_versions; Type: TABLE; Schema: public; Owner: smart_rps_user
+--
+
+CREATE TABLE public.template_versions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    template_id uuid,
+    version bigint NOT NULL,
+    definition jsonb,
+    created_by uuid,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    deleted_at timestamp with time zone
+);
+
+
+ALTER TABLE public.template_versions OWNER TO smart_rps_user;
+
+--
+-- TOC entry 220 (class 1259 OID 17241)
+-- Name: templates; Type: TABLE; Schema: public; Owner: smart_rps_user
+--
+
+CREATE TABLE public.templates (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    program_id uuid,
+    name text NOT NULL,
+    description text,
+    created_by uuid,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    deleted_at timestamp with time zone
+);
+
+
+ALTER TABLE public.templates OWNER TO smart_rps_user;
+
+--
+-- TOC entry 215 (class 1259 OID 17154)
+-- Name: users; Type: TABLE; Schema: public; Owner: smart_rps_user
+--
+
+CREATE TABLE public.users (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    username text NOT NULL,
+    password text NOT NULL,
+    email text,
+    display_name text,
+    role text DEFAULT 'viewer'::text NOT NULL,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    deleted_at timestamp with time zone
+);
+
+
+ALTER TABLE public.users OWNER TO smart_rps_user;
+
+--
+-- TOC entry 4998 (class 0 OID 17225)
+-- Dependencies: 219
+-- Data for Name: courses; Type: TABLE DATA; Schema: public; Owner: smart_rps_user
+--
+
+COPY public.courses (id, program_id, code, title, credits, semester, created_at, updated_at, deleted_at, prodi_id) FROM stdin;
+cb1bf49c-7473-434e-a93d-6c1a526fe8c4	6b4fb516-28e1-4670-a3ad-81f6270092af	qweqwe	qweqw	2	2	2025-12-06 18:21:58.621971+08	2025-12-06 18:27:50.27033+08	2025-12-06 22:20:37.263654+08	\N
+9a2bb2d4-e26f-4019-bdfd-3829fbf7b29d	6b4fb516-28e1-4670-a3ad-81f6270092af	AW60910042101	Pendidikan Pancasila	2	1	2025-12-06 18:28:10.975787+08	2025-12-06 22:20:47.702025+08	\N	\N
+5808c68c-b1e7-438b-84d0-c4459904f0ca	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552023101	Matematika Dasar	3	1	2025-12-06 18:28:10.981807+08	2025-12-06 18:28:10.981807+08	\N	\N
+ad902a31-e94b-442f-8609-fc5fabcb1a38	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022102	Matematika Informatika	2	1	2025-12-06 18:28:10.982867+08	2025-12-06 18:28:10.982867+08	\N	\N
+ec468123-aa76-4244-a797-234c2072459d	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022103	Dasar Algoritma & Pemrograman	2	1	2025-12-06 18:28:10.983373+08	2025-12-06 18:28:10.983373+08	\N	\N
+5a67bc0d-ffe2-467b-bd8b-c68847de0ab4	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021104	Praktikum Dasar Algoritma & Pemrograman	1	1	2025-12-06 18:28:10.984467+08	2025-12-06 18:28:10.984467+08	\N	\N
+9908dd31-05cf-488f-a3b9-578675fa1ccf	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022105	Pengantar Sains dan Informatika	2	1	2025-12-06 18:28:10.985556+08	2025-12-06 18:28:10.985556+08	\N	\N
+f8dc8f3f-25d9-4de7-bddd-7322e68f2979	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552020105	Praktikum Basic Command Line Linux	0	1	2025-12-06 18:28:10.98607+08	2025-12-06 18:28:10.98607+08	\N	\N
+24cd0740-25cc-41d5-85db-9fbaeaed25d9	6b4fb516-28e1-4670-a3ad-81f6270092af	AW60910042206	Al Islam Kemuhammadiyahan II	2	2	2025-12-06 18:28:10.987712+08	2025-12-06 18:28:10.987712+08	\N	\N
+aa055f94-fd2b-4d80-84e0-5087a8a04ae4	6b4fb516-28e1-4670-a3ad-81f6270092af	AW60910042202	Pendidikan Kewarganegaraan	2	2	2025-12-06 18:28:10.988229+08	2025-12-06 18:28:10.988229+08	\N	\N
+473d8213-aa1f-4dca-b09c-3fce32f8c27b	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022206	Eng for Computer Science	2	2	2025-12-06 18:28:10.989277+08	2025-12-06 18:28:10.989277+08	\N	\N
+9a90179d-8b6f-4d52-8fc3-cc4443c42351	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022207	Kalkulus	2	2	2025-12-06 18:28:10.98979+08	2025-12-06 18:28:10.98979+08	\N	\N
+5052abba-7021-48cb-a2b9-d1054b0148c1	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022208	Aljabar Linear & Matriks	2	2	2025-12-06 18:28:10.990811+08	2025-12-06 18:28:10.990811+08	\N	\N
+97ff428d-869a-41eb-842f-0784f85a88d3	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022209	Algoritma dan Pemrograman Tingkat Lanjut	2	2	2025-12-06 18:28:10.991329+08	2025-12-06 18:28:10.991329+08	\N	\N
+8405db26-190e-4e80-b7ca-33d82620b24f	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021210	Praktikum Algoritma dan Pemrograman Tingkat Lanjut	1	2	2025-12-06 18:28:10.99251+08	2025-12-06 18:28:10.99251+08	\N	\N
+4f29ff98-d508-47a9-8943-73bc03765714	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022211	Organisasi dan Arsitektur Komputer (OSK)	2	2	2025-12-06 18:28:10.993073+08	2025-12-06 18:28:10.993073+08	\N	\N
+743c52ee-b6fc-4470-aeba-ebf7fb305fdf	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022212	Dasar Pemrograman Web	2	2	2025-12-06 18:28:10.994624+08	2025-12-06 18:28:10.994624+08	\N	\N
+218695cd-2825-438f-bc88-51c5475cc21b	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021213	Praktikum Dasar Pemrograman Web	1	2	2025-12-06 18:28:10.995131+08	2025-12-06 18:28:10.995131+08	\N	\N
+2cdce4da-f400-456e-8b3f-d74645c5c7f4	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022214	Konsep Teknologi Informasi	2	2	2025-12-06 18:28:10.99622+08	2025-12-06 18:28:10.99622+08	\N	\N
+ac0c2786-6c3d-429b-89bd-43bf4e951a58	6b4fb516-28e1-4670-a3ad-81f6270092af	AW60910042307	Al Islam Kemuhammadiyahan III	2	3	2025-12-06 18:28:10.996735+08	2025-12-06 18:28:10.996735+08	\N	\N
+bcb63af4-566e-4bce-88f5-da1dbf1e0384	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022315	Pemodelan dan Metode Numerik	2	3	2025-12-06 18:28:10.997759+08	2025-12-06 18:28:10.997759+08	\N	\N
+a92eb94b-9d2e-4aa0-a7ea-4e4c9cfc0d74	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022316	Aritmatika Komputer	2	3	2025-12-06 18:28:10.998274+08	2025-12-06 18:28:10.998274+08	\N	\N
+df66a49e-6a91-47eb-8f66-0e961cb570d1	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022317	Struktur Data	2	3	2025-12-06 18:28:10.999372+08	2025-12-06 18:28:10.999372+08	\N	\N
+fd2e5ec0-65b7-402f-bf75-0cf65c3323ed	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021318	Praktikum Struktur Data	0	3	2025-12-06 18:28:10.999885+08	2025-12-06 18:28:10.999885+08	\N	\N
+bc23e939-a3ac-45bb-b494-01f7b734e371	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022319	Sistem Basis Data Relasional	2	3	2025-12-06 18:28:11.000912+08	2025-12-06 18:28:11.000912+08	\N	\N
+40fd2d48-f002-4764-beb9-be054de1beba	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552020320	Praktikum Sistem Basis Data Relasional	0	3	2025-12-06 18:28:11.00143+08	2025-12-06 18:28:11.00143+08	\N	\N
+87c9d324-92e3-4358-9ce7-2b0237c63311	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022321	Strategi dan Simulasi Algoritma	2	3	2025-12-06 18:28:11.002968+08	2025-12-06 18:28:11.002968+08	\N	\N
+f409abfc-3202-4f3b-92d4-3c525f8a6a4a	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021322	Praktikum Strategi dan Simulasi Algoritma	1	3	2025-12-06 18:28:11.003503+08	2025-12-06 18:28:11.003503+08	\N	\N
+88fbe350-2b01-4f7d-bf48-be76addeceb4	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022323	Statistika	2	3	2025-12-06 18:28:11.005154+08	2025-12-06 18:28:11.005154+08	\N	\N
+029997ce-b618-4439-af85-11116934c5fd	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022324	Rekayasa Perangkat Lunak Skalabilitas	2	3	2025-12-06 18:28:11.006421+08	2025-12-06 18:28:11.006421+08	\N	\N
+35785e9d-dc6a-4770-a5b3-06756923e6fe	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022325	Jaringan Komputer	2	3	2025-12-06 18:28:11.007466+08	2025-12-06 18:28:11.007466+08	\N	\N
+a1930e98-c7bc-4c37-b617-7e7a715c3fea	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552020326	Praktikum Jaringan Komputer	1	3	2025-12-06 18:28:11.008012+08	2025-12-06 18:28:11.008012+08	\N	\N
+1d6b82d4-a1f8-4050-826e-843ab268ecec	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022327	Sistem Operasi	2	3	2025-12-06 18:28:11.009099+08	2025-12-06 18:28:11.009099+08	\N	\N
+c48f8887-12ed-425f-b799-fa4505c45b11	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022328	Pengantar Komputasi Modern	2	3	2025-12-06 18:28:11.010208+08	2025-12-06 18:28:11.010208+08	\N	\N
+9ebd55a4-aa6d-4d47-986b-3c43e92e0332	6b4fb516-28e1-4670-a3ad-81f6270092af	AW60910042408	Al Islam Kemuhammadiyahan IV	2	4	2025-12-06 18:28:11.010723+08	2025-12-06 18:28:11.010723+08	\N	\N
+db34788b-93d7-4d87-b844-1e3c14c44c61	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022429	Kecerdasan Buatan	2	4	2025-12-06 18:28:11.011749+08	2025-12-06 18:28:11.011749+08	\N	\N
+871ca6eb-bbcd-46ed-a858-a13a23651cec	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021430	Praktikum Kecerdasan Buatan	1	4	2025-12-06 18:28:11.012774+08	2025-12-06 18:28:11.012774+08	\N	\N
+d170c157-f2c5-445c-8090-c9e6f5fd263d	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022431	Kriptografi	2	4	2025-12-06 18:28:11.013812+08	2025-12-06 18:28:11.013812+08	\N	\N
+85d6b298-d74f-448c-b9da-69be05a35e79	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022432	Riset Operasional	2	4	2025-12-06 18:28:11.014321+08	2025-12-06 18:28:11.014321+08	\N	\N
+0afe8f34-8231-4274-8ecc-70a062c21d2b	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022433	Sistem Basis Data Modern	2	4	2025-12-06 18:28:11.015376+08	2025-12-06 18:28:11.015376+08	\N	\N
+cb9b0b48-1f61-4a29-ba32-e5db28a3fcac	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022434	Interaksi Manusia & Komputer	2	4	2025-12-06 18:28:11.015884+08	2025-12-06 18:28:11.015884+08	\N	\N
+162bddf3-d201-4824-85d5-1074a76e93d9	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022435	Sistem Informasi Manajemen	2	4	2025-12-06 18:28:11.017098+08	2025-12-06 18:28:11.017098+08	\N	\N
+6ae68e59-fec1-43ad-a8c0-f4ab98a8da02	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022436	Pemrograman WEB	2	4	2025-12-06 18:28:11.017617+08	2025-12-06 18:28:11.017617+08	\N	\N
+c2ca3a14-f2e4-407e-8685-84a0aeee2103	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021437	Praktikum Pemrograman WEB	1	4	2025-12-06 18:28:11.018903+08	2025-12-06 18:28:11.018903+08	\N	\N
+1dc75d9c-2b3a-4bf3-914d-5a6ab9ffce48	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022438	Rekayasa Komputasional	2	4	2025-12-06 18:28:11.019965+08	2025-12-06 18:28:11.019965+08	\N	\N
+3638a486-12e1-4359-a803-f09fb550f71e	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022439	Pengolahan Citra Digital	2	4	2025-12-06 18:28:11.021236+08	2025-12-06 18:28:11.021236+08	\N	\N
+8071ce49-1347-48c0-8128-e24692573153	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022440	Sistem Terdistribusi	2	4	2025-12-06 18:28:11.022324+08	2025-12-06 18:28:11.022324+08	\N	\N
+f4f9cb6f-d49a-4cd0-8464-ddf7e57215e7	6b4fb516-28e1-4670-a3ad-81f6270092af	BW6040401	Praktikum Ilmu Falak	0	4	2025-12-06 18:28:11.023416+08	2025-12-06 18:28:11.023416+08	\N	\N
+81444e8e-ab36-4e50-89f2-61d3453c08a4	6b4fb516-28e1-4670-a3ad-81f6270092af	AW60910040411	Komprehensif AIK	0	4	2025-12-06 18:28:11.023973+08	2025-12-06 18:28:11.023973+08	\N	\N
+9057b4ed-ca9b-4197-b49b-5b7dc2f7c7be	6b4fb516-28e1-4670-a3ad-81f6270092af	AW60910042103	Bahasa Indonesia	2	1	2025-12-06 18:28:10.977971+08	2025-12-07 01:31:22.294701+08	\N	\N
+483aa5db-d959-4fd2-b880-e8669600e2c1	6b4fb516-28e1-4670-a3ad-81f6270092af	AW60910042104	Bahasa Inggris	2	1	2025-12-06 18:28:10.979284+08	2025-12-07 01:47:02.851849+08	\N	\N
+cad45387-3a1f-418e-a88f-3a41be3e098c	6b4fb516-28e1-4670-a3ad-81f6270092af	AW60910042105	Pendidikan Agama	2	1	2025-12-06 18:28:10.980285+08	2025-12-07 12:53:34.356995+08	\N	\N
+b694d038-9008-41f5-8d82-51cf04a591ed	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022541	Desain dan Analisis Algoritma	2	5	2025-12-06 18:28:11.025035+08	2025-12-06 18:28:11.025035+08	\N	\N
+44189280-f43a-4c6f-a7ad-d198c9e7d6de	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022542	Grafik Komputer	2	5	2025-12-06 18:28:11.027748+08	2025-12-06 18:28:11.027748+08	\N	\N
+773a9b39-768d-41de-9d0b-d31d76c18a36	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022543	Teori Bahasa dan Otomata	2	5	2025-12-06 18:28:11.028774+08	2025-12-06 18:28:11.028774+08	\N	\N
+26205784-8c7a-40a6-ab56-38ac099ea12e	6b4fb516-28e1-4670-a3ad-81f6270092af	CP6552022544	Standarisasi Keselamatan Kerja	2	5	2025-12-06 18:28:11.029291+08	2025-12-06 18:28:11.029291+08	\N	\N
+e0a51377-1ea3-4dfa-9b0a-501a725c9288	6b4fb516-28e1-4670-a3ad-81f6270092af	BW6042502	Etika Profesi	2	5	2025-12-06 18:28:11.030322+08	2025-12-06 18:28:11.030322+08	\N	\N
+c94eb1fa-30b1-49d7-bddf-4eac61c1f5e4	6b4fb516-28e1-4670-a3ad-81f6270092af	BW6042503	Technopreneurship (Kepemimpinan dan kewirausahaan)	2	5	2025-12-06 18:28:11.030836+08	2025-12-06 18:28:11.030836+08	\N	\N
+9b01ce8f-70a9-43c3-84cf-b7ea892432e1	6b4fb516-28e1-4670-a3ad-81f6270092af	BW6042504	Metodologi Penelitian dan Publikasi Ilmiah	2	5	2025-12-06 18:28:11.03193+08	2025-12-06 18:28:11.03193+08	\N	\N
+09d28bfc-3fa1-456a-ab1d-c340d8e46676	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022545	Sistem Pakar	2	5	2025-12-06 18:28:11.033015+08	2025-12-06 18:28:11.033015+08	\N	\N
+70d0d842-8d35-4b34-9c80-2e91bd40800a	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552012507	Pemrograman Berbasis Objek	2	5	2025-12-06 18:28:11.033531+08	2025-12-06 18:28:11.033531+08	\N	\N
+bb2e8b4d-1cba-4a49-a8c0-3fad4f1adc40	6b4fb516-28e1-4670-a3ad-81f6270092af	AW60910040511	Komprehensif AIK	0	5	2025-12-06 18:28:11.034551+08	2025-12-06 18:28:11.034551+08	\N	\N
+bb3b5881-c537-4d33-b4a6-a34c4dbf76d5	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022546	Applied Machine Learning	2	5	2025-12-06 18:28:11.035066+08	2025-12-06 18:28:11.035066+08	\N	\N
+de19ae1e-ae3f-4c68-93e2-001ae498afb6	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021547	Praktikum Applied Machine Learning	0	5	2025-12-06 18:28:11.036134+08	2025-12-06 18:28:11.036134+08	\N	\N
+e5abb52d-4c66-4fdd-8ad0-42be3221e1bc	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022548	Data Engineering and Big Data Systems	2	5	2025-12-06 18:28:11.037404+08	2025-12-06 18:28:11.037404+08	\N	\N
+01c2616a-0c43-44aa-b7d5-d9a669c565fa	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021549	Praktikum Data Engineering and Big Data Systems	0	5	2025-12-06 18:28:11.038487+08	2025-12-06 18:28:11.038487+08	\N	\N
+130c5820-4475-4a1b-b5ca-d0af6ff3a397	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022550	Mathematics for AI	2	5	2025-12-06 18:28:11.039553+08	2025-12-06 18:28:11.039553+08	\N	\N
+1d510cd9-2666-4b4f-a3ce-db58a7d11cec	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022551	Cloud-Native Application Development	2	5	2025-12-06 18:28:11.04008+08	2025-12-06 18:28:11.04008+08	\N	\N
+f5367641-0fd2-454a-8cc7-12f2caab16ec	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021552	Praktikum Cloud-Native Application Development	0	5	2025-12-06 18:28:11.041106+08	2025-12-06 18:28:11.041106+08	\N	\N
+e6b3e477-3c19-406d-bd2c-d59ff7e2e3ce	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022553	DevOps and CI/CD Pipelines	2	5	2025-12-06 18:28:11.042129+08	2025-12-06 18:28:11.042129+08	\N	\N
+616d0a34-028f-4d41-ab46-950d9e229972	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021554	Praktikum DevOps and CI/CD Pipelines	0	5	2025-12-06 18:28:11.042642+08	2025-12-06 18:28:11.042642+08	\N	\N
+fd9fcf80-cdfe-44cb-9a7f-2d31ee399507	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022555	Advanced Software Design and Architecture	2	5	2025-12-06 18:28:11.043663+08	2025-12-06 18:28:11.043663+08	\N	\N
+eb7c6d7c-0206-44cc-9f62-f4e4fc604d6a	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022556	Advanced Network Security and Protocols	2	5	2025-12-06 18:28:11.04468+08	2025-12-06 18:28:11.04468+08	\N	\N
+2f0e9edf-9f38-49c3-b0db-b87561633ec0	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021557	Praktikum Advanced Network Security and Protocols	0	5	2025-12-06 18:28:11.045193+08	2025-12-06 18:28:11.045193+08	\N	\N
+c65575f0-4184-41b9-b5e7-5bb501503566	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022558	Ethical Hacking and Penetration Testing I	2	5	2025-12-06 18:28:11.046212+08	2025-12-06 18:28:11.046212+08	\N	\N
+1f5dec10-2ffc-4906-a8e1-6c415c91a3c3	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021559	Praktikum Ethical Hacking and Penetration Testing I	0	5	2025-12-06 18:28:11.046726+08	2025-12-06 18:28:11.046726+08	\N	\N
+41b18b8c-2b74-4e6a-957f-805886c241ec	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022560	Security Governance Risk and Compliance (GRC)	2	5	2025-12-06 18:28:11.047767+08	2025-12-06 18:28:11.047767+08	\N	\N
+5f5623a8-a5b3-47e7-a968-3cf2312e926d	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022661	Legal Aspek Produk Teknologi Informasi dan Komunikasi	2	6	2025-12-06 18:28:11.048796+08	2025-12-06 18:28:11.048796+08	\N	\N
+2e5c43a8-5fc9-4593-a405-d01cbd822902	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022662	Algoritma Pemrograman Paralel	2	6	2025-12-06 18:28:11.049819+08	2025-12-06 18:28:11.049819+08	\N	\N
+2aa5f0bb-161c-46bf-b3c4-830238ded7c6	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022663	Aplikasi Komputasi Bergerak	2	6	2025-12-06 18:28:11.050333+08	2025-12-06 18:28:11.050333+08	\N	\N
+baf69d03-d630-4855-b591-4c51d5054bbc	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021664	Praktikum Aplikasi Komputasi Bergerak	1	6	2025-12-06 18:28:11.051427+08	2025-12-06 18:28:11.051427+08	\N	\N
+5df0dc48-5531-4aac-8de4-da619fc171e9	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022665	Teknologi Game	2	6	2025-12-06 18:28:11.051939+08	2025-12-06 18:28:11.051939+08	\N	\N
+9e00a377-689b-4258-b86d-5c587c73d0d4	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022666	Deep Learning and Neural Networks	2	6	2025-12-06 18:28:11.052962+08	2025-12-06 18:28:11.052962+08	\N	\N
+a3a43b5a-54f5-48d3-b319-75c89b7edb89	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021667	Praktikum Deep Learning and Neural Networks	1	6	2025-12-06 18:28:11.054036+08	2025-12-06 18:28:11.054036+08	\N	\N
+8133fb60-f2ef-4875-9071-3f960860b108	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022668	Generative AI and Large Language Models	2	6	2025-12-06 18:28:11.055095+08	2025-12-06 18:28:11.055095+08	\N	\N
+e3498e64-efb7-4cf6-a998-bb80c27a93a4	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021669	Praktikum Generative AI and Large Language Models	1	6	2025-12-06 18:28:11.05561+08	2025-12-06 18:28:11.05561+08	\N	\N
+774f26a6-60c5-4b83-af7d-41b039dbd78b	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552023670	MLOps (Machine Learning in Production)	2	6	2025-12-06 18:28:11.056637+08	2025-12-06 18:28:11.056637+08	\N	\N
+5a6ad3fd-651d-4e0e-b1d4-f0444b5b1bc4	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022671	Natural Language Processing (NLP)	2	6	2025-12-06 18:28:11.05718+08	2025-12-06 18:28:11.05718+08	\N	\N
+339a89ee-f70b-43fb-a539-62f688e9d1c8	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021672	Praktikum Natural Language Processing (NLP)	1	6	2025-12-06 18:28:11.058257+08	2025-12-06 18:28:11.058257+08	\N	\N
+4e29923f-cc5c-4353-ad05-17a8bf0beeab	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552023673	Responsible AI: Ethics and Governance	2	6	2025-12-06 18:28:11.059461+08	2025-12-06 18:28:11.059461+08	\N	\N
+168a6e5b-7d71-4be6-98fe-4180181e95d1	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022674	Microservices: Design and Implementation	2	6	2025-12-06 18:28:11.059975+08	2025-12-06 18:28:11.059975+08	\N	\N
+547a61ac-b4cb-4ca1-87d6-42498f17fe3c	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021675	Praktikum Microservices: Design and Implementation	1	6	2025-12-06 18:28:11.060999+08	2025-12-06 18:28:11.060999+08	\N	\N
+d83a19c2-401b-49a6-b5f2-3b71c22f72ef	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552023676	Secure Software Development Lifecycle (DevSecOps)	2	6	2025-12-06 18:28:11.061513+08	2025-12-06 18:28:11.061513+08	\N	\N
+7239eeea-a489-48d0-876a-beadc020ff1f	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552023677	Advanced Software Testing and Quality Assurance	2	6	2025-12-06 18:28:11.062534+08	2025-12-06 18:28:11.062534+08	\N	\N
+41a7dfc4-95cb-41a1-9234-9266829632dd	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022678	Scalable Systems Design	2	6	2025-12-06 18:28:11.06305+08	2025-12-06 18:28:11.06305+08	\N	\N
+bfaaff3d-54d9-405d-a085-2454f10b3f2d	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021679	Praktikum Scalable Systems Design	1	6	2025-12-06 18:28:11.064189+08	2025-12-06 18:28:11.064189+08	\N	\N
+4abd5598-4eac-4761-a9dc-160ded520650	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022680	Mobile and Cross-Platform Development	2	6	2025-12-06 18:28:11.06521+08	2025-12-06 18:28:11.06521+08	\N	\N
+111c5113-088a-4fde-8c0d-726e2d852766	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021681	Praktikum Mobile and Cross-Platform Development	1	6	2025-12-06 18:28:11.066274+08	2025-12-06 18:28:11.066274+08	\N	\N
+b74a1197-7d7f-4c86-ab77-ce22a2bb7e8a	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022682	Cloud Security Architecture	2	6	2025-12-06 18:28:11.06741+08	2025-12-06 18:28:11.06741+08	\N	\N
+07bacdba-1cc9-44d6-9dcd-d8799f98a7a6	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021683	Praktikum Cloud Security Architecture	1	6	2025-12-06 18:28:11.067924+08	2025-12-06 18:28:11.067924+08	\N	\N
+7bb8a7b7-007a-4f88-8967-4b0a86456398	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022684	Digital Forensics and Incident Response	2	6	2025-12-06 18:28:11.068984+08	2025-12-06 18:28:11.068984+08	\N	\N
+0c4a8c7e-741f-444c-bfdd-4d99be96e31e	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021685	Praktikum Digital Forensics and Incident Response	1	6	2025-12-06 18:28:11.070577+08	2025-12-06 18:28:11.070577+08	\N	\N
+e0472ba6-dd7d-465e-869a-c377ecbe4a66	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552023686	Cryptography and Secure Communications	2	6	2025-12-06 18:28:11.071836+08	2025-12-06 18:28:11.071836+08	\N	\N
+87beaeeb-a011-4b7e-a149-0b2de7d1377b	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552022687	Ethical Hacking and Penetration Testing II	2	6	2025-12-06 18:28:11.072865+08	2025-12-06 18:28:11.072865+08	\N	\N
+0d498417-0a50-4c88-bcd4-6a415ed3d7a3	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552021688	Praktikum Ethical Hacking and Penetration Testing II	1	6	2025-12-06 18:28:11.073893+08	2025-12-06 18:28:11.073893+08	\N	\N
+38cc9b88-f5ae-4305-a921-3bf5827defde	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552023689	Cyber Threat Intelligence	2	6	2025-12-06 18:28:11.074927+08	2025-12-06 18:28:11.074927+08	\N	\N
+1f5e9bc8-2f7a-4834-a89b-30d2634a250d	6b4fb516-28e1-4670-a3ad-81f6270092af	BW6044705	Kuliah Kerja Profesi - Plus (KKp-Plus)	4	7	2025-12-06 18:28:11.075949+08	2025-12-06 18:28:11.075949+08	\N	\N
+0b347955-06f9-4bab-800e-8fca6e93dcd8	6b4fb516-28e1-4670-a3ad-81f6270092af	CW6552023789	Capstone Project	3	7	2025-12-06 18:28:11.076474+08	2025-12-06 18:28:11.076474+08	\N	\N
+c3e3541f-b810-4a06-b5db-327e0e0cf74d	6b4fb516-28e1-4670-a3ad-81f6270092af	BW6042706	Seminar dan Usulan skripsi	2	7	2025-12-06 18:28:11.077504+08	2025-12-06 18:28:11.077504+08	\N	\N
+2bb44b95-501c-4c90-8c8d-ece50c4acdcd	6b4fb516-28e1-4670-a3ad-81f6270092af	BW6046707	Skripsi	6	7	2025-12-06 18:28:11.078018+08	2025-12-06 18:28:11.078018+08	\N	\N
+473363db-a561-4688-9c78-e06f647f2a01	6b4fb516-28e1-4670-a3ad-81f6270092af	234234	pembuatan web rps	3	7	2025-12-07 21:38:42.970061+08	2025-12-07 21:38:42.970061+08	\N	\N
+\.
+
+
+--
+-- TOC entry 5003 (class 0 OID 17343)
+-- Dependencies: 224
+-- Data for Name: dosen_courses; Type: TABLE DATA; Schema: public; Owner: smart_rps_user
+--
+
+COPY public.dosen_courses (dosen_id, course_id) FROM stdin;
+af1b8fd5-d6a3-485d-801f-9d3450bce62d	cad45387-3a1f-418e-a88f-3a41be3e098c
+af1b8fd5-d6a3-485d-801f-9d3450bce62d	9a2bb2d4-e26f-4019-bdfd-3829fbf7b29d
+af1b8fd5-d6a3-485d-801f-9d3450bce62d	5808c68c-b1e7-438b-84d0-c4459904f0ca
+af1b8fd5-d6a3-485d-801f-9d3450bce62d	2bb44b95-501c-4c90-8c8d-ece50c4acdcd
+\.
+
+
+--
+-- TOC entry 5002 (class 0 OID 17305)
+-- Dependencies: 223
+-- Data for Name: dosen_rps_accesses; Type: TABLE DATA; Schema: public; Owner: smart_rps_user
+--
+
+COPY public.dosen_rps_accesses (id, dosen_id, generated_rps_id, access_level, granted_by, created_at, updated_at, deleted_at) FROM stdin;
+\.
+
+
+--
+-- TOC entry 4997 (class 0 OID 17201)
+-- Dependencies: 218
+-- Data for Name: dosens; Type: TABLE DATA; Schema: public; Owner: smart_rps_user
+--
+
+COPY public.dosens (id, user_id, prodi_id, n_id_n, nama_lengkap, email, no_telepon, jabatan_fungsional, is_active, created_at, updated_at, deleted_at) FROM stdin;
+af1b8fd5-d6a3-485d-801f-9d3450bce62d	ebbe3ce3-a2ec-4ea1-afd5-7579e7278f4f	cf1f1218-e4f2-4020-b320-70d70b62c8ab	93229492	galang	andiariegalang@gmail.com	09890980	lektor	t	2025-12-07 01:59:45.215007+08	2025-12-07 21:44:23.084166+08	\N
+\.
+
+
+--
+-- TOC entry 5001 (class 0 OID 17280)
+-- Dependencies: 222
+-- Data for Name: generated_rps; Type: TABLE DATA; Schema: public; Owner: smart_rps_user
+--
+
+COPY public.generated_rps (id, template_version_id, course_id, generated_by, status, result, exported_file_url, ai_metadata, created_at, updated_at, deleted_at) FROM stdin;
+15e7c21a-4a96-40be-90c6-68e977f3db1e	\N	9a2bb2d4-e26f-4019-bdfd-3829fbf7b29d	\N	completed	{"cpmk": [{"code": "CPMK-1", "description": "Mahasiswa mampu memahami dan menjelaskan konsep dasar Pancasila sebagai dasar negara, ideologi negara, dan pandangan hidup bangsa (C2)."}, {"code": "CPMK-2", "description": "Mahasiswa mampu menganalisis nilai-nilai Pancasila dalam konteks kehidupan bermasyarakat, berbangsa, dan bernegara (C4)."}, {"code": "CPMK-3", "description": "Mahasiswa mampu mengaplikasikan nilai-nilai Pancasila dalam menyelesaikan permasalahan sosial dan etika yang dihadapi dalam kehidupan sehari-hari (C3)."}], "topik": [{"week": 1, "topic": "Pengantar Pendidikan Pancasila: Urgensi dan Relevansi", "description": "Membahas mengapa Pancasila penting dipelajari di perguruan tinggi dan relevansinya dalam kehidupan berbangsa dan bernegara."}, {"week": 2, "topic": "Sejarah Lahirnya Pancasila: Proses Perumusan dan Pengesahan", "description": "Mempelajari sejarah perumusan Pancasila oleh para pendiri bangsa, mulai dari BPUPKI hingga PPKI, serta proses pengesahannya sebagai dasar negara."}, {"week": 3, "topic": "Pancasila Pra-Kemerdekaan: Nilai-Nilai Luhur Bangsa Indonesia", "description": "Mengidentifikasi dan memahami nilai-nilai luhur yang telah hidup dan berkembang dalam masyarakat Indonesia sebelum kemerdekaan yang menjadi sumber Pancasila."}, {"week": 4, "topic": "Pancasila sebagai Dasar Negara: Pengertian, Fungsi, dan Kedudukan", "description": "Mendefinisikan Pancasila sebagai dasar negara, menjelaskan fungsi dan kedudukannya dalam sistem hukum dan ketatanegaraan Indonesia."}, {"week": 5, "topic": "Pancasila sebagai Ideologi Negara: Pengertian dan Ciri-Ciri Ideologi", "description": "Memahami pengertian ideologi, ciri-ciri ideologi, dan bagaimana Pancasila memenuhi kriteria sebagai ideologi negara."}, {"week": 6, "topic": "Pancasila sebagai Pandangan Hidup Bangsa: Nilai-Nilai yang Mendasari Perilaku", "description": "Menganalisis Pancasila sebagai pandangan hidup yang membimbing perilaku dan tindakan seluruh warga negara Indonesia."}, {"week": 7, "topic": "Nilai-Nilai Pancasila: Ketuhanan Yang Maha Esa", "description": "Mengkaji makna dan implementasi sila pertama Pancasila dalam kehidupan beragama dan berkeyakinan di Indonesia."}, {"week": 8, "topic": "Nilai-Nilai Pancasila: Kemanusiaan yang Adil dan Beradab", "description": "Mengkaji makna dan implementasi sila kedua Pancasila dalam mewujudkan keadilan dan peradaban yang menjunjung tinggi harkat dan martabat manusia."}, {"week": 9, "topic": "Nilai-Nilai Pancasila: Persatuan Indonesia", "description": "Mengkaji makna dan implementasi sila ketiga Pancasila dalam menjaga persatuan dan kesatuan bangsa Indonesia di tengah keberagaman."}, {"week": 10, "topic": "Nilai-Nilai Pancasila: Kerakyatan yang Dipimpin oleh Hikmat Kebijaksanaan dalam Permusyawaratan/Perwakilan", "description": "Mengkaji makna dan implementasi sila keempat Pancasila dalam sistem demokrasi Indonesia yang berdasarkan musyawarah untuk mufakat."}, {"week": 11, "topic": "Nilai-Nilai Pancasila: Keadilan Sosial bagi Seluruh Rakyat Indonesia", "description": "Mengkaji makna dan implementasi sila kelima Pancasila dalam mewujudkan keadilan sosial dan kesejahteraan bagi seluruh rakyat Indonesia."}, {"week": 12, "topic": "Pancasila dalam Konteks Sejarah Ketatanegaraan Indonesia", "description": "Menganalisis peran Pancasila dalam berbagai konstitusi yang pernah berlaku di Indonesia (UUD 1945, Konstitusi RIS, UUDS 1950)."}, {"week": 13, "topic": "Implementasi Pancasila dalam Kehidupan Berbangsa dan Bernegara", "description": "Mengkaji bagaimana nilai-nilai Pancasila diimplementasikan dalam berbagai bidang kehidupan, seperti politik, ekonomi, sosial, dan budaya."}, {"week": 14, "topic": "Tantangan dan Aktualisasi Pancasila di Era Globalisasi", "description": "Menganalisis tantangan yang dihadapi Pancasila di era globalisasi dan bagaimana mengaktualisasikan nilai-nilainya dalam menghadapi tantangan tersebut."}, {"week": 15, "topic": "Pancasila dan Hukum: Hubungan dan Implikasinya", "description": "Mengkaji hubungan antara Pancasila dan sistem hukum di Indonesia, serta implikasinya dalam pembentukan dan penegakan hukum."}, {"week": 16, "topic": "Pancasila sebagai Etika Politik: Mewujudkan Pemerintahan yang Bersih dan Berwibawa", "description": "Menganalisis Pancasila sebagai landasan etika politik dalam mewujudkan pemerintahan yang bersih, berwibawa, dan berorientasi pada kepentingan rakyat."}], "tugas": [{"bobot": 20, "nomor": 1, "kriteria": "1. Ketepatan dalam menjelaskan pengertian, fungsi, dan kedudukan Pancasila sebagai dasar negara (20%). 2. Ketepatan dalam mengidentifikasi dan menjelaskan nilai-nilai Pancasila (30%). 3. Kualitas analisis isu/permasalahan dan kaitannya dengan nilai-nilai Pancasila (30%). 4. Kualitas solusi yang ditawarkan berdasarkan nilai-nilai Pancasila (10%). 5. Kerapian dan format penulisan (10%).", "sub_cpmk": "Sub-CPMK-1, Sub-CPMK-2", "indikator": "Mahasiswa mampu menjelaskan pengertian, fungsi, dan kedudukan Pancasila sebagai dasar negara dengan benar dan lengkap. Mahasiswa mampu mengidentifikasi dan menjelaskan minimal 3 nilai yang terkandung dalam setiap sila Pancasila dengan contoh konkret.", "batas_waktu": "Minggu ke-5", "judul_tugas": "Analisis Nilai-Nilai Pancasila sebagai Dasar Negara", "luaran_tugas": "Makalah analisis yang menjelaskan isu/permasalahan aktual dikaitkan dengan fungsi, kedudukan, dan nilai-nilai Pancasila sebagai dasar negara.", "daftar_rujukan": ["Kaelan. (2016). Pendidikan Pancasila. Paradigma.", "Latif, Y. (2011). Negara Paripurna: Historisitas, Rasionalitas, dan Aktualitas Pancasila. Gramedia Pustaka Utama."], "teknik_penilaian": "Rubrik penilaian makalah", "petunjuk_pengerjaan": "1. Pilih satu isu/permasalahan aktual yang terjadi di Indonesia (contoh: korupsi, intoleransi, ketimpangan ekonomi). 2. Jelaskan secara singkat isu/permasalahan tersebut. 3. Analisis bagaimana isu/permasalahan tersebut bertentangan dengan fungsi dan kedudukan Pancasila sebagai dasar negara. 4. Identifikasi dan jelaskan nilai-nilai dari setiap sila Pancasila yang dilanggar dalam isu/permasalahan tersebut. Berikan contoh konkret dari pelanggaran nilai tersebut. 5. Berikan solusi yang berdasarkan pada nilai-nilai Pancasila untuk mengatasi atau meminimalisir isu/permasalahan tersebut. 6. Tugas diketik rapi dengan format: Font Times New Roman, Size 12, Spasi 1.5, Margin Normal. Panjang tugas minimal 5 halaman."}], "subCPMK": [{"code": "Sub-CPMK-1", "cpmk_id": "CPMK-1", "description": "Mahasiswa mampu menjelaskan pengertian, fungsi, dan kedudukan Pancasila sebagai dasar negara Republik Indonesia."}, {"code": "Sub-CPMK-2", "cpmk_id": "CPMK-1", "description": "Mahasiswa mampu mengidentifikasi dan menjelaskan nilai-nilai yang terkandung dalam setiap sila Pancasila."}, {"code": "Sub-CPMK-3", "cpmk_id": "CPMK-1", "description": "Mahasiswa mampu membedakan Pancasila sebagai ideologi negara dengan ideologi-ideologi lainnya yang ada di dunia."}]}	\N	\N	2025-12-06 22:57:30.175675+08	2025-12-06 23:05:24.611137+08	2025-12-07 00:41:31.036643+08
+0c03e98b-adc7-420f-9ce7-9689c03fabef	\N	2bb44b95-501c-4c90-8c8d-ece50c4acdcd	\N	completed	{"cpmk": [{"code": "CPMK-1", "description": "Mahasiswa mampu merumuskan permasalahan penelitian yang relevan dan orisinal dalam bidang [sebutkan bidang spesifik, misal: Sistem Informasi, Teknik Informatika, dll.] secara sistematis dan komprehensif (C6)."}, {"code": "CPMK-2", "description": "Mahasiswa mampu merancang metodologi penelitian yang tepat dan sesuai dengan permasalahan penelitian, termasuk pemilihan metode pengumpulan data, analisis data, dan pengujian hipotesis (C6)."}, {"code": "CPMK-3", "description": "Mahasiswa mampu melaksanakan penelitian secara mandiri, bertanggung jawab, dan beretika, serta mengelola data dan informasi secara efektif (A5)."}], "topik": [{"week": 1, "topic": "Pengantar Skripsi: Tujuan, Manfaat, dan Tahapan Umum", "description": "Memahami definisi, tujuan, manfaat skripsi, serta tahapan umum dalam proses penyusunan skripsi di bidang Sistem Informasi."}, {"week": 2, "topic": "Etika Penelitian dan Integritas Akademik", "description": "Mempelajari prinsip-prinsip etika penelitian, menghindari plagiarisme, dan menjaga integritas akademik dalam penulisan skripsi."}, {"week": 3, "topic": "Mengenal Bidang Kajian Sistem Informasi dan Tren Penelitian Terkini", "description": "Mengidentifikasi berbagai bidang kajian dalam Sistem Informasi dan memahami tren penelitian terkini yang relevan."}, {"week": 4, "topic": "Dasar-Dasar Pencarian Literatur Ilmiah: Database dan Strategi Pencarian", "description": "Mempelajari cara menggunakan database ilmiah (Scopus, Web of Science, Google Scholar, dll.) dan mengembangkan strategi pencarian yang efektif untuk menemukan artikel relevan."}, {"week": 5, "topic": "Teknik Membaca dan Menganalisis Artikel Ilmiah", "description": "Mengembangkan kemampuan membaca cepat, mengidentifikasi poin-poin penting, dan menganalisis artikel ilmiah secara kritis."}, {"week": 6, "topic": "Identifikasi Masalah Penelitian: Sumber dan Teknik", "description": "Mempelajari sumber-sumber masalah penelitian (observasi, wawancara, studi literatur) dan teknik identifikasi masalah penelitian yang relevan."}, {"week": 7, "topic": "Merumuskan Latar Belakang Masalah yang Komprehensif", "description": "Mempelajari cara merumuskan latar belakang masalah yang jelas, relevan, dan didukung oleh data dan fakta yang kuat."}, {"week": 8, "topic": "Identifikasi Research Gap: Konsep dan Teknik Analisis", "description": "Memahami konsep research gap dan mempelajari berbagai teknik analisis untuk mengidentifikasi research gap dalam literatur."}, {"week": 9, "topic": "Perumusan Pertanyaan Penelitian yang Tepat dan Terukur", "description": "Mempelajari cara merumuskan pertanyaan penelitian yang spesifik, terukur, dapat dicapai, relevan, dan terikat waktu (SMART)."}, {"week": 10, "topic": "Menentukan Tujuan dan Manfaat Penelitian yang Jelas", "description": "Mempelajari cara merumuskan tujuan penelitian yang selaras dengan pertanyaan penelitian dan menjelaskan manfaat penelitian bagi pengembangan ilmu dan praktik."}, {"week": 11, "topic": "Kerangka Teori: Memilih dan Mengembangkan Landasan Teori yang Relevan", "description": "Mempelajari cara memilih dan mengembangkan kerangka teori yang relevan dengan masalah penelitian."}, {"week": 12, "topic": "Metodologi Penelitian: Memilih Metode yang Tepat (Kuantitatif, Kualitatif, Mixed Methods)", "description": "Memahami berbagai metode penelitian (kuantitatif, kualitatif, mixed methods) dan memilih metode yang paling tepat untuk menjawab pertanyaan penelitian."}, {"week": 13, "topic": "Desain Penelitian: Menyusun Rencana Penelitian yang Terstruktur", "description": "Mempelajari cara menyusun desain penelitian yang terstruktur, termasuk populasi dan sampel, teknik pengumpulan data, dan teknik analisis data."}, {"week": 14, "topic": "Pengumpulan dan Analisis Data (Sesuai Metode yang Dipilih)", "description": "Mempelajari teknik pengumpulan data yang sesuai dengan metode penelitian dan teknik analisis data yang relevan."}, {"week": 15, "topic": "Pembahasan Hasil Penelitian: Interpretasi dan Implikasi", "description": "Mempelajari cara membahas hasil penelitian, menginterpretasikan temuan, dan menjelaskan implikasi penelitian terhadap teori dan praktik."}, {"week": 16, "topic": "Penyusunan Kesimpulan dan Saran: Ringkasan Temuan dan Rekomendasi", "description": "Mempelajari cara menyusun kesimpulan yang ringkas dan jelas, serta memberikan saran yang relevan berdasarkan hasil penelitian."}], "tugas": [{"bobot": 20, "nomor": 1, "kriteria": "1. Ketepatan identifikasi celah penelitian (30%).\\n2. Kualitas rumusan pertanyaan penelitian SMART (30%).\\n3. Kelengkapan dan kedalaman latar belakang penelitian (40%).", "sub_cpmk": "Sub-CPMK-1, Sub-CPMK-2, Sub-CPMK-3", "indikator": "Mahasiswa mampu mengidentifikasi minimal 3 celah penelitian (research gap) yang relevan dan spesifik dalam literatur terkini bidang Sistem Informasi; Mahasiswa mampu merumuskan minimal 1 pertanyaan penelitian SMART berdasarkan celah penelitian yang teridentifikasi; Mahasiswa mampu menyusun latar belakang penelitian yang komprehensif dan sistematis, yang memuat justifikasi permasalahan penelitian dan relevansinya dengan bidang Sistem Informasi (minimal 3 halaman).", "batas_waktu": "Minggu ke-5", "judul_tugas": "Identifikasi Celah Penelitian dan Perumusan Latar Belakang Penelitian Skripsi", "luaran_tugas": "Dokumen yang berisi:\\n1. Daftar 3 celah penelitian (research gaps) yang teridentifikasi (masing-masing dijelaskan secara ringkas dalam 1-2 kalimat).\\n2. Rumusan 1 pertanyaan penelitian SMART.\\n3. Latar belakang penelitian (minimal 3 halaman).", "daftar_rujukan": ["Webster, J., & Watson, R. T. (2002). Analyzing the past to prepare for the future: Writing a literature review. MIS quarterly, xiii-xxiii.", "Levy, Y., & Ellis, T. J. (2011). A systems approach to conduct an effective literature review in support of information systems research. Informing science, 14, 181-212."], "teknik_penilaian": "Rubrik penilaian", "petunjuk_pengerjaan": "1. Lakukan studi literatur mendalam terhadap jurnal-jurnal ilmiah dan artikel-artikel konferensi terkini (5 tahun terakhir) di bidang Sistem Informasi. Fokuskan pada topik-topik yang diminati untuk skripsi.\\n2. Identifikasi minimal 3 celah penelitian (research gaps) yang ada dalam literatur tersebut. Celah penelitian dapat berupa area yang belum dieksplorasi, kontradiksi dalam hasil penelitian, atau keterbatasan metodologi yang digunakan.\\n3. Rumuskan minimal 1 pertanyaan penelitian SMART (Specific, Measurable, Achievable, Relevant, Time-bound) berdasarkan salah satu celah penelitian yang telah diidentifikasi.\\n4. Susun latar belakang penelitian yang komprehensif dan sistematis. Latar belakang penelitian harus mencakup:\\n    a. Konteks permasalahan penelitian (mengapa permasalahan ini penting untuk diteliti).\\n    b. Tinjauan literatur yang relevan (ringkasan penelitian-penelitian sebelumnya yang terkait).\\n    c. Identifikasi celah penelitian (research gap) yang akan diisi oleh penelitian ini.\\n    d. Rumusan pertanyaan penelitian.\\n    e. Tujuan dan manfaat penelitian.\\n    f. Relevansi penelitian dengan bidang Sistem Informasi.\\n5. Format penulisan: Font Times New Roman, ukuran 12, spasi 1.5, margin normal."}], "subCPMK": [{"code": "Sub-CPMK-1", "cpmk_id": "CPMK-1", "description": "Mahasiswa mampu mengidentifikasi dan menganalisis celah penelitian (research gap) dalam literatur terkini bidang Sistem Informasi."}, {"code": "Sub-CPMK-2", "cpmk_id": "CPMK-1", "description": "Mahasiswa mampu merumuskan pertanyaan penelitian yang spesifik, terukur, dapat dicapai, relevan, dan terikat waktu (SMART) berdasarkan celah penelitian yang teridentifikasi."}, {"code": "Sub-CPMK-3", "cpmk_id": "CPMK-1", "description": "Mahasiswa mampu menyusun latar belakang penelitian yang komprehensif dan sistematis, yang memuat justifikasi permasalahan penelitian dan relevansinya dengan bidang Sistem Informasi."}]}	\N	\N	2025-12-07 01:48:27.244595+08	2025-12-07 12:43:21.97304+08	\N
+5323e54e-b926-4518-979e-9e2f1435bc0f	\N	9a2bb2d4-e26f-4019-bdfd-3829fbf7b29d	\N	completed	{"cpmk": [{"code": "CPMK-1", "description": ""}, {"code": "CPMK-2", "description": ""}, {"code": "CPMK-3", "description": ""}], "topik": [{"week": 1, "topic": "", "description": ""}, {"week": 2, "topic": "", "description": ""}, {"week": 3, "topic": "", "description": ""}, {"week": 4, "topic": "", "description": ""}, {"week": 5, "topic": "", "description": ""}, {"week": 6, "topic": "", "description": ""}, {"week": 7, "topic": "", "description": ""}, {"week": 8, "topic": "", "description": ""}, {"week": 9, "topic": "", "description": ""}, {"week": 10, "topic": "", "description": ""}, {"week": 11, "topic": "", "description": ""}, {"week": 12, "topic": "", "description": ""}, {"week": 13, "topic": "", "description": ""}, {"week": 14, "topic": "", "description": ""}, {"week": 15, "topic": "", "description": ""}, {"week": 16, "topic": "", "description": ""}], "tugas": [{"bobot": 0, "nomor": 1, "kriteria": "", "sub_cpmk": "", "indikator": "", "batas_waktu": "", "judul_tugas": "", "luaran_tugas": "", "daftar_rujukan": [], "teknik_penilaian": "", "petunjuk_pengerjaan": ""}, {"bobot": 0, "nomor": 2, "kriteria": "", "sub_cpmk": "", "indikator": "", "batas_waktu": "", "judul_tugas": "", "luaran_tugas": "", "daftar_rujukan": [], "teknik_penilaian": "", "petunjuk_pengerjaan": ""}, {"bobot": 0, "nomor": 3, "kriteria": "", "sub_cpmk": "", "indikator": "", "batas_waktu": "", "judul_tugas": "", "luaran_tugas": "", "daftar_rujukan": [], "teknik_penilaian": "", "petunjuk_pengerjaan": ""}], "subCPMK": [{"code": "Sub-CPMK-1", "cpmk_id": "CPMK-1", "description": ""}, {"code": "Sub-CPMK-2", "cpmk_id": "CPMK-1", "description": ""}, {"code": "Sub-CPMK-3", "cpmk_id": "CPMK-1", "description": ""}]}	\N	\N	2025-12-07 12:43:11.40061+08	2025-12-07 12:43:24.676353+08	2025-12-07 12:50:53.019205+08
+1c93bdf4-7ded-4439-abdc-ddb4214d9b46	\N	5808c68c-b1e7-438b-84d0-c4459904f0ca	\N	completed	{"cpmk": [{"code": "CPMK-1", "description": "Mampu menjelaskan konsep dasar bilangan dan operasi matematis sederhana."}, {"code": "CPMK-2", "description": "Mampu menerapkan prinsip matematika dasar dalam menyelesaikan masalah sehari-hari."}, {"code": "CPMK-3", "description": "Mampu menganalisis dan menyusun informasi numerik dalam bentuk tabel dan grafik."}], "topik": [{"week": 1, "topic": "Pengenalan Bilangan", "description": "Mempelajari definisi bilangan dan kategori-kategorinya, termasuk bilangan bulat, pecahan, dan desimal."}, {"week": 2, "topic": "Bilangan Bulat", "description": "Mendalami sifat-sifat bilangan bulat, termasuk operasi penjumlahan, pengurangan, perkalian, dan pembagian."}, {"week": 3, "topic": "Bilangan Pecahan", "description": "Memahami konsep bilangan pecahan, termasuk cara menyederhanakan dan melakukan operasi dasar."}, {"week": 4, "topic": "Bilangan Desimal", "description": "Menggali konsep bilangan desimal dan hubungan antara pecahan dan desimal."}, {"week": 5, "topic": "Operasi Dasar Bilangan Bulat", "description": "Menguasai operasi dasar pada bilangan bulat dengan contoh aplikasi dalam kehidupan sehari-hari."}, {"week": 6, "topic": "Operasi Dasar Bilangan Pecahan", "description": "Belajar melakukan operasi penjumlahan, pengurangan, perkalian, dan pembagian pada bilangan pecahan."}, {"week": 7, "topic": "Operasi Dasar Bilangan Desimal", "description": "Mempelajari cara melakukan operasi dasar pada bilangan desimal."}, {"week": 8, "topic": "Perbandingan dan Urutan Bilangan", "description": "Mempelajari cara membandingkan dan mengurutkan bilangan bulat, pecahan, dan desimal."}, {"week": 9, "topic": "Penggunaan Bilangan dalam Masalah Sehari-hari", "description": "Menerapkan bilangan dalam konteks masalah sehari-hari dan situasi nyata."}, {"week": 10, "topic": "Konversi antara Pecahan dan Desimal", "description": "Belajar cara mengkonversi antara pecahan dan desimal secara tepat."}, {"week": 11, "topic": "Bilangan Campuran dan Pecahan Biasa", "description": "Mempelajari bilangan campuran dan cara mengubahnya menjadi pecahan biasa dan sebaliknya."}, {"week": 12, "topic": "Rasio dan Proporsi", "description": "Mengenal konsep rasio dan proporsi serta aplikasinya dalam konteks bilangan."}, {"week": 13, "topic": "Pengantar Persamaan dan Ketidaksamaan", "description": "Mempelajari konsep dasar persamaan dan ketidaksamaan serta cara menyelesaikannya."}, {"week": 14, "topic": "Grafik Bilangan", "description": "Belajar menggambarkan bilangan pada garis bilangan dan grafik sederhana."}, {"week": 15, "topic": "Penerapan Konsep Bilangan dalam Statistika", "description": "Mempelajari penggunaan bilangan dalam pengolahan data dan statistik dasar."}, {"week": 16, "topic": "Ulangan dan Evaluasi Konsep Bilangan", "description": "Mengadakan evaluasi untuk menguji pemahaman dan penerapan konsep bilangan yang telah dipelajari."}], "tugas": [{"bobot": 20, "nomor": 1, "kriteria": "1. Ketepatan definisi dan contoh (30%) \\n2. Ketepatan dan kebenaran hasil operasi (40%) \\n3. Keterbacaan dan kejelasan tabel dan grafik (30%)", "sub_cpmk": "Sub-CPMK-1, Sub-CPMK-2", "indikator": "Mahasiswa dapat mendefinisikan bilangan bulat, pecahan, dan desimal serta melakukan operasi penjumlahan dan pengurangan dengan benar.", "batas_waktu": "Minggu ke-5", "judul_tugas": "Operasi Dasar Bilangan: Penjumlahan dan Pengurangan", "luaran_tugas": "Dokumen yang berisi definisi, contoh bilangan, tabel hasil operasi, dan grafik.", "daftar_rujukan": ["Matematika Dasar untuk Pemula", "Pengenalan Bilangan dan Operasi Dasar"], "teknik_penilaian": "Penilaian rubrik berdasarkan kriteria yang telah ditentukan.", "petunjuk_pengerjaan": "1. Buatlah definisi singkat mengenai bilangan bulat, pecahan, dan desimal. \\n2. Berikan contoh masing-masing jenis bilangan tersebut. \\n3. Selesaikan 10 soal penjumlahan dan 10 soal pengurangan yang melibatkan bilangan bulat dan pecahan. \\n4. Tulis hasilnya dalam format tabel. \\n5. Buatlah grafik sederhana yang menunjukkan hasil penjumlahan dan pengurangan yang telah diselesaikan."}], "subCPMK": [{"code": "Sub-CPMK-1", "cpmk_id": "CPMK-1", "description": "Mampu mendefinisikan bilangan bulat, pecahan, dan desimal dengan benar."}, {"code": "Sub-CPMK-2", "cpmk_id": "CPMK-1", "description": "Mampu melakukan operasi penjumlahan dan pengurangan pada bilangan bulat dan pecahan."}, {"code": "Sub-CPMK-3", "cpmk_id": "CPMK-1", "description": "Mampu menyelesaikan soal cerita sederhana yang melibatkan operasi matematis dasar."}]}	\N	\N	2025-12-07 21:41:28.779759+08	2025-12-07 21:41:45.488718+08	\N
+be396cf3-ba02-46ff-9d79-6a31916f8f6b	\N	9a2bb2d4-e26f-4019-bdfd-3829fbf7b29d	\N	completed	{"cpmk": [{"code": "CPMK-1", "description": "Mahasiswa mampu menganalisis dan mengevaluasi nilai-nilai Pancasila sebagai dasar negara, ideologi, dan sistem etika dalam konteks kehidupan bermasyarakat, berbangsa, dan bernegara (C4, A3,A8)"}, {"code": "CPMK-2", "description": "Mahasiswa mampu mengidentifikasi dan menerapkan prinsip-prinsip Pancasila dalam memecahkan permasalahan sosial, politik, ekonomi, dan budaya yang relevan dengan perkembangan zaman (C3, P2)."}, {"code": "CPMK-3", "description": "Mahasiswa mampu menunjukkan sikap positif, bertanggung jawab, dan berpartisipasi aktif dalam mewujudkan nilai-nilai Pancasila dalam kehidupan sehari-hari (A5, P3)."}], "topik": [{"week": 1, "topic": "Pengantar Pendidikan Pancasila: Urgensi dan Relevansi", "description": "Membahas definisi, tujuan, dan manfaat mempelajari Pendidikan Pancasila. Menjelaskan mengapa Pancasila penting bagi generasi muda dan keberlangsungan bangsa."}, {"week": 2, "topic": "Sejarah Perumusan dan Lahirnya Pancasila", "description": "Mengupas proses perumusan Pancasila oleh para pendiri bangsa, mulai dari sidang BPUPKI hingga pengesahan Pancasila sebagai dasar negara dalam Pembukaan UUD 1945."}, {"week": 3, "topic": "Pancasila sebagai Dasar Negara: Makna dan Fungsi", "description": "Menganalisis kedudukan dan fungsi Pancasila sebagai dasar negara, sumber dari segala sumber hukum, dan panduan dalam penyelenggaraan negara."}, {"week": 4, "topic": "Pancasila sebagai Ideologi Negara: Konsep dan Perbandingan", "description": "Memahami Pancasila sebagai ideologi terbuka, membandingkannya dengan ideologi lain, dan menganalisis relevansinya dalam konteks global."}, {"week": 5, "topic": "Nilai-Nilai Pancasila: Ketuhanan Yang Maha Esa", "description": "Mengkaji makna dan implementasi sila pertama Pancasila dalam kehidupan beragama dan berkeyakinan di Indonesia, serta toleransi antar umat beragama."}, {"week": 6, "topic": "Nilai-Nilai Pancasila: Kemanusiaan yang Adil dan Beradab", "description": "Mengkaji makna dan implementasi sila kedua Pancasila terkait hak asasi manusia, kesetaraan, dan keadilan sosial."}, {"week": 7, "topic": "Nilai-Nilai Pancasila: Persatuan Indonesia", "description": "Mengkaji makna dan implementasi sila ketiga Pancasila dalam menjaga persatuan dan kesatuan bangsa, serta mengatasi konflik dan separatisme."}, {"week": 8, "topic": "Nilai-Nilai Pancasila: Kerakyatan yang Dipimpin oleh Hikmat Kebijaksanaan dalam Permusyawaratan/Perwakilan", "description": "Mengkaji makna dan implementasi sila keempat Pancasila dalam sistem demokrasi, partisipasi politik, dan pengambilan keputusan."}, {"week": 9, "topic": "Nilai-Nilai Pancasila: Keadilan Sosial bagi Seluruh Rakyat Indonesia", "description": "Mengkaji makna dan implementasi sila kelima Pancasila dalam mewujudkan kesejahteraan sosial, pemerataan ekonomi, dan keadilan bagi seluruh warga negara."}, {"week": 10, "topic": "Pancasila sebagai Sistem Etika: Norma dan Moralitas", "description": "Menganalisis Pancasila sebagai sistem etika yang menjadi landasan moral dalam kehidupan bermasyarakat, berbangsa, dan bernegara."}, {"week": 11, "topic": "Penerapan Nilai-Nilai Pancasila dalam Kebijakan Publik: Studi Kasus 1", "description": "Menganalisis secara kritis penerapan nilai-nilai Pancasila dalam kebijakan publik tertentu (misalnya, kebijakan pendidikan atau kesehatan)."}, {"week": 12, "topic": "Penerapan Nilai-Nilai Pancasila dalam Kebijakan Publik: Studi Kasus 2", "description": "Menganalisis secara kritis penerapan nilai-nilai Pancasila dalam kebijakan publik tertentu (misalnya, kebijakan ekonomi atau lingkungan)."}, {"week": 13, "topic": "Penerapan Nilai-Nilai Pancasila dalam Peraturan Perundang-undangan: Analisis Kritis", "description": "Menganalisis secara kritis kesesuaian peraturan perundang-undangan dengan nilai-nilai Pancasila, serta implikasinya terhadap masyarakat."}, {"week": 14, "topic": "Tantangan dan Aktualisasi Pancasila di Era Globalisasi", "description": "Membahas tantangan yang dihadapi Pancasila di era globalisasi, seperti pengaruh budaya asing dan ideologi transnasional, serta upaya aktualisasi nilai-nilai Pancasila dalam kehidupan sehari-hari."}, {"week": 15, "topic": "Pancasila dan Bela Negara: Tanggung Jawab Warga Negara", "description": "Mengkaji hubungan antara Pancasila dan bela negara, serta peran serta warga negara dalam mempertahankan dan mengamalkan nilai-nilai Pancasila."}, {"week": 16, "topic": "Refleksi dan Proyeksi Pendidikan Pancasila di Masa Depan", "description": "Merefleksikan relevansi Pendidikan Pancasila di masa depan dan merumuskan proyeksi untuk pengembangannya agar tetap relevan dan efektif dalam membentuk karakter bangsa."}], "tugas": [{"bobot": 20, "nomor": 1, "kriteria": "1. Ketepatan analisis kebijakan publik berdasarkan nilai-nilai Pancasila (30%)\\n2. Ketepatan evaluasi implementasi Pancasila dalam menghadapi tantangan globalisasi (30%)\\n3. Kualitas argumen dan dukungan data/fakta (20%)\\n4. Struktur makalah dan format sitasi (10%)\\n5. Orisinalitas dan kedalaman pemahaman (10%)", "sub_cpmk": "Sub-CPMK-1, Sub-CPMK-2", "indikator": "Mahasiswa mampu menganalisis secara kritis penerapan nilai-nilai Pancasila dalam minimal 3 kebijakan publik dan mengevaluasi implementasi Pancasila sebagai ideologi dalam menghadapi minimal 2 tantangan globalisasi.", "batas_waktu": "Minggu ke-7", "judul_tugas": "Analisis Kritis Kebijakan Publik dan Tantangan Globalisasi Berdasarkan Nilai Pancasila", "luaran_tugas": "Makalah analisis kritis (minimal 1500 kata) mengenai penerapan nilai-nilai Pancasila dalam kebijakan publik dan evaluasi implementasi Pancasila dalam menghadapi tantangan globalisasi.", "daftar_rujukan": ["Undang-Undang Dasar Negara Republik Indonesia Tahun 1945", "Buku teks Pendidikan Pancasila yang relevan", "Artikel jurnal ilmiah tentang Pancasila dan kebijakan publik", "Artikel jurnal ilmiah tentang Pancasila dan globalisasi"], "teknik_penilaian": "Rubrik penilaian makalah", "petunjuk_pengerjaan": "1. Pilih minimal 3 kebijakan publik di Indonesia (contoh: UU ITE, Kebijakan Pendidikan, Kebijakan Ekonomi) dan analisis bagaimana nilai-nilai Pancasila diterapkan atau dilanggar dalam kebijakan tersebut. Sertakan argumen yang didukung oleh data dan fakta.\\n2. Identifikasi minimal 2 tantangan globalisasi dan modernisasi (contoh: Radikalisme, Disrupsi Teknologi, Perubahan Iklim) yang mempengaruhi Indonesia. Evaluasi bagaimana Pancasila sebagai ideologi dapat menjadi landasan untuk menghadapi tantangan tersebut.\\n3. Susun hasil analisis dan evaluasi dalam bentuk makalah dengan format: Pendahuluan (latar belakang, rumusan masalah, tujuan), Pembahasan (analisis kebijakan publik, evaluasi tantangan globalisasi), Kesimpulan dan Saran.\\n4. Makalah harus dilengkapi dengan daftar pustaka yang relevan dan menggunakan format sitasi yang konsisten."}], "subCPMK": [{"code": "Sub-CPMK-1", "cpmk_id": "CPMK-1", "description": "Menganalisis secara kritis penerapan nilai-nilai Pancasila dalam berbagai kebijakan publik dan peraturan perundang-undangan di Indonesia."}, {"code": "Sub-CPMK-2", "cpmk_id": "CPMK-1", "description": "Mengevaluasi implementasi Pancasila sebagai ideologi dalam menghadapi tantangan globalisasi dan modernisasi."}, {"code": "Sub-CPMK-3", "cpmk_id": "CPMK-1", "description": "Mengidentifikasi dan menganalisis dilema etika yang muncul dalam kehidupan bermasyarakat, berbangsa, dan bernegara, serta memberikan solusi berdasarkan nilai-nilai Pancasila."}]}	\N	\N	2025-12-07 00:41:18.591351+08	2025-12-07 21:46:06.076722+08	\N
+\.
+
+
+--
+-- TOC entry 4995 (class 0 OID 17168)
+-- Dependencies: 216
+-- Data for Name: prodis; Type: TABLE DATA; Schema: public; Owner: smart_rps_user
+--
+
+COPY public.prodis (id, user_id, kode_prodi, nama_prodi, fakultas, jenjang, email_kaprodi, nama_kaprodi, is_active, created_at, updated_at, deleted_at, program_id) FROM stdin;
+cf1f1218-e4f2-4020-b320-70d70b62c8ab	9f878586-ad2a-4f68-8210-2c989b4a6607	S1-TI	S1-INFORMATIKA	Fakultas Teknik	S1	sadasd@gmai.com	asdasdas	t	2025-12-06 17:21:46.855445+08	2025-12-06 17:21:46.855445+08	\N	6b4fb516-28e1-4670-a3ad-81f6270092af
+ff30099e-736e-4799-9a3e-040b7b11c573	9e6e66ad-12ac-4325-bc59-bd1afb01403a	s1-sipil	sipil	Fakultas Teknik	S1	sipil@gmail.com	sipil	t	2025-12-06 21:51:30.946895+08	2025-12-06 21:51:30.946895+08	\N	148dd082-8132-460b-b14c-80686e6b231f
+c5edd40e-3bfe-486f-a2c6-561c7a029884	24c7a70e-cb7d-4c49-b251-460c31f19f00	832344	elektro	Fakultas Teknik	S1	difah@gmail.com	difa	t	2025-12-07 21:35:15.717362+08	2025-12-07 21:35:15.717362+08	\N	637f777d-594c-4025-9eb3-2d4385f7d1ba
+09ebb435-217d-4b3e-99dc-ddb4acbccd55	8d847652-b30b-440f-a6d7-1ad729210825	2312	arsi	Fakultas Teknik	S1	andiariegalang0@gmail.com	ARSI	t	2025-12-07 23:34:32.296659+08	2025-12-07 23:34:32.296659+08	\N	5dfb570c-85b8-4821-af78-c2eb47ac51fb
+\.
+
+
+--
+-- TOC entry 4996 (class 0 OID 17185)
+-- Dependencies: 217
+-- Data for Name: programs; Type: TABLE DATA; Schema: public; Owner: smart_rps_user
+--
+
+COPY public.programs (id, prodi_id, code, name, created_at, updated_at, deleted_at) FROM stdin;
+6b4fb516-28e1-4670-a3ad-81f6270092af	\N	S1-TI	S1-INFORMATIKA	2025-12-06 16:35:55.717044+08	2025-12-06 16:50:37.933143+08	\N
+148dd082-8132-460b-b14c-80686e6b231f	\N	s1-sipil	sipil	2025-12-06 21:51:11.515121+08	2025-12-06 21:51:11.515121+08	\N
+5dfb570c-85b8-4821-af78-c2eb47ac51fb	\N	2312	arsi	2025-12-07 21:12:32.689203+08	2025-12-07 21:12:32.689203+08	\N
+637f777d-594c-4025-9eb3-2d4385f7d1ba	\N	832344	elektro	2025-12-07 21:34:15.10746+08	2025-12-07 21:34:15.10746+08	\N
+\.
+
+
+--
+-- TOC entry 5000 (class 0 OID 17261)
+-- Dependencies: 221
+-- Data for Name: template_versions; Type: TABLE DATA; Schema: public; Owner: smart_rps_user
+--
+
+COPY public.template_versions (id, template_id, version, definition, created_by, created_at, updated_at, deleted_at) FROM stdin;
+\.
+
+
+--
+-- TOC entry 4999 (class 0 OID 17241)
+-- Dependencies: 220
+-- Data for Name: templates; Type: TABLE DATA; Schema: public; Owner: smart_rps_user
+--
+
+COPY public.templates (id, program_id, name, description, created_by, is_active, created_at, updated_at, deleted_at) FROM stdin;
+\.
+
+
+--
+-- TOC entry 4994 (class 0 OID 17154)
+-- Dependencies: 215
+-- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: smart_rps_user
+--
+
+COPY public.users (id, username, password, email, display_name, role, created_at, updated_at, deleted_at) FROM stdin;
+8d847652-b30b-440f-a6d7-1ad729210825	arsi123	$2a$10$jDB/UFnE19liOziv/Ck6Ke9frbe4Jjz5uiJR7golbcKseqA7CrNg.	andiariegalang0@gmail.com	ARSI	kaprodi	2025-12-07 23:34:32.295152+08	2025-12-07 23:34:32.295152+08	\N
+a96ee0c0-5f8e-4cef-a7dd-99056efda013	admin	$2a$10$JLH/BWiTuC5tdaL1m4guJudAcbu806VbVE3L5qa./udmvF0dVIrqW	admin@smartrps.com	Administrator	admin	2025-12-06 17:20:07.540524+08	2025-12-06 17:20:07.540524+08	\N
+9f878586-ad2a-4f68-8210-2c989b4a6607	galang	$2a$10$LSI/ZxyHkvApc8iYW227.uK16Pm386DPhfLt2H0i/UhXSJbzzSvl6	sadasd@gmai.com	asdasdas	kaprodi	2025-12-06 17:21:46.852938+08	2025-12-06 17:21:46.852938+08	\N
+9e6e66ad-12ac-4325-bc59-bd1afb01403a	sipil	$2a$10$CzuO3hVgQ0T7tB0PB9Y/2eohEd8d1OySigtQWv3SGh/I59syht/Yy	sipil@gmail.com	sipil	kaprodi	2025-12-06 21:51:30.94538+08	2025-12-06 21:51:30.94538+08	\N
+ebbe3ce3-a2ec-4ea1-afd5-7579e7278f4f	dosen1	$2a$10$HbTjuGWhVjUhzxyo2fsDRevRsjM5N.UBmNfpDjYL.ewvd841lOThu	andiariegalang@gmail.com	galang	dosen	2025-12-07 01:59:45.20619+08	2025-12-07 01:59:45.20619+08	\N
+24c7a70e-cb7d-4c49-b251-460c31f19f00	difah	$2a$10$PvGaLEu6FyWzICskY1Ukc.UlhH3Xeah9ocDSYdbV9un.0nVU3eaQG	difah@gmail.com	difa	kaprodi	2025-12-07 21:35:15.715855+08	2025-12-07 21:35:15.715855+08	\N
+\.
+
+
+--
+-- TOC entry 4814 (class 2606 OID 17234)
+-- Name: courses courses_code_key; Type: CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.courses
+    ADD CONSTRAINT courses_code_key UNIQUE (code);
+
+
+--
+-- TOC entry 4816 (class 2606 OID 17232)
+-- Name: courses courses_pkey; Type: CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.courses
+    ADD CONSTRAINT courses_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4831 (class 2606 OID 17349)
+-- Name: dosen_courses dosen_courses_pkey; Type: CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.dosen_courses
+    ADD CONSTRAINT dosen_courses_pkey PRIMARY KEY (dosen_id, course_id);
+
+
+--
+-- TOC entry 4828 (class 2606 OID 17313)
+-- Name: dosen_rps_accesses dosen_rps_accesses_pkey; Type: CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.dosen_rps_accesses
+    ADD CONSTRAINT dosen_rps_accesses_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4807 (class 2606 OID 17213)
+-- Name: dosens dosens_email_key; Type: CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.dosens
+    ADD CONSTRAINT dosens_email_key UNIQUE (email);
+
+
+--
+-- TOC entry 4809 (class 2606 OID 17211)
+-- Name: dosens dosens_n_id_n_key; Type: CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.dosens
+    ADD CONSTRAINT dosens_n_id_n_key UNIQUE (n_id_n);
+
+
+--
+-- TOC entry 4811 (class 2606 OID 17209)
+-- Name: dosens dosens_pkey; Type: CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.dosens
+    ADD CONSTRAINT dosens_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4825 (class 2606 OID 17288)
+-- Name: generated_rps generated_rps_pkey; Type: CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.generated_rps
+    ADD CONSTRAINT generated_rps_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4798 (class 2606 OID 17178)
+-- Name: prodis prodis_kode_prodi_key; Type: CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.prodis
+    ADD CONSTRAINT prodis_kode_prodi_key UNIQUE (kode_prodi);
+
+
+--
+-- TOC entry 4800 (class 2606 OID 17176)
+-- Name: prodis prodis_pkey; Type: CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.prodis
+    ADD CONSTRAINT prodis_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4803 (class 2606 OID 17194)
+-- Name: programs programs_code_key; Type: CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.programs
+    ADD CONSTRAINT programs_code_key UNIQUE (code);
+
+
+--
+-- TOC entry 4805 (class 2606 OID 17192)
+-- Name: programs programs_pkey; Type: CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.programs
+    ADD CONSTRAINT programs_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4823 (class 2606 OID 17268)
+-- Name: template_versions template_versions_pkey; Type: CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.template_versions
+    ADD CONSTRAINT template_versions_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4820 (class 2606 OID 17249)
+-- Name: templates templates_pkey; Type: CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.templates
+    ADD CONSTRAINT templates_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4791 (class 2606 OID 17166)
+-- Name: users users_email_key; Type: CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_email_key UNIQUE (email);
+
+
+--
+-- TOC entry 4793 (class 2606 OID 17162)
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4795 (class 2606 OID 17164)
+-- Name: users users_username_key; Type: CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_username_key UNIQUE (username);
+
+
+--
+-- TOC entry 4817 (class 1259 OID 17240)
+-- Name: idx_courses_deleted_at; Type: INDEX; Schema: public; Owner: smart_rps_user
+--
+
+CREATE INDEX idx_courses_deleted_at ON public.courses USING btree (deleted_at);
+
+
+--
+-- TOC entry 4829 (class 1259 OID 17329)
+-- Name: idx_dosen_rps_accesses_deleted_at; Type: INDEX; Schema: public; Owner: smart_rps_user
+--
+
+CREATE INDEX idx_dosen_rps_accesses_deleted_at ON public.dosen_rps_accesses USING btree (deleted_at);
+
+
+--
+-- TOC entry 4812 (class 1259 OID 17224)
+-- Name: idx_dosens_deleted_at; Type: INDEX; Schema: public; Owner: smart_rps_user
+--
+
+CREATE INDEX idx_dosens_deleted_at ON public.dosens USING btree (deleted_at);
+
+
+--
+-- TOC entry 4826 (class 1259 OID 17304)
+-- Name: idx_generated_rps_deleted_at; Type: INDEX; Schema: public; Owner: smart_rps_user
+--
+
+CREATE INDEX idx_generated_rps_deleted_at ON public.generated_rps USING btree (deleted_at);
+
+
+--
+-- TOC entry 4796 (class 1259 OID 17184)
+-- Name: idx_prodis_deleted_at; Type: INDEX; Schema: public; Owner: smart_rps_user
+--
+
+CREATE INDEX idx_prodis_deleted_at ON public.prodis USING btree (deleted_at);
+
+
+--
+-- TOC entry 4801 (class 1259 OID 17200)
+-- Name: idx_programs_deleted_at; Type: INDEX; Schema: public; Owner: smart_rps_user
+--
+
+CREATE INDEX idx_programs_deleted_at ON public.programs USING btree (deleted_at);
+
+
+--
+-- TOC entry 4821 (class 1259 OID 17279)
+-- Name: idx_template_versions_deleted_at; Type: INDEX; Schema: public; Owner: smart_rps_user
+--
+
+CREATE INDEX idx_template_versions_deleted_at ON public.template_versions USING btree (deleted_at);
+
+
+--
+-- TOC entry 4818 (class 1259 OID 17260)
+-- Name: idx_templates_deleted_at; Type: INDEX; Schema: public; Owner: smart_rps_user
+--
+
+CREATE INDEX idx_templates_deleted_at ON public.templates USING btree (deleted_at);
+
+
+--
+-- TOC entry 4789 (class 1259 OID 17167)
+-- Name: idx_users_deleted_at; Type: INDEX; Schema: public; Owner: smart_rps_user
+--
+
+CREATE INDEX idx_users_deleted_at ON public.users USING btree (deleted_at);
+
+
+--
+-- TOC entry 4837 (class 2606 OID 17330)
+-- Name: courses fk_courses_prodi; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.courses
+    ADD CONSTRAINT fk_courses_prodi FOREIGN KEY (prodi_id) REFERENCES public.prodis(id);
+
+
+--
+-- TOC entry 4838 (class 2606 OID 17235)
+-- Name: courses fk_courses_program; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.courses
+    ADD CONSTRAINT fk_courses_program FOREIGN KEY (program_id) REFERENCES public.programs(id);
+
+
+--
+-- TOC entry 4849 (class 2606 OID 17355)
+-- Name: dosen_courses fk_dosen_courses_course; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.dosen_courses
+    ADD CONSTRAINT fk_dosen_courses_course FOREIGN KEY (course_id) REFERENCES public.courses(id);
+
+
+--
+-- TOC entry 4850 (class 2606 OID 17350)
+-- Name: dosen_courses fk_dosen_courses_dosen; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.dosen_courses
+    ADD CONSTRAINT fk_dosen_courses_dosen FOREIGN KEY (dosen_id) REFERENCES public.dosens(id);
+
+
+--
+-- TOC entry 4846 (class 2606 OID 17314)
+-- Name: dosen_rps_accesses fk_dosen_rps_accesses_dosen; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.dosen_rps_accesses
+    ADD CONSTRAINT fk_dosen_rps_accesses_dosen FOREIGN KEY (dosen_id) REFERENCES public.dosens(id);
+
+
+--
+-- TOC entry 4847 (class 2606 OID 17319)
+-- Name: dosen_rps_accesses fk_dosen_rps_accesses_generated_rps; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.dosen_rps_accesses
+    ADD CONSTRAINT fk_dosen_rps_accesses_generated_rps FOREIGN KEY (generated_rps_id) REFERENCES public.generated_rps(id);
+
+
+--
+-- TOC entry 4848 (class 2606 OID 17324)
+-- Name: dosen_rps_accesses fk_dosen_rps_accesses_granter; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.dosen_rps_accesses
+    ADD CONSTRAINT fk_dosen_rps_accesses_granter FOREIGN KEY (granted_by) REFERENCES public.users(id);
+
+
+--
+-- TOC entry 4835 (class 2606 OID 17219)
+-- Name: dosens fk_dosens_prodi; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.dosens
+    ADD CONSTRAINT fk_dosens_prodi FOREIGN KEY (prodi_id) REFERENCES public.prodis(id);
+
+
+--
+-- TOC entry 4836 (class 2606 OID 17214)
+-- Name: dosens fk_dosens_user; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.dosens
+    ADD CONSTRAINT fk_dosens_user FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- TOC entry 4843 (class 2606 OID 17294)
+-- Name: generated_rps fk_generated_rps_course; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.generated_rps
+    ADD CONSTRAINT fk_generated_rps_course FOREIGN KEY (course_id) REFERENCES public.courses(id);
+
+
+--
+-- TOC entry 4844 (class 2606 OID 17299)
+-- Name: generated_rps fk_generated_rps_generator; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.generated_rps
+    ADD CONSTRAINT fk_generated_rps_generator FOREIGN KEY (generated_by) REFERENCES public.users(id);
+
+
+--
+-- TOC entry 4845 (class 2606 OID 17289)
+-- Name: generated_rps fk_generated_rps_template_version; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.generated_rps
+    ADD CONSTRAINT fk_generated_rps_template_version FOREIGN KEY (template_version_id) REFERENCES public.template_versions(id);
+
+
+--
+-- TOC entry 4832 (class 2606 OID 17335)
+-- Name: prodis fk_prodis_program; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.prodis
+    ADD CONSTRAINT fk_prodis_program FOREIGN KEY (program_id) REFERENCES public.programs(id);
+
+
+--
+-- TOC entry 4833 (class 2606 OID 17179)
+-- Name: prodis fk_prodis_user; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.prodis
+    ADD CONSTRAINT fk_prodis_user FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- TOC entry 4834 (class 2606 OID 17195)
+-- Name: programs fk_programs_prodi; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.programs
+    ADD CONSTRAINT fk_programs_prodi FOREIGN KEY (prodi_id) REFERENCES public.prodis(id);
+
+
+--
+-- TOC entry 4841 (class 2606 OID 17274)
+-- Name: template_versions fk_template_versions_creator; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.template_versions
+    ADD CONSTRAINT fk_template_versions_creator FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- TOC entry 4842 (class 2606 OID 17269)
+-- Name: template_versions fk_template_versions_template; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.template_versions
+    ADD CONSTRAINT fk_template_versions_template FOREIGN KEY (template_id) REFERENCES public.templates(id);
+
+
+--
+-- TOC entry 4839 (class 2606 OID 17255)
+-- Name: templates fk_templates_creator; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.templates
+    ADD CONSTRAINT fk_templates_creator FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- TOC entry 4840 (class 2606 OID 17250)
+-- Name: templates fk_templates_program; Type: FK CONSTRAINT; Schema: public; Owner: smart_rps_user
+--
+
+ALTER TABLE ONLY public.templates
+    ADD CONSTRAINT fk_templates_program FOREIGN KEY (program_id) REFERENCES public.programs(id);
+
+
+--
+-- TOC entry 5009 (class 0 OID 0)
+-- Dependencies: 5
+-- Name: SCHEMA public; Type: ACL; Schema: -; Owner: pg_database_owner
+--
+
+GRANT ALL ON SCHEMA public TO smart_rps_user;
+
+
+--
+-- TOC entry 2074 (class 826 OID 17153)
+-- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: public; Owner: postgres
+--
+
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO smart_rps_user;
+
+
+--
+-- TOC entry 2073 (class 826 OID 17152)
+-- Name: DEFAULT PRIVILEGES FOR TABLES; Type: DEFAULT ACL; Schema: public; Owner: postgres
+--
+
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO smart_rps_user;
+
+
+-- Completed on 2025-12-08 00:08:18
+
+--
+-- PostgreSQL database dump complete
+--
+
+\unrestrict IeuXPEDTuYyNwMxQZWTYh0LeLzA47YLYN7pS5tyHD442hKj73twtMgUlgtVOWIM
+
