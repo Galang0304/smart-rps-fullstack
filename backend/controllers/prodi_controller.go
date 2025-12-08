@@ -54,14 +54,14 @@ func (pc *ProdiController) GetAll(c *gin.Context) {
 	var prodis []models.Prodi
 	var total int64
 
-	query := pc.db.Model(&models.Prodi{})
+	query := pc.db.Preload("User").Preload("Program")
 
 	if search != "" {
 		query = query.Where("kode_prodi ILIKE ? OR nama_prodi ILIKE ?",
 			"%"+search+"%", "%"+search+"%")
 	}
 
-	query.Count(&total)
+	query.Model(&models.Prodi{}).Count(&total)
 	query.Find(&prodis)
 
 	c.JSON(http.StatusOK, gin.H{
