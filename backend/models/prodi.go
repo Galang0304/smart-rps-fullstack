@@ -11,7 +11,7 @@ type Prodi struct {
 	ID           uuid.UUID      `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
 	UserID       *uuid.UUID     `json:"user_id,omitempty" gorm:"type:uuid"`
 	ProgramID    *uuid.UUID     `json:"program_id,omitempty" gorm:"type:uuid"`
-	KodeProdi    string         `json:"kode_prodi" gorm:"unique;not null"`
+	KodeProdi    string         `json:"kode_prodi" gorm:"not null"`
 	NamaProdi    string         `json:"nama_prodi" gorm:"not null"`
 	Fakultas     string         `json:"fakultas" gorm:"not null"`
 	Jenjang      string         `json:"jenjang" gorm:"not null"`
