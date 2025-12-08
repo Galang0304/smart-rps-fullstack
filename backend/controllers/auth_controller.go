@@ -7,16 +7,21 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/syrlramadhan/dokumentasi-rps-api/models"
+	"github.com/syrlramadhan/dokumentasi-rps-api/services"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
 type AuthController struct {
-	db *gorm.DB
+	db           *gorm.DB
+	emailService *services.EmailService
 }
 
 func NewAuthController(db *gorm.DB) *AuthController {
-	return &AuthController{db: db}
+	return &AuthController{
+		db:           db,
+		emailService: services.NewEmailService(),
+	}
 }
 
 type LoginRequest struct {
@@ -257,9 +262,28 @@ func (ac *AuthController) ResetPassword(c *gin.Context) {
 		return
 	}
 
+	// Send email notification to user
+	if user.Email != nil && *user.Email != "" {
+		displayName := user.Username
+		if user.DisplayName != nil && *user.DisplayName != "" {
+			displayName = *user.DisplayName
+		}
+
+		go func() {
+			if err := ac.emailService.SendKaprodiAccountEmail(
+				*user.Email,
+				displayName,
+				user.Username,
+				req.NewPassword,
+			); err != nil {
+				println("Warning: Failed to send password reset email:", err.Error())
+			}
+		}()
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"message": "Password berhasil direset",
+		"message": "Password berhasil direset dan email notifikasi telah dikirim",
 		"data": gin.H{
 			"username": user.Username,
 			"email":    user.Email,
