@@ -121,6 +121,12 @@ func (pc *ProdiController) Create(c *gin.Context) {
 		return
 	}
 
+	// Check if email already exists (only check active users, not soft-deleted)
+	if err := pc.db.Where("email = ? AND deleted_at IS NULL", req.EmailKaprodi).First(&existingUser).Error; err == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Email '" + req.EmailKaprodi + "' sudah digunakan. Silakan gunakan email lain."})
+		return
+	}
+
 	// Check if kode_prodi already exists (only check active prodi, not soft-deleted)
 	var existingProdi models.Prodi
 	if err := pc.db.Where("kode_prodi = ? AND deleted_at IS NULL", req.KodeProdi).First(&existingProdi).Error; err == nil {
