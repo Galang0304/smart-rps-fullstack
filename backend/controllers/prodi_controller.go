@@ -114,16 +114,16 @@ func (pc *ProdiController) Create(c *gin.Context) {
 		return
 	}
 
-	// Check if username already exists (both active and soft-deleted)
+	// Check if username already exists (only check active users, not soft-deleted)
 	var existingUser models.User
-	if err := pc.db.Where("username = ?", req.Username).First(&existingUser).Error; err == nil {
+	if err := pc.db.Where("username = ? AND deleted_at IS NULL", req.Username).First(&existingUser).Error; err == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Username '" + req.Username + "' sudah digunakan. Silakan gunakan username lain."})
 		return
 	}
 
-	// Check if kode_prodi already exists
+	// Check if kode_prodi already exists (only check active prodi, not soft-deleted)
 	var existingProdi models.Prodi
-	if err := pc.db.Where("kode_prodi = ?", req.KodeProdi).First(&existingProdi).Error; err == nil {
+	if err := pc.db.Where("kode_prodi = ? AND deleted_at IS NULL", req.KodeProdi).First(&existingProdi).Error; err == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Kode prodi '" + req.KodeProdi + "' sudah digunakan"})
 		return
 	}
