@@ -11,6 +11,9 @@ export default function CPMKManagement() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [uploadStatus, setUploadStatus] = useState(null);
   const [excelFile, setExcelFile] = useState(null);
+  const [importType, setImportType] = useState('excel'); // 'excel' or 'csv'
+  const [cpmkCsvFile, setCpmkCsvFile] = useState(null);
+  const [subCpmkCsvFile, setSubCpmkCsvFile] = useState(null);
 
   const userRole = localStorage.getItem('role');
   const prodiId = localStorage.getItem('prodi_id');
@@ -141,6 +144,55 @@ export default function CPMKManagement() {
       setTimeout(() => setUploadStatus(null), 5000);
     } catch (error) {
       console.error('Failed to import Excel:', error);
+      setUploadStatus({
+        success: false,
+        message: 'Import gagal',
+        details: error.message,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImportCSV = async () => {
+    if (!cpmkCsvFile || !subCpmkCsvFile) {
+      alert('Pilih kedua file CSV (CPMK dan Sub-CPMK)');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const formData = new FormData();
+      formData.append('cpmk_file', cpmkCsvFile);
+      formData.append('sub_cpmk_file', subCpmkCsvFile);
+
+      const response = await fetch('http://103.151.145.182:8080/api/v1/cpmk/import/csv', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Import failed');
+      }
+
+      setUploadStatus({
+        success: true,
+        message: data.message || `Berhasil import ${data.imported_count} CPMK`,
+        details: data.failed_count > 0 ? `${data.failed_count} gagal: ${data.errors?.slice(0, 3).join(', ')}` : null,
+      });
+      
+      setCpmkCsvFile(null);
+      setSubCpmkCsvFile(null);
+      setShowImportModal(false);
+      loadCPMK();
+      setTimeout(() => setUploadStatus(null), 5000);
+    } catch (error) {
+      console.error('Failed to import CSV:', error);
       setUploadStatus({
         success: false,
         message: 'Import gagal',
@@ -382,38 +434,116 @@ export default function CPMKManagement() {
       {/* Import Modal */}
       {showImportModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Import CPMK dari Excel</h2>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Import CPMK</h2>
             
             <div className="space-y-4">
+              {/* Import Type Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Pilih Format Import
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      value="excel"
+                      checked={importType === 'excel'}
+                      onChange={(e) => setImportType(e.target.value)}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Excel (.xlsx) - Single File</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      value="csv"
+                      checked={importType === 'csv'}
+                      onChange={(e) => setImportType(e.target.value)}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <span className="text-sm font-medium text-gray-700">CSV - Dua File Terpisah</span>
+                  </label>
+                </div>
+              </div>
+
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                 <p className="text-sm text-yellow-800">
                   ⚠️ <strong>Perhatian:</strong>
                 </p>
-                <ul className="text-sm text-yellow-700 mt-2 ml-4 list-disc space-y-1">
-                  <li>Download template terlebih dahulu</li>
-                  <li>Isi sesuai format (2 sheet: CPMK Template & Sub-CPMK Template)</li>
-                  <li>Nama mata kuliah harus <strong>sama persis</strong> dengan data di sistem</li>
-                  <li>Import akan mengganti CPMK lama untuk mata kuliah yang sama</li>
-                </ul>
+                {importType === 'excel' ? (
+                  <ul className="text-sm text-yellow-700 mt-2 ml-4 list-disc space-y-1">
+                    <li>Download template terlebih dahulu</li>
+                    <li>Isi sesuai format (2 sheet: CPMK Template & Sub-CPMK Template)</li>
+                    <li>Nama mata kuliah harus <strong>sama persis</strong> dengan data di sistem</li>
+                    <li>Import akan mengganti CPMK lama untuk mata kuliah yang sama</li>
+                  </ul>
+                ) : (
+                  <ul className="text-sm text-yellow-700 mt-2 ml-4 list-disc space-y-1">
+                    <li>Upload <strong>2 file CSV terpisah</strong>: cpmk.csv dan subs-cpmk.csv</li>
+                    <li>Format CSV harus sesuai dengan file di folder docs/</li>
+                    <li>Nama mata kuliah harus <strong>sama persis</strong> dengan data di sistem</li>
+                    <li>Import akan mengganti CPMK lama untuk mata kuliah yang sama</li>
+                  </ul>
+                )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  File Excel (.xlsx)
-                </label>
-                <input
-                  type="file"
-                  accept=".xlsx"
-                  onChange={(e) => setExcelFile(e.target.files[0])}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+              {/* File Upload */}
+              {importType === 'excel' ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    File Excel (.xlsx)
+                  </label>
+                  <input
+                    type="file"
+                    accept=".xlsx"
+                    onChange={(e) => setExcelFile(e.target.files[0])}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  {excelFile && (
+                    <p className="text-sm text-gray-600 mt-1">✓ {excelFile.name}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      File CPMK CSV
+                    </label>
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={(e) => setCpmkCsvFile(e.target.files[0])}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    />
+                    {cpmkCsvFile && (
+                      <p className="text-xs text-gray-600 mt-1">✓ {cpmkCsvFile.name}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      File Sub-CPMK CSV
+                    </label>
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={(e) => setSubCpmkCsvFile(e.target.files[0])}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    />
+                    {subCpmkCsvFile && (
+                      <p className="text-xs text-gray-600 mt-1">✓ {subCpmkCsvFile.name}</p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-3 pt-4">
                 <button
-                  onClick={handleImportExcel}
-                  disabled={!excelFile || loading}
+                  onClick={importType === 'excel' ? handleImportExcel : handleImportCSV}
+                  disabled={
+                    loading || 
+                    (importType === 'excel' ? !excelFile : (!cpmkCsvFile || !subCpmkCsvFile))
+                  }
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {loading ? (
@@ -424,7 +554,7 @@ export default function CPMKManagement() {
                   ) : (
                     <>
                       <Upload className="w-5 h-5" />
-                      <span>Import</span>
+                      <span>Import {importType === 'excel' ? 'Excel' : 'CSV'}</span>
                     </>
                   )}
                 </button>
@@ -432,6 +562,8 @@ export default function CPMKManagement() {
                   onClick={() => {
                     setShowImportModal(false);
                     setExcelFile(null);
+                    setCpmkCsvFile(null);
+                    setSubCpmkCsvFile(null);
                   }}
                   className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 >

@@ -479,3 +479,215 @@ func (cc *CPMKController) ExportExcel(c *gin.Context) {
 		return
 	}
 }
+
+// ImportCSV - Import CPMK and Sub-CPMK from CSV files
+func (cc *CPMKController) ImportCSV(c *gin.Context) {
+	// Get uploaded files
+	cpmkFile, err := c.FormFile("cpmk_file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "CPMK CSV file required"})
+		return
+	}
+
+	subCpmkFile, err := c.FormFile("sub_cpmk_file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Sub-CPMK CSV file required"})
+		return
+	}
+
+	// Open CPMK CSV
+	cpmkFileReader, err := cpmkFile.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open CPMK file"})
+		return
+	}
+	defer cpmkFileReader.Close()
+
+	// Open Sub-CPMK CSV
+	subCpmkFileReader, err := subCpmkFile.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open Sub-CPMK file"})
+		return
+	}
+	defer subCpmkFileReader.Close()
+
+	// Read CPMK CSV using excelize (supports CSV)
+	cpmkExcel, err := excelize.OpenReader(cpmkFileReader)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid CPMK CSV format"})
+		return
+	}
+	defer cpmkExcel.Close()
+
+	// Read Sub-CPMK CSV
+	subCpmkExcel, err := excelize.OpenReader(subCpmkFileReader)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Sub-CPMK CSV format"})
+		return
+	}
+	defer subCpmkExcel.Close()
+
+	// Get first sheet
+	cpmkSheet := cpmkExcel.GetSheetName(0)
+	subCpmkSheet := subCpmkExcel.GetSheetName(0)
+
+	// Read CPMK rows
+	cpmkRows, err := cpmkExcel.GetRows(cpmkSheet)
+	if err != nil || len(cpmkRows) < 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "CPMK CSV must have header and data rows"})
+		return
+	}
+
+	// Read Sub-CPMK rows
+	subCpmkRows, err := subCpmkExcel.GetRows(subCpmkSheet)
+	if err != nil || len(subCpmkRows) < 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Sub-CPMK CSV must have header and data rows"})
+		return
+	}
+
+	// Process CPMK data
+	courseMap := make(map[string]uuid.UUID)
+	cpmkMap := make(map[string]map[int]uuid.UUID) // courseTitle -> cpmkNumber -> cpmkID
+	importedCount := 0
+	failedCount := 0
+	var errors []string
+
+	// Start transaction
+	tx := cc.db.Begin()
+
+	// Process CPMK rows (skip header)
+	for i, row := range cpmkRows[1:] {
+		if len(row) < 4 {
+			continue
+		}
+
+		courseTitle := strings.TrimSpace(row[1])
+		if courseTitle == "" {
+			continue
+		}
+
+		// Get or cache course ID
+		courseID, exists := courseMap[courseTitle]
+		if !exists {
+			var course models.Course
+			if err := tx.Where("title = ?", courseTitle).First(&course).Error; err != nil {
+				errors = append(errors, fmt.Sprintf("Row %d: Course '%s' not found", i+2, courseTitle))
+				failedCount++
+				continue
+			}
+			courseID = course.ID
+			courseMap[courseTitle] = courseID
+
+			// Delete existing CPMK for this course
+			if err := tx.Where("course_id = ?", courseID).Delete(&models.CPMK{}).Error; err != nil {
+				errors = append(errors, fmt.Sprintf("Failed to delete existing CPMK for '%s'", courseTitle))
+			}
+		}
+
+		// Parse CPMK data (columns D onwards are CPMK descriptions)
+		if _, exists := cpmkMap[courseTitle]; !exists {
+			cpmkMap[courseTitle] = make(map[int]uuid.UUID)
+		}
+
+		for cpmkNum := 1; cpmkNum <= 11; cpmkNum++ {
+			colIndex := 3 + cpmkNum - 1 // Column D = index 3
+			if colIndex >= len(row) {
+				break
+			}
+
+			description := strings.TrimSpace(row[colIndex])
+			if description == "" {
+				continue
+			}
+
+			cpmk := models.CPMK{
+				ID:          uuid.New(),
+				CourseID:    courseID,
+				CPMKNumber:  cpmkNum,
+				Description: description,
+			}
+
+			if err := tx.Create(&cpmk).Error; err != nil {
+				errors = append(errors, fmt.Sprintf("Row %d CPMK %d: %s", i+2, cpmkNum, err.Error()))
+				failedCount++
+				continue
+			}
+
+			cpmkMap[courseTitle][cpmkNum] = cpmk.ID
+			importedCount++
+		}
+	}
+
+	// Process Sub-CPMK rows (skip header)
+	for i, row := range subCpmkRows[1:] {
+		if len(row) < 4 {
+			continue
+		}
+
+		courseTitle := strings.TrimSpace(row[1])
+		cpmkNumStr := strings.TrimSpace(row[2])
+
+		if courseTitle == "" || cpmkNumStr == "" {
+			continue
+		}
+
+		// Parse CPMK number from string like "1). Description" or just "1"
+		cpmkNumStr = strings.Split(cpmkNumStr, ")")[0]
+		cpmkNumStr = strings.TrimSpace(cpmkNumStr)
+		cpmkNum, err := strconv.Atoi(cpmkNumStr)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Sub-CPMK Row %d: Invalid CPMK number '%s'", i+2, row[2]))
+			failedCount++
+			continue
+		}
+
+		// Get CPMK ID
+		cpmkID, exists := cpmkMap[courseTitle][cpmkNum]
+		if !exists {
+			errors = append(errors, fmt.Sprintf("Sub-CPMK Row %d: CPMK %d not found for '%s'", i+2, cpmkNum, courseTitle))
+			failedCount++
+			continue
+		}
+
+		// Parse Sub-CPMK data (columns D onwards)
+		for subNum := 1; subNum <= 14; subNum++ {
+			colIndex := 3 + subNum - 1
+			if colIndex >= len(row) {
+				break
+			}
+
+			description := strings.TrimSpace(row[colIndex])
+			if description == "" {
+				continue
+			}
+
+			subCpmk := models.SubCPMK{
+				ID:            uuid.New(),
+				CPMKId:        cpmkID,
+				SubCPMKNumber: subNum,
+				Description:   description,
+			}
+
+			if err := tx.Create(&subCpmk).Error; err != nil {
+				errors = append(errors, fmt.Sprintf("Sub-CPMK Row %d.%d: %s", i+2, subNum, err.Error()))
+				failedCount++
+				continue
+			}
+		}
+	}
+
+	// Commit transaction
+	if err := tx.Commit().Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":        true,
+		"message":        fmt.Sprintf("Successfully imported %d CPMK items", importedCount),
+		"imported_count": importedCount,
+		"failed_count":   failedCount,
+		"errors":         errors,
+	})
+}
