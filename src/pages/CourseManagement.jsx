@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Upload, Plus, Search, Loader2, CheckCircle, AlertCircle, FileText, BookOpen, CheckCircle2, Trash2, Edit, Settings } from 'lucide-react';
+import { Upload, Plus, Search, Loader2, CheckCircle, AlertCircle, FileText, BookOpen, CheckCircle2, Trash2, Edit, Settings, Filter, X } from 'lucide-react';
 import { courseAPI, programAPI, prodiAPI, generatedRPSAPI } from '../services/api';
 
 export default function CourseManagement() {
@@ -21,6 +21,10 @@ export default function CourseManagement() {
   const [showExcelUpload, setShowExcelUpload] = useState(false);
   const [excelFile, setExcelFile] = useState(null);
   const [selectedYear, setSelectedYear] = useState('all');
+  const [filterSKS, setFilterSKS] = useState('all');
+  const [filterSemester, setFilterSemester] = useState('all');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterRPSStatus, setFilterRPSStatus] = useState('all');
   const [formData, setFormData] = useState({
     code: '',
     title: '',
@@ -202,27 +206,68 @@ export default function CourseManagement() {
     }
   }, [selectedProgram, loadCourses]);
 
-  // Get unique years from courses
-  const availableYears = Array.isArray(courses) 
-    ? [...new Set(courses.map(c => c.tahun || '2025'))].sort((a, b) => b.localeCompare(a))
-    : [];
+  // Get unique values for filters
+  const availableYears = useMemo(() => 
+    Array.isArray(courses) 
+      ? [...new Set(courses.map(c => c.tahun || '2025'))].sort((a, b) => b.localeCompare(a))
+      : []
+  , [courses]);
 
-  const filteredCourses = Array.isArray(courses) ? courses.filter((course) => {
-    const searchLower = searchQuery.toLowerCase();
-    const category = course.description?.replace('Kategori: ', '').trim() || '';
+  const availableCategories = useMemo(() => 
+    Array.isArray(courses)
+      ? [...new Set(courses.map(c => c.description?.replace('Kategori: ', '').trim()).filter(Boolean))].sort()
+      : []
+  , [courses]);
+
+  const filteredCourses = useMemo(() => {
+    if (!Array.isArray(courses)) return [];
     
-    // Filter by search query
-    const matchesSearch = (
-      course.title?.toLowerCase().includes(searchLower) ||
-      course.code?.toLowerCase().includes(searchLower) ||
-      category.toLowerCase().includes(searchLower)
-    );
-    
-    // Filter by year
-    const matchesYear = selectedYear === 'all' || (course.tahun || '2025') === selectedYear;
-    
-    return matchesSearch && matchesYear;
-  }) : [];
+    return courses.filter((course) => {
+      const searchLower = searchQuery.toLowerCase();
+      const category = course.description?.replace('Kategori: ', '').trim() || '';
+      const hasRPS = coursesWithRPS.has(course.id);
+      
+      // Filter by search query
+      const matchesSearch = (
+        course.title?.toLowerCase().includes(searchLower) ||
+        course.code?.toLowerCase().includes(searchLower) ||
+        category.toLowerCase().includes(searchLower)
+      );
+      
+      // Filter by year
+      const matchesYear = selectedYear === 'all' || (course.tahun || '2025') === selectedYear;
+      
+      // Filter by SKS
+      const matchesSKS = filterSKS === 'all' || String(course.credits) === filterSKS;
+      
+      // Filter by semester
+      const matchesSemester = filterSemester === 'all' || String(course.semester) === filterSemester;
+      
+      // Filter by category
+      const matchesCategory = filterCategory === 'all' || category === filterCategory;
+      
+      // Filter by RPS status
+      const matchesRPS = filterRPSStatus === 'all' ||
+        (filterRPSStatus === 'with-rps' && hasRPS) ||
+        (filterRPSStatus === 'without-rps' && !hasRPS);
+      
+      return matchesSearch && matchesYear && matchesSKS && matchesSemester && matchesCategory && matchesRPS;
+    });
+  }, [courses, searchQuery, selectedYear, filterSKS, filterSemester, filterCategory, filterRPSStatus, coursesWithRPS]);
+
+  // Check if any filter is active
+  const hasActiveFilters = searchQuery !== '' || selectedYear !== 'all' || filterSKS !== 'all' || 
+    filterSemester !== 'all' || filterCategory !== 'all' || filterRPSStatus !== 'all';
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSearchQuery('');
+    setSelectedYear('all');
+    setFilterSKS('all');
+    setFilterSemester('all');
+    setFilterCategory('all');
+    setFilterRPSStatus('all');
+  };
 
   const handleAddCourse = async (e) => {
     e.preventDefault();
@@ -639,41 +684,14 @@ export default function CourseManagement() {
         </div>
       )}
 
-      {/* Filters */}
-      <div className="mb-4 md:mb-6 flex flex-col sm:flex-row gap-3 md:gap-4">
-        <div className="flex-1">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari mata kuliah..."
-              className="w-full pl-9 md:pl-10 pr-4 py-2 text-sm md:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-        </div>
-        
-        {/* Filter Tahun */}
-        <select
-          value={selectedYear}
-          onChange={(e) => setSelectedYear(e.target.value)}
-          className="px-3 md:px-4 py-2 text-sm md:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-purple-50"
-        >
-          <option value="all">Semua Tahun</option>
-          {availableYears.map((year) => (
-            <option key={year} value={year}>
-              Tahun {year}
-            </option>
-          ))}
-        </select>
-        
-        {/* Hanya tampilkan dropdown program jika admin atau jika ada lebih dari 1 program */}
-        {(userRole === 'admin' || programs.length > 1) && (
+      {/* Program Selector (if needed) */}
+      {(userRole === 'admin' || programs.length > 1) && (
+        <div className="mb-4 md:mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Program Studi</label>
           <select
             value={selectedProgram}
             onChange={(e) => setSelectedProgram(e.target.value)}
-            className="px-3 md:px-4 py-2 text-sm md:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             {programs.map((program) => (
               <option key={program.id} value={program.id}>
@@ -681,11 +699,144 @@ export default function CourseManagement() {
               </option>
             ))}
           </select>
-        )}
+        </div>
+      )}
+
+      {/* Filter Section */}
+      <div className="mb-6 bg-white rounded-xl shadow p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <Filter className="w-5 h-5 text-gray-600" />
+          <h2 className="text-lg font-semibold text-gray-900">Filter Mata Kuliah</h2>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="ml-auto flex items-center gap-1 px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4" />
+              <span>Clear Filters</span>
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          {/* Search */}
+          <div className="lg:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              <Search className="w-4 h-4 inline mr-1" />
+              Cari Mata Kuliah
+            </label>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Nama atau kode..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            />
+          </div>
+
+          {/* Tahun Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Tahun Kurikulum
+            </label>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="all">Semua Tahun</option>
+              {availableYears.map((year) => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* SKS Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              SKS
+            </label>
+            <select
+              value={filterSKS}
+              onChange={(e) => setFilterSKS(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="all">Semua SKS</option>
+              <option value="1">1 SKS</option>
+              <option value="2">2 SKS</option>
+              <option value="3">3 SKS</option>
+              <option value="4">4 SKS</option>
+              <option value="6">6 SKS</option>
+            </select>
+          </div>
+
+          {/* Semester Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Semester
+            </label>
+            <select
+              value={filterSemester}
+              onChange={(e) => setFilterSemester(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="all">Semua Semester</option>
+              {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
+                <option key={sem} value={sem}>Semester {sem}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Category Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Kategori
+            </label>
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="all">Semua Kategori</option>
+              {availableCategories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* RPS Status Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Status RPS
+            </label>
+            <select
+              value={filterRPSStatus}
+              onChange={(e) => setFilterRPSStatus(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="all">Semua</option>
+              <option value="with-rps">Sudah Ada RPS</option>
+              <option value="without-rps">Belum Ada RPS</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Filter Summary */}
+        <div className="mt-4 flex items-center justify-between text-sm">
+          <p className="text-gray-600">
+            Menampilkan <span className="font-semibold text-gray-900">{filteredCourses.length}</span> dari <span className="font-semibold text-gray-900">{courses.length}</span> mata kuliah
+          </p>
+          {hasActiveFilters && (
+            <div className="flex items-center gap-2 text-blue-600">
+              <Filter className="w-4 h-4" />
+              <span>Filter aktif</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Courses Table - Desktop */}
-      <div className="hidden md:block bg-white rounded-xl shadow">
+      <div className="hidden md:block bg-white rounded-xl shadow overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
@@ -694,20 +845,29 @@ export default function CourseManagement() {
           <div className="flex flex-col items-center justify-center h-64 text-gray-500">
             <BookOpen className="w-12 h-12 mb-2 opacity-50" />
             <p>Belum ada mata kuliah</p>
-            <p className="text-sm">Upload CSV atau tambah manual</p>
+            <p className="text-sm">{hasActiveFilters ? 'Tidak ada mata kuliah yang sesuai filter' : 'Upload CSV atau tambah manual'}</p>
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="mt-4 px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              >
+                Clear Filters
+              </button>
+            )}
           </div>
         ) : (
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Kode</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mata Kuliah</th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">SKS</th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Semester</th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Tahun</th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-80">Actions</th>
-              </tr>
-            </thead>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Kode</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Mata Kuliah</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">SKS</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Semester</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Tahun</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
+                </tr>
+              </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredCourses.map((course) => {
                 const hasRPS = coursesWithRPS.has(course.id);
@@ -781,7 +941,8 @@ export default function CourseManagement() {
                 );
               })}
             </tbody>
-          </table>
+            </table>
+          </div>
         )}
       </div>
 
