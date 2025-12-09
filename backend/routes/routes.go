@@ -17,7 +17,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 	courseController := controllers.NewCourseController(db)
 	generatedRPSController := controllers.NewGeneratedRPSController(db)
 	cpmkController := controllers.NewCPMKController(db)
-	aiController := controllers.NewAIController()
+	aiController := controllers.NewAIController(db)
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {

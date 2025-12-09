@@ -10,12 +10,17 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/syrlramadhan/dokumentasi-rps-api/models"
+	"gorm.io/gorm"
 )
 
-type AIController struct{}
+type AIController struct {
+	db *gorm.DB
+}
 
-func NewAIController() *AIController {
-	return &AIController{}
+func NewAIController(db *gorm.DB) *AIController {
+	return &AIController{db: db}
 }
 
 // HealthCheck - Check AI service status
@@ -51,12 +56,13 @@ func (ac *AIController) GetTypes(c *gin.Context) {
 	})
 }
 
-// GenerateCPMK - Generate CPMK using Gemini
+// GenerateCPMK - Generate CPMK using database first, fallback to AI
 func (ac *AIController) GenerateCPMK(c *gin.Context) {
 	var req struct {
 		CourseTitle string `json:"course_title" binding:"required"`
 		CourseCode  string `json:"course_code" binding:"required"`
 		Credits     int    `json:"credits"`
+		CourseID    string `json:"course_id"` // Optional: untuk lookup database
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -66,6 +72,38 @@ func (ac *AIController) GenerateCPMK(c *gin.Context) {
 	}
 
 	fmt.Printf("[AI] Generating CPMK for: %s (%s) - %d SKS\n", req.CourseTitle, req.CourseCode, req.Credits)
+
+	// 1. TRY DATABASE FIRST - Check if course_id provided and CPMK exists in database
+	if req.CourseID != "" {
+		courseUUID, err := uuid.Parse(req.CourseID)
+		if err == nil {
+			var cpmks []models.CPMK
+			if err := ac.db.Where("course_id = ?", courseUUID).Order("cpmk_number ASC").Find(&cpmks).Error; err == nil && len(cpmks) > 0 {
+				fmt.Printf("[AI] Found %d CPMK in database for course %s\n", len(cpmks), req.CourseID)
+
+				// Format database CPMK to match AI response format
+				items := make([]map[string]interface{}, len(cpmks))
+				for i, cpmk := range cpmks {
+					items[i] = map[string]interface{}{
+						"code":        fmt.Sprintf("CPMK-%d", cpmk.CPMKNumber),
+						"description": cpmk.Description,
+					}
+				}
+
+				c.JSON(http.StatusOK, gin.H{
+					"success": true,
+					"source":  "database",
+					"data": gin.H{
+						"items": items,
+					},
+				})
+				return
+			}
+		}
+	}
+
+	// 2. FALLBACK TO AI - If no database CPMK found, generate with AI
+	fmt.Printf("[AI] No database CPMK found, generating with AI\n")
 
 	prompt := fmt.Sprintf(`Buatkan 3-5 CPMK (Capaian Pembelajaran Mata Kuliah) untuk mata kuliah:
 Nama: %s
@@ -110,23 +148,63 @@ HANYA kembalikan JSON array, tanpa penjelasan tambahan.`, req.CourseTitle, req.C
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
+		"source":  "ai",
 		"data": gin.H{
 			"items": items,
 		},
 	})
 }
 
-// GenerateSubCPMK - Generate Sub-CPMK using Gemini
+// GenerateSubCPMK - Generate Sub-CPMK using database first, fallback to AI
 func (ac *AIController) GenerateSubCPMK(c *gin.Context) {
 	var req struct {
 		CPMK        string `json:"cpmk" binding:"required"`
 		CourseTitle string `json:"course_title" binding:"required"`
+		CourseID    string `json:"course_id"` // Optional: untuk lookup database
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	// 1. TRY DATABASE FIRST - Check if course_id provided and Sub-CPMK exists in database
+	if req.CourseID != "" {
+		courseUUID, err := uuid.Parse(req.CourseID)
+		if err == nil {
+			// Get all CPMK with their Sub-CPMKs for this course
+			var cpmks []models.CPMK
+			if err := ac.db.Preload("SubCPMKs").Where("course_id = ?", courseUUID).Order("cpmk_number ASC").Find(&cpmks).Error; err == nil && len(cpmks) > 0 {
+				// Collect all Sub-CPMKs from all CPMKs
+				var items []map[string]interface{}
+				for _, cpmk := range cpmks {
+					cpmkCode := fmt.Sprintf("CPMK-%d", cpmk.CPMKNumber)
+					for _, subCpmk := range cpmk.SubCPMKs {
+						items = append(items, map[string]interface{}{
+							"code":        fmt.Sprintf("Sub-CPMK-%d.%d", cpmk.CPMKNumber, subCpmk.SubCPMKNumber),
+							"description": subCpmk.Description,
+							"cpmk_id":     cpmkCode,
+						})
+					}
+				}
+
+				if len(items) > 0 {
+					fmt.Printf("[AI] Found %d Sub-CPMK in database for course %s\n", len(items), req.CourseID)
+					c.JSON(http.StatusOK, gin.H{
+						"success": true,
+						"source":  "database",
+						"data": gin.H{
+							"items": items,
+						},
+					})
+					return
+				}
+			}
+		}
+	}
+
+	// 2. FALLBACK TO AI - If no database Sub-CPMK found, generate with AI
+	fmt.Printf("[AI] No database Sub-CPMK found, generating with AI\n")
 
 	prompt := fmt.Sprintf(`Buatkan 3-5 Sub-CPMK (Sub Capaian Pembelajaran) untuk CPMK berikut:
 CPMK: %s
@@ -162,6 +240,7 @@ HANYA kembalikan JSON array, tanpa penjelasan tambahan.`, req.CPMK, req.CourseTi
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
+		"source":  "ai",
 		"data": gin.H{
 			"items": items,
 		},

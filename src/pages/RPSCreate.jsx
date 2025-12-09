@@ -442,10 +442,20 @@ function CPMKStep({ course, formData, setFormData }) {
     setGenerating(true);
     try {
       const res = await aiHelperAPI.generateCPMK({
+        course_id: course.id,
         course_code: course.code,
         course_title: course.title,
+        credits: course.credits,
         existing_cpl: [],
       });
+      
+      // Check source to inform user if data came from database
+      const source = res.data.source;
+      if (source === 'database') {
+        alert('✅ CPMK berhasil dimuat dari database!');
+      } else if (source === 'ai') {
+        alert('✨ CPMK berhasil di-generate dengan AI (tidak ada data di database)');
+      }
       
       // Ganti isi form yang ada dengan hasil generate
       const generatedItems = res.data.data.items;
@@ -551,10 +561,19 @@ function SubCPMKStep({ course, formData, setFormData }) {
     setGenerating(true);
     try {
       const res = await aiHelperAPI.generateSubCPMK({
+        course_id: course.id,
         course_code: course.code,
         course_title: course.title,
         cpmk: formData.cpmk[selectedCPMK].description,
       });
+      
+      // Check source to inform user if data came from database
+      const source = res.data.source;
+      if (source === 'database') {
+        alert('✅ Sub-CPMK berhasil dimuat dari database!');
+      } else if (source === 'ai') {
+        alert('✨ Sub-CPMK berhasil di-generate dengan AI (tidak ada data di database)');
+      }
       
       // Ganti isi form yang ada dengan hasil generate
       const generatedItems = res.data.data.items;
