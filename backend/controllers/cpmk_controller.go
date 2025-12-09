@@ -803,3 +803,145 @@ func (cc *CPMKController) ImportCSV(c *gin.Context) {
 		"errors":         errors,
 	})
 }
+
+// BatchCreateOrUpdate - Batch create or update CPMK with Sub-CPMKs
+// This is used when creating RPS to save new CPMK/Sub-CPMK to database
+func (cc *CPMKController) BatchCreateOrUpdate(c *gin.Context) {
+	var req struct {
+		CourseID string `json:"course_id" binding:"required"`
+		CPMKs    []struct {
+			Code        string `json:"code"` // e.g., "CPMK-1"
+			Description string `json:"description" binding:"required"`
+			SubCPMKs    []struct {
+				Code        string `json:"code"` // e.g., "Sub-CPMK-1-1"
+				Description string `json:"description" binding:"required"`
+			} `json:"sub_cpmks"`
+		} `json:"cpmks" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	courseUUID, err := uuid.Parse(req.CourseID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid course_id"})
+		return
+	}
+
+	// Start transaction
+	tx := cc.db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	var createdCPMKs []models.CPMK
+	var updatedCPMKs []models.CPMK
+
+	for i, cpmkReq := range req.CPMKs {
+		cpmkNumber := i + 1
+
+		// Check if CPMK exists
+		var existingCPMK models.CPMK
+		err := tx.Where("course_id = ? AND cpmk_number = ?", courseUUID, cpmkNumber).First(&existingCPMK).Error
+
+		if err == gorm.ErrRecordNotFound {
+			// Create new CPMK
+			newCPMK := models.CPMK{
+				ID:          uuid.New(),
+				CourseID:    courseUUID,
+				CPMKNumber:  cpmkNumber,
+				Description: cpmkReq.Description,
+			}
+
+			if err := tx.Create(&newCPMK).Error; err != nil {
+				tx.Rollback()
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": fmt.Sprintf("Failed to create CPMK-%d: %v", cpmkNumber, err),
+				})
+				return
+			}
+
+			// Create Sub-CPMKs
+			for j, subReq := range cpmkReq.SubCPMKs {
+				subCPMK := models.SubCPMK{
+					ID:            uuid.New(),
+					CPMKId:        newCPMK.ID,
+					SubCPMKNumber: j + 1,
+					Description:   subReq.Description,
+				}
+				if err := tx.Create(&subCPMK).Error; err != nil {
+					tx.Rollback()
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"error": fmt.Sprintf("Failed to create Sub-CPMK-%d-%d: %v", cpmkNumber, j+1, err),
+					})
+					return
+				}
+			}
+
+			createdCPMKs = append(createdCPMKs, newCPMK)
+		} else if err != nil {
+			// Database error
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Database error checking CPMK-%d: %v", cpmkNumber, err),
+			})
+			return
+		} else {
+			// Update existing CPMK
+			existingCPMK.Description = cpmkReq.Description
+			if err := tx.Save(&existingCPMK).Error; err != nil {
+				tx.Rollback()
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": fmt.Sprintf("Failed to update CPMK-%d: %v", cpmkNumber, err),
+				})
+				return
+			}
+
+			// Delete old Sub-CPMKs and create new ones
+			if err := tx.Where("cpmk_id = ?", existingCPMK.ID).Delete(&models.SubCPMK{}).Error; err != nil {
+				tx.Rollback()
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": fmt.Sprintf("Failed to delete old Sub-CPMKs for CPMK-%d: %v", cpmkNumber, err),
+				})
+				return
+			}
+
+			// Create new Sub-CPMKs
+			for j, subReq := range cpmkReq.SubCPMKs {
+				subCPMK := models.SubCPMK{
+					ID:            uuid.New(),
+					CPMKId:        existingCPMK.ID,
+					SubCPMKNumber: j + 1,
+					Description:   subReq.Description,
+				}
+				if err := tx.Create(&subCPMK).Error; err != nil {
+					tx.Rollback()
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"error": fmt.Sprintf("Failed to create Sub-CPMK-%d-%d: %v", cpmkNumber, j+1, err),
+					})
+					return
+				}
+			}
+
+			updatedCPMKs = append(updatedCPMKs, existingCPMK)
+		}
+	}
+
+	// Commit transaction
+	if err := tx.Commit().Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":       true,
+		"message":       fmt.Sprintf("Saved %d CPMK(s) to database", len(req.CPMKs)),
+		"created_count": len(createdCPMKs),
+		"updated_count": len(updatedCPMKs),
+	})
+}

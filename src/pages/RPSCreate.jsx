@@ -478,50 +478,59 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
   const [loadingDB, setLoadingDB] = useState(false);
   const [inputMode, setInputMode] = useState(null); // 'manual', 'database', 'ai'
   const [checkingDB, setCheckingDB] = useState(true);
+  const [saving, setSaving] = useState(false);
   const userRole = localStorage.getItem('role');
 
-  // Check if database has CPMK for this course
+  // Load CPMK from database on mount
   useEffect(() => {
-    const checkDBData = async () => {
+    const loadDBCpmk = async () => {
       if (!course?.id) return;
       setCheckingDB(true);
       try {
-        // Try to get CPMK from database via a test call
-        const res = await aiHelperAPI.generateCPMK({
-          course_id: course.id,
-          course_code: course.code,
-          course_title: course.title,
-          credits: course.credits,
-          existing_cpl: [],
-          check_only: true, // Add flag to just check
-        });
-        setHasDBCpmk(res.data.source === 'database');
+        const res = await apiClient.get(`/api/v1/cpmk/course/${course.id}`);
+        if (res.data.success && res.data.data && res.data.data.length > 0) {
+          const dbCpmks = res.data.data.map((cpmk, index) => ({
+            code: `CPMK-${cpmk.cpmk_number}`,
+            description: cpmk.description,
+            id: cpmk.id,
+            fromDB: true
+          }));
+          setFormData({ ...formData, cpmk: dbCpmks });
+          setHasDBCpmk(true);
+          setInputMode('database');
+        }
       } catch (error) {
+        console.error('Failed to load CPMK from DB:', error);
         setHasDBCpmk(false);
       } finally {
         setCheckingDB(false);
       }
     };
-    checkDBData();
+    loadDBCpmk();
   }, [course?.id]);
 
   const handleLoadFromDB = async () => {
     setLoadingDB(true);
     setInputMode('database');
     try {
-      const res = await aiHelperAPI.generateCPMK({
-        course_id: course.id,
-        course_code: course.code,
-        course_title: course.title,
-        credits: course.credits,
-        existing_cpl: [],
-      });
-      
-      if (res.data.source === 'database') {
-        const generatedItems = res.data.data.items;
-        // Replace all CPMK with database data
-        setFormData({ ...formData, cpmk: generatedItems });
-        alert('✅ CPMK berhasil dimuat dari database!');
+      // Load from DB via direct API call (already done in useEffect)
+      // This button is just to refresh if needed
+      const res = await apiClient.get(`/api/v1/cpmk/course/${course.id}`);
+      if (res.data.success && res.data.data && res.data.data.length > 0) {
+        const dbCpmks = res.data.data.map((cpmk) => ({
+          code: `CPMK-${cpmk.cpmk_number}`,
+          description: cpmk.description,
+          id: cpmk.id,
+          fromDB: true
+        }));
+        
+        // Merge with existing non-DB CPMK
+        const existingNonDB = formData.cpmk.filter(c => !c.fromDB);
+        const merged = [...dbCpmks, ...existingNonDB];
+        
+        setFormData({ ...formData, cpmk: merged });
+        setHasDBCpmk(true);
+        alert(`✅ ${dbCpmks.length} CPMK berhasil dimuat dari database!`);
       } else {
         alert('❌ Tidak ada data CPMK di database untuk mata kuliah ini');
         setInputMode(null);
@@ -548,12 +557,24 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
         force_ai: true, // Force AI generation
       });
       
-      const generatedItems = res.data.data.items;
-      setFormData({ ...formData, cpmk: generatedItems });
+      const generatedItems = res.data.data.items.map(item => ({
+        ...item,
+        fromDB: false // Mark as AI-generated
+      }));
       
-      if (res.data.source === 'database') {
-        alert('✅ CPMK berhasil dimuat dari database!');
+      // Merge AI-generated with existing CPMK
+      const existingCpmks = formData.cpmk.filter(c => c.description && c.description.trim());
+      
+      // Ask user if they want to merge or replace
+      const shouldMerge = existingCpmks.length > 0 && 
+        confirm(`Anda sudah memiliki ${existingCpmks.length} CPMK. Gabung dengan hasil AI (${generatedItems.length} CPMK)?`);
+      
+      if (shouldMerge) {
+        const merged = [...existingCpmks, ...generatedItems];
+        setFormData({ ...formData, cpmk: merged });
+        alert(`✨ Berhasil menggabungkan ${existingCpmks.length} CPMK existing dengan ${generatedItems.length} CPMK dari AI!`);
       } else {
+        setFormData({ ...formData, cpmk: generatedItems });
         alert('✨ CPMK berhasil di-generate dengan AI!');
       }
     } catch (error) {
@@ -569,15 +590,79 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
     setInputMode('manual');
   };
 
+  const handleSaveToDB = async () => {
+    if (!course?.id) {
+      alert('Course ID tidak ditemukan');
+      return;
+    }
+
+    // Filter CPMK yang valid (ada deskripsi)
+    const validCpmks = formData.cpmk.filter(c => c.description && c.description.trim());
+    if (validCpmks.length === 0) {
+      alert('Tidak ada CPMK yang valid untuk disimpan');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        course_id: course.id,
+        cpmks: validCpmks.map(cpmk => ({
+          code: cpmk.code,
+          description: cpmk.description,
+          sub_cpmks: [] // Sub-CPMK akan ditambah di step berikutnya
+        }))
+      };
+
+      const res = await apiClient.post('/api/v1/cpmk/batch', payload);
+      
+      if (res.data.success) {
+        // Mark all saved CPMK as fromDB
+        const updatedCpmks = formData.cpmk.map(cpmk => ({
+          ...cpmk,
+          fromDB: true
+        }));
+        setFormData({ ...formData, cpmk: updatedCpmks });
+        setHasDBCpmk(true);
+        alert(`✅ Berhasil menyimpan ${validCpmks.length} CPMK ke database!`);
+      }
+    } catch (error) {
+      console.error('Failed to save CPMK to DB:', error);
+      const errorMsg = error.response?.data?.error || error.message;
+      alert(`❌ Gagal menyimpan CPMK: ${errorMsg}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div>
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">
-          Capaian Pembelajaran Mata Kuliah (CPMK)
-        </h2>
-        <p className="text-sm text-gray-600">
-          Pilih metode untuk mengisi CPMK: input manual, ambil dari database, atau generate dengan AI.
-        </p>
+      <div className="mb-4 flex items-start justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">
+            Capaian Pembelajaran Mata Kuliah (CPMK)
+          </h2>
+          <p className="text-sm text-gray-600">
+            Pilih metode untuk mengisi CPMK: input manual, ambil dari database, atau generate dengan AI.
+          </p>
+        </div>
+        <button
+          onClick={handleSaveToDB}
+          disabled={saving || formData.cpmk.every(c => c.fromDB)}
+          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+        >
+          {saving ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Menyimpan...</span>
+            </>
+          ) : (
+            <>
+              <Save className="w-4 h-4" />
+              <span>Simpan ke Database</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* Input Mode Selector */}
@@ -659,15 +744,31 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
       {/* CPMK Form */}
       <div className="space-y-3">
         {formData.cpmk.map((item, index) => (
-          <div key={index} className="p-4 border border-gray-200 rounded-lg">
+          <div key={index} className={`p-4 border-2 rounded-lg ${item.fromDB ? 'border-green-300 bg-green-50/30' : 'border-gray-200'}`}>
             <div className="flex items-start gap-3">
-              <span className="font-semibold text-blue-600 min-w-[70px]">{item.code}</span>
+              <div className="flex flex-col items-start gap-1">
+                <span className="font-semibold text-blue-600 min-w-[70px]">{item.code}</span>
+                {item.fromDB && (
+                  <span className="text-xs px-2 py-0.5 bg-green-600 text-white rounded-full">
+                    Database
+                  </span>
+                )}
+                {!item.fromDB && item.description && (
+                  <span className="text-xs px-2 py-0.5 bg-orange-600 text-white rounded-full">
+                    Baru
+                  </span>
+                )}
+              </div>
               <div className="flex-1">
                 <textarea
                   value={item.description}
                   onChange={(e) => {
                     const newCPMK = [...formData.cpmk];
                     newCPMK[index].description = e.target.value;
+                    // Mark as modified (not from DB anymore if edited)
+                    if (item.fromDB) {
+                      newCPMK[index].fromDB = false;
+                    }
                     setFormData({ ...formData, cpmk: newCPMK });
                     if (!inputMode) setInputMode('manual');
                   }}
@@ -678,6 +779,11 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
               </div>
               <button
                 onClick={() => {
+                  if (item.fromDB) {
+                    if (!confirm('CPMK ini dari database. Yakin ingin menghapus? (Tidak akan terhapus dari database, hanya dari form ini)')) {
+                      return;
+                    }
+                  }
                   const newCPMK = formData.cpmk.filter((_, i) => i !== index);
                   setFormData({ ...formData, cpmk: newCPMK });
                 }}
@@ -691,7 +797,7 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
         ))}
         <button
           onClick={() => {
-            const newCPMK = [...formData.cpmk, { code: `CPMK-${formData.cpmk.length + 1}`, description: '' }];
+            const newCPMK = [...formData.cpmk, { code: `CPMK-${formData.cpmk.length + 1}`, description: '', fromDB: false }];
             setFormData({ ...formData, cpmk: newCPMK });
             if (!inputMode) setInputMode('manual');
           }}
@@ -707,7 +813,103 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
 function SubCPMKStep({ course, formData, setFormData }) {
   const [generating, setGenerating] = useState(false);
   const [selectedCPMK, setSelectedCPMK] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
   const userRole = localStorage.getItem('role');
+
+  // Load Sub-CPMK from database when component mounts or selectedCPMK changes
+  useEffect(() => {
+    const loadSubCpmk = async () => {
+      if (!course?.id) return;
+      setLoading(true);
+      try {
+        const res = await apiClient.get(`/api/v1/cpmk/course/${course.id}`);
+        if (res.data.success && res.data.data && res.data.data.length > 0) {
+          // Find CPMK with sub_cpmks
+          const allSubCpmks = [];
+          res.data.data.forEach((cpmk, cpmkIndex) => {
+            if (cpmk.sub_cpmks && cpmk.sub_cpmks.length > 0) {
+              cpmk.sub_cpmks.forEach(subCpmk => {
+                allSubCpmks.push({
+                  code: `Sub-CPMK-${cpmk.cpmk_number}-${subCpmk.sub_cpmk_number}`,
+                  description: subCpmk.description,
+                  cpmk_id: `CPMK-${cpmk.cpmk_number}`,
+                  id: subCpmk.id,
+                  fromDB: true
+                });
+              });
+            }
+          });
+          
+          if (allSubCpmks.length > 0) {
+            setFormData({ ...formData, subCPMK: allSubCpmks });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load Sub-CPMK from DB:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadSubCpmk();
+  }, [course?.id]);
+
+  const handleSaveToDB = async () => {
+    if (!course?.id) {
+      alert('Course ID tidak ditemukan');
+      return;
+    }
+
+    // Group Sub-CPMK by CPMK
+    const cpmkGroups = {};
+    formData.subCPMK.forEach(subCpmk => {
+      if (subCpmk.description && subCpmk.description.trim()) {
+        if (!cpmkGroups[subCpmk.cpmk_id]) {
+          cpmkGroups[subCpmk.cpmk_id] = [];
+        }
+        cpmkGroups[subCpmk.cpmk_id].push(subCpmk);
+      }
+    });
+
+    // Build payload with CPMK and their Sub-CPMKs
+    const cpmks = formData.cpmk.map((cpmk, index) => {
+      const subCpmks = cpmkGroups[cpmk.code] || [];
+      return {
+        code: cpmk.code,
+        description: cpmk.description,
+        sub_cpmks: subCpmks.map(sub => ({
+          code: sub.code,
+          description: sub.description
+        }))
+      };
+    });
+
+    setSaving(true);
+    try {
+      const payload = {
+        course_id: course.id,
+        cpmks: cpmks
+      };
+
+      const res = await apiClient.post('/api/v1/cpmk/batch', payload);
+      
+      if (res.data.success) {
+        // Mark all saved Sub-CPMK as fromDB
+        const updatedSubCpmks = formData.subCPMK.map(sub => ({
+          ...sub,
+          fromDB: true
+        }));
+        setFormData({ ...formData, subCPMK: updatedSubCpmks });
+        alert(`✅ Berhasil menyimpan CPMK dan Sub-CPMK ke database!`);
+      }
+    } catch (error) {
+      console.error('Failed to save Sub-CPMK to DB:', error);
+      const errorMsg = error.response?.data?.error || error.message;
+      alert(`❌ Gagal menyimpan Sub-CPMK: ${errorMsg}`);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!formData.cpmk[selectedCPMK] || !formData.cpmk[selectedCPMK].description.trim()) {
@@ -766,61 +968,106 @@ function SubCPMKStep({ course, formData, setFormData }) {
             ))}
           </select>
           {userRole !== 'dosen' && (
-            <button
-              onClick={handleGenerate}
-              disabled={generating || formData.cpmk.length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
-            >
-              {generating ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Bot className="w-5 h-5" />
-              )}
-              Generate AI
-            </button>
+            <>
+              <button
+                onClick={handleGenerate}
+                disabled={generating || formData.cpmk.length === 0 || loading}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+              >
+                {generating ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Bot className="w-5 h-5" />
+                )}
+                Generate AI
+              </button>
+              <button
+                onClick={handleSaveToDB}
+                disabled={saving || formData.subCPMK.every(s => s.fromDB) || loading}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Menyimpan...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>Simpan ke DB</span>
+                  </>
+                )}
+              </button>
+            </>
           )}
         </div>
       </div>
 
-      <div className="space-y-3">
-        {formData.subCPMK.map((item, index) => (
-          <div key={index} className="p-4 border border-gray-200 rounded-lg">
-            <div className="flex items-start gap-3">
-              <span className="font-semibold text-purple-600">{item.code}</span>
-              <textarea
-                value={item.description}
-                onChange={(e) => {
-                  const newSubCPMK = [...formData.subCPMK];
-                  newSubCPMK[index].description = e.target.value;
-                  setFormData({ ...formData, subCPMK: newSubCPMK });
-                }}
-                placeholder="Masukkan Sub-CPMK atau klik 'Generate AI'"
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none"
-                rows={2}
-              />
-              <button
-                onClick={() => {
-                  const newSubCPMK = formData.subCPMK.filter((_, i) => i !== index);
-                  setFormData({ ...formData, subCPMK: newSubCPMK });
-                }}
-                className="text-red-500 hover:text-red-700"
-                title="Hapus Sub-CPMK"
-              >
-                <X className="w-5 h-5" />
-              </button>
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {formData.subCPMK.map((item, index) => (
+            <div key={index} className={`p-4 border-2 rounded-lg ${item.fromDB ? 'border-green-300 bg-green-50/30' : 'border-gray-200'}`}>
+              <div className="flex items-start gap-3">
+                <div className="flex flex-col items-start gap-1">
+                  <span className="font-semibold text-purple-600 min-w-[90px] text-sm">{item.code}</span>
+                  {item.fromDB && (
+                    <span className="text-xs px-2 py-0.5 bg-green-600 text-white rounded-full">
+                      Database
+                    </span>
+                  )}
+                  {!item.fromDB && item.description && (
+                    <span className="text-xs px-2 py-0.5 bg-orange-600 text-white rounded-full">
+                      Baru
+                    </span>
+                  )}
+                </div>
+                <textarea
+                  value={item.description}
+                  onChange={(e) => {
+                    const newSubCPMK = [...formData.subCPMK];
+                    newSubCPMK[index].description = e.target.value;
+                    if (item.fromDB) {
+                      newSubCPMK[index].fromDB = false;
+                    }
+                    setFormData({ ...formData, subCPMK: newSubCPMK });
+                  }}
+                  placeholder="Masukkan Sub-CPMK atau klik 'Generate AI'"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none"
+                  rows={2}
+                />
+                <button
+                  onClick={() => {
+                    if (item.fromDB) {
+                      if (!confirm('Sub-CPMK ini dari database. Yakin ingin menghapus? (Tidak akan terhapus dari database, hanya dari form ini)')) {
+                        return;
+                      }
+                    }
+                    const newSubCPMK = formData.subCPMK.filter((_, i) => i !== index);
+                    setFormData({ ...formData, subCPMK: newSubCPMK });
+                  }}
+                  className="text-red-500 hover:text-red-700"
+                  title="Hapus Sub-CPMK"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
-        <button
-          onClick={() => {
-            const newSubCPMK = [...formData.subCPMK, { code: `Sub-CPMK-${formData.subCPMK.length + 1}`, description: '', cpmk_id: formData.cpmk[selectedCPMK]?.code || 'CPMK-1' }];
-            setFormData({ ...formData, subCPMK: newSubCPMK });
-          }}
-          className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600"
-        >
-          + Tambah Sub-CPMK
-        </button>
-      </div>
+          ))}
+          <button
+            onClick={() => {
+              const newSubCPMK = [...formData.subCPMK, { code: `Sub-CPMK-${formData.subCPMK.length + 1}`, description: '', cpmk_id: formData.cpmk[selectedCPMK]?.code || 'CPMK-1', fromDB: false }];
+              setFormData({ ...formData, subCPMK: newSubCPMK });
+            }}
+            className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600"
+          >
+            + Tambah Sub-CPMK
+          </button>
+        </div>
+      )}
     </div>
   );
 }
