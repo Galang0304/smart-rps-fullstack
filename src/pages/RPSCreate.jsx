@@ -487,7 +487,7 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
       if (!course?.id) return;
       setCheckingDB(true);
       try {
-        const res = await apiClient.get(`/api/v1/cpmk/course/${course.id}`);
+        const res = await apiClient.get(`/cpmk/course/${course.id}`);
         if (res.data.success && res.data.data && res.data.data.length > 0) {
           const dbCpmks = res.data.data.map((cpmk, index) => ({
             code: `CPMK-${cpmk.cpmk_number}`,
@@ -515,7 +515,7 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
     try {
       // Load from DB via direct API call (already done in useEffect)
       // This button is just to refresh if needed
-      const res = await apiClient.get(`/api/v1/cpmk/course/${course.id}`);
+      const res = await apiClient.get(`/cpmk/course/${course.id}`);
       if (res.data.success && res.data.data && res.data.data.length > 0) {
         const dbCpmks = res.data.data.map((cpmk) => ({
           code: `CPMK-${cpmk.cpmk_number}`,
@@ -823,7 +823,7 @@ function SubCPMKStep({ course, formData, setFormData }) {
       if (!course?.id) return;
       setLoading(true);
       try {
-        const res = await apiClient.get(`/api/v1/cpmk/course/${course.id}`);
+        const res = await apiClient.get(`/cpmk/course/${course.id}`);
         if (res.data.success && res.data.data && res.data.data.length > 0) {
           // Find CPMK with sub_cpmks
           const allSubCpmks = [];
@@ -891,7 +891,7 @@ function SubCPMKStep({ course, formData, setFormData }) {
         cpmks: cpmks
       };
 
-      const res = await apiClient.post('/api/v1/cpmk/batch', payload);
+      const res = await apiClient.post('/cpmk/batch', payload);
       
       if (res.data.success) {
         // Mark all saved Sub-CPMK as fromDB
