@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"encoding/csv"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -511,36 +512,36 @@ func (cc *CPMKController) ImportCSV(c *gin.Context) {
 	}
 	defer subCpmkFileReader.Close()
 
-	// Read CPMK CSV using excelize (supports CSV)
-	cpmkExcel, err := excelize.OpenReader(cpmkFileReader)
+	// Read CPMK CSV using csv.Reader
+	cpmkCsvReader := csv.NewReader(cpmkFileReader)
+	cpmkCsvReader.Comma = ';' // CSV uses semicolon delimiter
+	cpmkCsvReader.LazyQuotes = true
+	cpmkCsvReader.TrimLeadingSpace = true
+
+	cpmkRows, err := cpmkCsvReader.ReadAll()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid CPMK CSV format"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Failed to parse CPMK CSV: %v", err)})
 		return
 	}
-	defer cpmkExcel.Close()
 
-	// Read Sub-CPMK CSV
-	subCpmkExcel, err := excelize.OpenReader(subCpmkFileReader)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Sub-CPMK CSV format"})
-		return
-	}
-	defer subCpmkExcel.Close()
-
-	// Get first sheet
-	cpmkSheet := cpmkExcel.GetSheetName(0)
-	subCpmkSheet := subCpmkExcel.GetSheetName(0)
-
-	// Read CPMK rows
-	cpmkRows, err := cpmkExcel.GetRows(cpmkSheet)
-	if err != nil || len(cpmkRows) < 2 {
+	if len(cpmkRows) < 2 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "CPMK CSV must have header and data rows"})
 		return
 	}
 
-	// Read Sub-CPMK rows
-	subCpmkRows, err := subCpmkExcel.GetRows(subCpmkSheet)
-	if err != nil || len(subCpmkRows) < 2 {
+	// Read Sub-CPMK CSV
+	subCpmkCsvReader := csv.NewReader(subCpmkFileReader)
+	subCpmkCsvReader.Comma = ';' // CSV uses semicolon delimiter
+	subCpmkCsvReader.LazyQuotes = true
+	subCpmkCsvReader.TrimLeadingSpace = true
+
+	subCpmkRows, err := subCpmkCsvReader.ReadAll()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Failed to parse Sub-CPMK CSV: %v", err)})
+		return
+	}
+
+	if len(subCpmkRows) < 2 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Sub-CPMK CSV must have header and data rows"})
 		return
 	}
