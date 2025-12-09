@@ -16,6 +16,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 	programController := controllers.NewProgramController(db)
 	courseController := controllers.NewCourseController(db)
 	generatedRPSController := controllers.NewGeneratedRPSController(db)
+	cpmkController := controllers.NewCPMKController(db)
 	aiController := controllers.NewAIController()
 
 	// Health check
@@ -93,6 +94,17 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 			dosens.DELETE("/:id", dosenController.Delete)
 			dosens.POST("/:id/courses", dosenController.AssignCourses)
 			dosens.GET("/:id/courses", dosenController.GetDosenCourses)
+		}
+
+		// CPMK routes
+		cpmk := v1.Group("/cpmk")
+		{
+			cpmk.GET("/course/:course_id", cpmkController.GetByCourseId)
+			cpmk.POST("", cpmkController.Create)
+			cpmk.DELETE("/:id", cpmkController.Delete)
+			cpmk.GET("/template/excel", cpmkController.DownloadTemplate)
+			cpmk.POST("/import/excel", cpmkController.ImportExcel)
+			cpmk.GET("/export/excel", cpmkController.ExportExcel)
 		}
 
 		// Templates routes

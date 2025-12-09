@@ -9,6 +9,7 @@ import ProdiManagement from './pages/Admin/ProdiManagement';
 import AdminDosenManagement from './pages/Admin/AdminDosenManagement';
 import DosenManagement from './pages/Admin/DosenManagement';
 import ProgramManagement from './pages/Admin/ProgramManagement';
+import CPMKManagement from './pages/Admin/CPMKManagement';
 
 // Prodi Pages (using existing pages temporarily)
 import Dashboard from './pages/Dashboard';
@@ -85,6 +86,14 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/admin/cpmk"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'kaprodi']}>
+              <CPMKManagement />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Prodi Routes */}
         <Route
@@ -140,6 +149,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['prodi', 'kaprodi']}>
               <DosenManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/prodi/cpmk"
+          element={
+            <ProtectedRoute allowedRoles={['prodi', 'kaprodi']}>
+              <CPMKManagement />
             </ProtectedRoute>
           }
         />

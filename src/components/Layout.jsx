@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, BookOpen, FileText, Users, Building2, LogOut, Settings } from 'lucide-react';
+import { Home, BookOpen, FileText, Users, Building2, LogOut, Settings, BookCheck } from 'lucide-react';
 
 export default function Layout({ children }) {
   const location = useLocation();
@@ -17,6 +17,7 @@ export default function Layout({ children }) {
           { name: 'Kelola Prodi', path: '/admin/prodis', icon: Building2 },
           { name: 'Kelola Program', path: '/admin/programs', icon: BookOpen },
           { name: 'Mata Kuliah', path: '/admin/courses', icon: BookOpen },
+          { name: 'Kelola CPMK', path: '/admin/cpmk', icon: BookCheck },
           { name: 'Kelola Dosen', path: '/admin/dosens', icon: Users },
         ];
       case 'prodi':
@@ -24,6 +25,7 @@ export default function Layout({ children }) {
         return [
           { name: 'Dashboard', path: '/prodi/dashboard', icon: Home },
           { name: 'Mata Kuliah', path: '/prodi/courses', icon: BookOpen },
+          { name: 'Kelola CPMK', path: '/prodi/cpmk', icon: BookCheck },
           { name: 'Daftar RPS', path: '/prodi/rps', icon: FileText },
           { name: 'Kelola Dosen', path: '/prodi/dosens', icon: Users },
         ];
