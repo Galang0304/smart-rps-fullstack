@@ -102,6 +102,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 			cpmk.GET("/course/:course_id", cpmkController.GetByCourseId)
 			cpmk.POST("", cpmkController.Create)
 			cpmk.DELETE("/:id", cpmkController.Delete)
+			cpmk.POST("/:id/sub-cpmk", cpmkController.AddSubCPMK)
 			cpmk.GET("/template/excel", cpmkController.DownloadTemplate)
 			cpmk.POST("/import/excel", cpmkController.ImportExcel)
 			cpmk.POST("/import/csv", cpmkController.ImportCSV)

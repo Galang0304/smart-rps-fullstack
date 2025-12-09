@@ -120,6 +120,60 @@ func (cc *CPMKController) Delete(c *gin.Context) {
 	})
 }
 
+// AddSubCPMK - Add new Sub-CPMK to existing CPMK
+func (cc *CPMKController) AddSubCPMK(c *gin.Context) {
+	cpmkId := c.Param("id")
+
+	var req struct {
+		SubCPMKNumber int    `json:"sub_cpmk_number" binding:"required"`
+		Description   string `json:"description" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	cpmkUUID, err := uuid.Parse(cpmkId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid cpmk_id"})
+		return
+	}
+
+	// Check if CPMK exists
+	var cpmk models.CPMK
+	if err := cc.db.First(&cpmk, cpmkUUID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "CPMK not found"})
+		return
+	}
+
+	// Check if Sub-CPMK number already exists
+	var existing models.SubCPMK
+	if err := cc.db.Where("cpmk_id = ? AND sub_cpmk_number = ?", cpmkUUID, req.SubCPMKNumber).First(&existing).Error; err == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "Sub-CPMK number already exists for this CPMK"})
+		return
+	}
+
+	// Create Sub-CPMK
+	subCPMK := models.SubCPMK{
+		ID:            uuid.New(),
+		CPMKId:        cpmkUUID,
+		SubCPMKNumber: req.SubCPMKNumber,
+		Description:   req.Description,
+	}
+
+	if err := cc.db.Create(&subCPMK).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create Sub-CPMK"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"success": true,
+		"data":    subCPMK,
+		"message": "Sub-CPMK created successfully",
+	})
+}
+
 // DownloadTemplate - Download Excel template for CPMK import
 func (cc *CPMKController) DownloadTemplate(c *gin.Context) {
 	f := excelize.NewFile()

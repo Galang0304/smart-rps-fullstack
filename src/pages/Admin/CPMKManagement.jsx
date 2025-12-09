@@ -10,7 +10,12 @@ export default function CPMKManagement() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showAddCpmkModal, setShowAddCpmkModal] = useState(false);
+  const [showAddSubCpmkModal, setShowAddSubCpmkModal] = useState(false);
   const [uploadStatus, setUploadStatus] = useState(null);
+  const [newCpmk, setNewCpmk] = useState({ cpmk_number: '', description: '' });
+  const [newSubCpmk, setNewSubCpmk] = useState({ sub_cpmk_number: '', description: '' });
+  const [selectedCpmkForSub, setSelectedCpmkForSub] = useState(null);
   const [excelFile, setExcelFile] = useState(null);
   const [importType, setImportType] = useState('excel'); // 'excel' or 'csv'
   const [cpmkCsvFile, setCpmkCsvFile] = useState(null);
@@ -323,6 +328,95 @@ export default function CPMKManagement() {
     } catch (error) {
       console.error('Failed to delete CPMK:', error);
       alert('Gagal menghapus CPMK: ' + error.message);
+    }
+  };
+
+  const handleAddCpmk = async () => {
+    if (!newCpmk.cpmk_number || !newCpmk.description) {
+      alert('Nomor CPMK dan deskripsi harus diisi!');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await fetch('http://103.151.145.182:8080/api/v1/cpmk', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          course_id: selectedCourse.id,
+          cpmk_number: parseInt(newCpmk.cpmk_number),
+          description: newCpmk.description,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setUploadStatus({
+          success: true,
+          message: 'CPMK berhasil ditambahkan!',
+        });
+        setNewCpmk({ cpmk_number: '', description: '' });
+        setShowAddCpmkModal(false);
+        const newData = await loadCPMKForCourse(selectedCourse.id);
+        setCpmkData(newData);
+        loadCourses(); // Update count
+        setTimeout(() => setUploadStatus(null), 3000);
+      } else {
+        throw new Error(data.error || 'Gagal menambahkan CPMK');
+      }
+    } catch (error) {
+      console.error('Failed to add CPMK:', error);
+      alert('Gagal menambahkan CPMK: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddSubCpmk = async () => {
+    if (!newSubCpmk.sub_cpmk_number || !newSubCpmk.description) {
+      alert('Nomor Sub-CPMK dan deskripsi harus diisi!');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await fetch(`http://103.151.145.182:8080/api/v1/cpmk/${selectedCpmkForSub.id}/sub-cpmk`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sub_cpmk_number: parseInt(newSubCpmk.sub_cpmk_number),
+          description: newSubCpmk.description,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setUploadStatus({
+          success: true,
+          message: 'Sub-CPMK berhasil ditambahkan!',
+        });
+        setNewSubCpmk({ sub_cpmk_number: '', description: '' });
+        setShowAddSubCpmkModal(false);
+        setSelectedCpmkForSub(null);
+        const newData = await loadCPMKForCourse(selectedCourse.id);
+        setCpmkData(newData);
+        setTimeout(() => setUploadStatus(null), 3000);
+      } else {
+        throw new Error(data.error || 'Gagal menambahkan Sub-CPMK');
+      }
+    } catch (error) {
+      console.error('Failed to add Sub-CPMK:', error);
+      alert('Gagal menambahkan Sub-CPMK: ' + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -651,18 +745,27 @@ export default function CPMKManagement() {
                   {selectedCourse.code} | {cpmkData.length} CPMK
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  setShowDetailModal(false);
-                  setSelectedCourse(null);
-                  setCpmkData([]);
-                }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAddCpmkModal(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Tambah CPMK</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDetailModal(false);
+                    setSelectedCourse(null);
+                    setCpmkData([]);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6">
@@ -697,7 +800,19 @@ export default function CPMKManagement() {
                       {/* Sub-CPMKs */}
                       {cpmk.sub_cpmks && cpmk.sub_cpmks.length > 0 ? (
                         <div className="mt-4 pl-6 border-l-2 border-blue-200">
-                          <p className="text-xs font-semibold text-gray-600 mb-3">Sub-CPMK:</p>
+                          <div className="flex items-center justify-between mb-3">
+                            <p className="text-xs font-semibold text-gray-600">Sub-CPMK:</p>
+                            <button
+                              onClick={() => {
+                                setSelectedCpmkForSub(cpmk);
+                                setShowAddSubCpmkModal(true);
+                              }}
+                              className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Tambah Sub</span>
+                            </button>
+                          </div>
                           <div className="space-y-2">
                             {cpmk.sub_cpmks.map((sub) => (
                               <div key={sub.id} className="flex items-start gap-3">
@@ -711,7 +826,19 @@ export default function CPMKManagement() {
                         </div>
                       ) : (
                         <div className="mt-4 pl-6 border-l-2 border-gray-200">
-                          <p className="text-xs text-gray-500 italic">Belum ada Sub-CPMK</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-gray-500 italic">Belum ada Sub-CPMK</p>
+                            <button
+                              onClick={() => {
+                                setSelectedCpmkForSub(cpmk);
+                                setShowAddSubCpmkModal(true);
+                              }}
+                              className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Tambah Sub</span>
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -731,6 +858,165 @@ export default function CPMKManagement() {
               >
                 Tutup
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add CPMK Modal */}
+      {showAddCpmkModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Tambah CPMK Baru</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mata Kuliah
+                </label>
+                <input
+                  type="text"
+                  value={selectedCourse?.title || ''}
+                  disabled
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nomor CPMK <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={newCpmk.cpmk_number}
+                  onChange={(e) => setNewCpmk({ ...newCpmk, cpmk_number: e.target.value })}
+                  placeholder="Contoh: 1"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Deskripsi CPMK <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={newCpmk.description}
+                  onChange={(e) => setNewCpmk({ ...newCpmk, description: e.target.value })}
+                  placeholder="Contoh: Mahasiswa mampu menjelaskan konsep dasar..."
+                  rows={4}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={handleAddCpmk}
+                  disabled={loading || !newCpmk.cpmk_number || !newCpmk.description}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-5 h-5" />
+                      <span>Simpan CPMK</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAddCpmkModal(false);
+                    setNewCpmk({ cpmk_number: '', description: '' });
+                  }}
+                  disabled={loading}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Batal
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Sub-CPMK Modal */}
+      {showAddSubCpmkModal && selectedCpmkForSub && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Tambah Sub-CPMK Baru</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Parent CPMK
+                </label>
+                <div className="px-4 py-2 border border-gray-300 rounded-lg bg-gray-50">
+                  <p className="text-sm font-medium text-gray-900">CPMK {selectedCpmkForSub.cpmk_number}</p>
+                  <p className="text-xs text-gray-600 mt-1">{selectedCpmkForSub.description}</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nomor Sub-CPMK <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={newSubCpmk.sub_cpmk_number}
+                  onChange={(e) => setNewSubCpmk({ ...newSubCpmk, sub_cpmk_number: e.target.value })}
+                  placeholder="Contoh: 1"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Deskripsi Sub-CPMK <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={newSubCpmk.description}
+                  onChange={(e) => setNewSubCpmk({ ...newSubCpmk, description: e.target.value })}
+                  placeholder="Contoh: Menjelaskan pengertian algoritma..."
+                  rows={4}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={handleAddSubCpmk}
+                  disabled={loading || !newSubCpmk.sub_cpmk_number || !newSubCpmk.description}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-5 h-5" />
+                      <span>Simpan Sub-CPMK</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAddSubCpmkModal(false);
+                    setSelectedCpmkForSub(null);
+                    setNewSubCpmk({ sub_cpmk_number: '', description: '' });
+                  }}
+                  disabled={loading}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Batal
+                </button>
+              </div>
             </div>
           </div>
         </div>
