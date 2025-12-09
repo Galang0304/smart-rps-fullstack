@@ -517,13 +517,18 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 		"Praktikum",
 	}
 
-	// Calculate bobot per week (total 100% divided by weeks)
-	totalWeeks := 16
+	// Get actual topic count
 	topikDataSlice, hasTopik := result["topik"].([]interface{})
+	actualTopikCount := 0
 	if hasTopik {
-		totalWeeks = len(topikDataSlice)
+		actualTopikCount = len(topikDataSlice)
 	}
-	bobotPerWeek := 100.0 / float64(totalWeeks)
+
+	// Calculate bobot - distribute among actual weeks with content
+	bobotPerWeek := 0.0
+	if actualTopikCount > 0 {
+		bobotPerWeek = 100.0 / float64(actualTopikCount)
+	}
 
 	// SKS value for time calculation
 	sksValue := 2
@@ -532,21 +537,24 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	}
 
 	// Generate placeholders for each week (1-16)
+	// Only fill data for weeks that have actual topik data
 	for week := 1; week <= 16; week++ {
 		weekIndex := week - 1
 
-		// Default values
-		mingguKe := fmt.Sprintf("%d", week)
+		// Default empty values for weeks without data
+		mingguKe := ""
 		subCPMKCode := ""
 		indikatorText := ""
 		topikText := ""
 		metodeText := ""
-		waktuText := fmt.Sprintf("%d", sksValue*50)
+		waktuText := ""
 		kriteriaText := ""
 		bobotText := ""
 
-		// Fill with actual data if available
+		// Only fill if we have actual data for this week
 		if hasTopik && weekIndex < len(topikDataSlice) {
+			mingguKe = fmt.Sprintf("%d", week)
+
 			if topik, ok := topikDataSlice[weekIndex].(map[string]interface{}); ok {
 				topic := getString(topik, "topic")
 				desc := getString(topik, "description")
@@ -556,22 +564,24 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 				}
 			}
 
-			// Map Sub-CPMK to week
-			if len(subCPMKList) > 0 {
-				subCPMKIndex := weekIndex % len(subCPMKList)
-				subCPMK := subCPMKList[subCPMKIndex]
+			// Map Sub-CPMK to week - NO cycling, only use if we have one for this week
+			if weekIndex < len(subCPMKList) {
+				subCPMK := subCPMKList[weekIndex]
 				subCPMKCode = getString(subCPMK, "code")
 				indikatorText = getString(subCPMK, "description")
 			}
 
-			// Teaching method
+			// Teaching method (rotate through available methods)
 			metodeText = metodePembelajaranDefault[weekIndex%len(metodePembelajaranDefault)]
 
-			// Assessment criteria
-			if week == 8 { // UTS
+			// Time in minutes
+			waktuText = fmt.Sprintf("%d", sksValue*50)
+
+			// Assessment criteria based on week position
+			if week == 8 || (actualTopikCount < 16 && week == actualTopikCount/2) { // UTS at midpoint
 				kriteriaText = "UTS"
 				bobotText = "30%"
-			} else if week == 16 { // UAS
+			} else if week == actualTopikCount { // UAS at last week
 				kriteriaText = "UAS"
 				bobotText = "40%"
 			} else if week%4 == 0 { // Quiz every 4 weeks
@@ -613,26 +623,27 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 					mingguText += fmt.Sprintf("%d\n", i+1)
 					topikMingguanText += fmt.Sprintf("%s: %s\n", topic, desc)
 
-					if len(subCPMKList) > 0 {
-						subCPMKIndex := i % len(subCPMKList)
-						subCPMK := subCPMKList[subCPMKIndex]
+					// Only use Sub-CPMK if we have one for this week (no cycling)
+					if i < len(subCPMKList) {
+						subCPMK := subCPMKList[i]
 						subCPMKMingguanText += fmt.Sprintf("%s\n", getString(subCPMK, "code"))
 						indikatorMingguanText += fmt.Sprintf("%s\n", getString(subCPMK, "description"))
 					} else {
-						subCPMKMingguanText += fmt.Sprintf("Sub-CPMK-%d\n", (i%5)+1)
-						indikatorMingguanText += "-\n"
+						subCPMKMingguanText += "\n"
+						indikatorMingguanText += "\n"
 					}
 
 					metodePembelajaranText += fmt.Sprintf("%s\n", metodePembelajaranDefault[i%len(metodePembelajaranDefault)])
 					estimasiWaktuText += fmt.Sprintf("%d\n", sksValue*50)
 
-					if i == 7 {
+					week := i + 1
+					if week == 8 || (actualTopikCount < 16 && week == actualTopikCount/2) {
 						kriteriaPenilaianText += "UTS\n"
 						bobotNilaiText += "30%\n"
-					} else if i == 15 {
+					} else if week == actualTopikCount {
 						kriteriaPenilaianText += "UAS\n"
 						bobotNilaiText += "40%\n"
-					} else if i%4 == 3 {
+					} else if week%4 == 0 {
 						kriteriaPenilaianText += "Kuis\n"
 						bobotNilaiText += fmt.Sprintf("%.0f%%\n", bobotPerWeek*2)
 					} else {
