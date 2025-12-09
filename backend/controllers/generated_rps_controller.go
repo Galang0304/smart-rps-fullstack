@@ -367,6 +367,13 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 		return
 	}
 
+	// Get Dosen info via many2many dosen_courses table
+	var dosens []models.Dosen
+	gc.db.Preload("Prodi").
+		Joins("JOIN dosen_courses ON dosen_courses.dosen_id = dosens.id").
+		Where("dosen_courses.course_id = ?", rps.CourseID).
+		Find(&dosens)
+
 	// Parse result JSON
 	var result map[string]interface{}
 	if err := json.Unmarshal(rps.Result, &result); err != nil {
@@ -406,22 +413,37 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	replaceMap["{DESKRIPSI_MK}"] = ""
 	replaceMap["{MK_PRASYARAT}"] = ""
 	replaceMap["{REFERENSI_LIST}"] = ""
-	replaceMap["{NAMA_DOSEN}"] = ""
 
-	// Get Prodi info
+	// Get Dosen name and Fakultas from dosen data
+	namaDosen := ""
+	fakultasDosen := ""
+	if len(dosens) > 0 {
+		namaDosen = dosens[0].NamaLengkap
+		if dosens[0].Prodi != nil {
+			fakultasDosen = dosens[0].Prodi.Fakultas
+		}
+	}
+	replaceMap["{NAMA_DOSEN}"] = namaDosen
+
+	// Get Prodi info - fallback to Program.Prodi if dosen doesn't have fakultas
 	if rps.Course.Program != nil {
 		replaceMap["{PROGRAM_STUDI}"] = rps.Course.Program.Name
 		if rps.Course.Program.Prodi != nil {
 			replaceMap["{KETUA_PRODI}"] = rps.Course.Program.Prodi.NamaKaprodi
-			replaceMap["{FAKULTAS}"] = rps.Course.Program.Prodi.Fakultas
+			// Use fakultas from dosen's prodi, fallback to program's prodi
+			if fakultasDosen != "" {
+				replaceMap["{FAKULTAS}"] = fakultasDosen
+			} else {
+				replaceMap["{FAKULTAS}"] = rps.Course.Program.Prodi.Fakultas
+			}
 		} else {
 			replaceMap["{KETUA_PRODI}"] = ""
-			replaceMap["{FAKULTAS}"] = ""
+			replaceMap["{FAKULTAS}"] = fakultasDosen
 		}
 	} else {
 		replaceMap["{PROGRAM_STUDI}"] = ""
 		replaceMap["{KETUA_PRODI}"] = ""
-		replaceMap["{FAKULTAS}"] = ""
+		replaceMap["{FAKULTAS}"] = fakultasDosen
 	}
 
 	// CPL_LIST (Capaian Pembelajaran Lulusan)
