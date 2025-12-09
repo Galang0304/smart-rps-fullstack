@@ -348,8 +348,19 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	}
 
 	var rps models.GeneratedRPS
-	if err := gc.db.Preload("Course").Preload("Course.Program").First(&rps, "id = ?", rpsUUID).Error; err != nil {
+	// Use Unscoped() to include soft-deleted courses so export still works
+	if err := gc.db.Preload("Course", func(db *gorm.DB) *gorm.DB {
+		return db.Unscoped()
+	}).Preload("Course.Program", func(db *gorm.DB) *gorm.DB {
+		return db.Unscoped()
+	}).First(&rps, "id = ?", rpsUUID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "RPS not found"})
+		return
+	}
+
+	// Safety check: ensure Course is loaded
+	if rps.Course == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Course not found for this RPS"})
 		return
 	}
 
