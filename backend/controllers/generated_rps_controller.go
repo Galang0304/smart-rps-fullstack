@@ -502,6 +502,35 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	kriteriaPenilaianText := ""
 	bobotNilaiText := ""
 
+	// Prepare Sub-CPMK data for mapping to weeks
+	var subCPMKList []map[string]interface{}
+	if subCPMKData, ok := result["subCPMK"].([]interface{}); ok {
+		for _, item := range subCPMKData {
+			if subCPMK, ok := item.(map[string]interface{}); ok {
+				subCPMKList = append(subCPMKList, subCPMK)
+			}
+		}
+	}
+
+	// Default methods for teaching
+	metodePembelajaranDefault := []string{
+		"Ceramah, Diskusi",
+		"Ceramah, Tanya Jawab",
+		"Diskusi, Presentasi",
+		"Problem Based Learning",
+		"Case Study",
+		"Collaborative Learning",
+		"Project Based Learning",
+		"Praktikum",
+	}
+
+	// Calculate bobot per week (total 100% divided by weeks)
+	totalWeeks := 16
+	if topikData, ok := result["topik"].([]interface{}); ok {
+		totalWeeks = len(topikData)
+	}
+	bobotPerWeek := 100.0 / float64(totalWeeks)
+
 	if topikData, ok := result["topik"].([]interface{}); ok {
 		for i, item := range topikData {
 			if topik, ok := item.(map[string]interface{}); ok {
@@ -510,12 +539,42 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 				if topic != "" {
 					mingguText += fmt.Sprintf("%d\n", i+1)
 					topikMingguanText += fmt.Sprintf("%s\n%s\n\n", topic, desc)
-					subCPMKMingguanText += "-\n"
-					indikatorMingguanText += "-\n"
-					metodePembelajaranText += "-\n"
-					estimasiWaktuText += "150\n"
-					kriteriaPenilaianText += "-\n"
-					bobotNilaiText += "-\n"
+
+					// Map Sub-CPMK to week (cycle through available Sub-CPMKs)
+					if len(subCPMKList) > 0 {
+						subCPMKIndex := i % len(subCPMKList)
+						subCPMK := subCPMKList[subCPMKIndex]
+						subCPMKMingguanText += fmt.Sprintf("%s\n", getString(subCPMK, "code"))
+						indikatorMingguanText += fmt.Sprintf("%s\n", getString(subCPMK, "description"))
+					} else {
+						subCPMKMingguanText += fmt.Sprintf("Sub-CPMK-%d\n", (i%5)+1)
+						indikatorMingguanText += "-\n"
+					}
+
+					// Use rotating teaching methods
+					metodePembelajaranText += fmt.Sprintf("%s\n", metodePembelajaranDefault[i%len(metodePembelajaranDefault)])
+
+					// SKS * 50 minutes per week
+					sksValue := 2
+					if rps.Course.Credits != nil {
+						sksValue = *rps.Course.Credits
+					}
+					estimasiWaktuText += fmt.Sprintf("%d\n", sksValue*50)
+
+					// Penilaian criteria
+					if i == 7 { // UTS at week 8
+						kriteriaPenilaianText += "UTS\n"
+						bobotNilaiText += "30\n"
+					} else if i == 15 { // UAS at week 16
+						kriteriaPenilaianText += "UAS\n"
+						bobotNilaiText += "40\n"
+					} else if i%4 == 3 { // Quiz every 4 weeks
+						kriteriaPenilaianText += "Kuis\n"
+						bobotNilaiText += fmt.Sprintf("%.1f\n", bobotPerWeek*2)
+					} else {
+						kriteriaPenilaianText += "Partisipasi\n"
+						bobotNilaiText += fmt.Sprintf("%.1f\n", bobotPerWeek/2)
+					}
 				}
 			}
 		}
