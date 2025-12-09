@@ -1,0 +1,5 @@
+[33ma420f5f[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Remove .env files from tracking
+[33m117557c[m Add .env to gitignore
+[33me5b9855[m Fix: Allow reusing username and kode_prodi after soft delete
+[33m1e4999d[m Fix: Allow reusing username and kode_prodi after soft delete
+[33m7b36a17[m[33m ([m[1;31morigin/main[m[33m)[m Add files via upload

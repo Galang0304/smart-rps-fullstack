@@ -204,6 +204,6 @@ This project is licensed under the MIT License.
 
 Untuk pertanyaan atau dukungan, silakan buka issue di GitHub repository.
 
----
+TERIMA KASIH
 
 ⭐ Jika proyek ini bermanfaat, jangan lupa berikan star di GitHub!
