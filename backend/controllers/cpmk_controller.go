@@ -619,38 +619,63 @@ func (cc *CPMKController) ImportCSV(c *gin.Context) {
 		}
 	}
 
-	// Process Sub-CPMK rows (skip header)
-	for i, row := range subCpmkRows[1:] {
+	// Process Sub-CPMK rows (skip header at index 0 and empty first row at index 1)
+	var currentCourseTitle string
+	var currentCpmkNum int
+	var currentCpmkID uuid.UUID
+
+	for i, row := range subCpmkRows[2:] { // Skip first 2 rows (header + empty)
 		if len(row) < 4 {
 			continue
 		}
 
+		// Check if this row has course title (new course/CPMK)
 		courseTitle := strings.TrimSpace(row[1])
-		cpmkNumStr := strings.TrimSpace(row[2])
+		cpmkField := strings.TrimSpace(row[2])
 
-		if courseTitle == "" || cpmkNumStr == "" {
+		// Update current course if present
+		if courseTitle != "" {
+			currentCourseTitle = courseTitle
+		}
+
+		// Update current CPMK if present
+		if cpmkField != "" {
+			// Parse CPMK number from string like "1). Description"
+			parts := strings.Split(cpmkField, ")")
+			if len(parts) >= 1 {
+				cpmkNumStr := strings.TrimSpace(parts[0])
+				cpmkNum, err := strconv.Atoi(cpmkNumStr)
+				if err != nil {
+					errors = append(errors, fmt.Sprintf("Sub-CPMK Row %d: Invalid CPMK number '%s'", i+3, cpmkField))
+					failedCount++
+					continue
+				}
+				currentCpmkNum = cpmkNum
+
+				// Get CPMK ID
+				if cpmkMap[currentCourseTitle] != nil {
+					if id, exists := cpmkMap[currentCourseTitle][currentCpmkNum]; exists {
+						currentCpmkID = id
+					} else {
+						errors = append(errors, fmt.Sprintf("Sub-CPMK Row %d: CPMK %d not found for '%s'", i+3, currentCpmkNum, currentCourseTitle))
+						failedCount++
+						continue
+					}
+				} else {
+					errors = append(errors, fmt.Sprintf("Sub-CPMK Row %d: Course '%s' not found in CPMK map", i+3, currentCourseTitle))
+					failedCount++
+					continue
+				}
+			}
+		}
+
+		// Skip if we don't have a valid CPMK ID yet
+		if currentCpmkID == uuid.Nil {
 			continue
 		}
 
-		// Parse CPMK number from string like "1). Description" or just "1"
-		cpmkNumStr = strings.Split(cpmkNumStr, ")")[0]
-		cpmkNumStr = strings.TrimSpace(cpmkNumStr)
-		cpmkNum, err := strconv.Atoi(cpmkNumStr)
-		if err != nil {
-			errors = append(errors, fmt.Sprintf("Sub-CPMK Row %d: Invalid CPMK number '%s'", i+2, row[2]))
-			failedCount++
-			continue
-		}
-
-		// Get CPMK ID
-		cpmkID, exists := cpmkMap[courseTitle][cpmkNum]
-		if !exists {
-			errors = append(errors, fmt.Sprintf("Sub-CPMK Row %d: CPMK %d not found for '%s'", i+2, cpmkNum, courseTitle))
-			failedCount++
-			continue
-		}
-
-		// Parse Sub-CPMK data (columns D onwards)
+		// Parse Sub-CPMK data (columns D onwards = index 3+)
+		subCpmkCount := 0
 		for subNum := 1; subNum <= 14; subNum++ {
 			colIndex := 3 + subNum - 1
 			if colIndex >= len(row) {
@@ -664,16 +689,17 @@ func (cc *CPMKController) ImportCSV(c *gin.Context) {
 
 			subCpmk := models.SubCPMK{
 				ID:            uuid.New(),
-				CPMKId:        cpmkID,
+				CPMKId:        currentCpmkID,
 				SubCPMKNumber: subNum,
 				Description:   description,
 			}
 
 			if err := tx.Create(&subCpmk).Error; err != nil {
-				errors = append(errors, fmt.Sprintf("Sub-CPMK Row %d.%d: %s", i+2, subNum, err.Error()))
+				errors = append(errors, fmt.Sprintf("Sub-CPMK Row %d.%d: %s", i+3, subNum, err.Error()))
 				failedCount++
 				continue
 			}
+			subCpmkCount++
 		}
 	}
 
