@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -124,6 +125,7 @@ func (cc *CourseController) Create(c *gin.Context) {
 		Title     string `json:"title" binding:"required"`
 		Credits   int    `json:"credits"`
 		Semester  int    `json:"semester"`
+		Tahun     string `json:"tahun" binding:"required"`
 		Category  string `json:"category"`
 	}
 
@@ -154,16 +156,14 @@ func (cc *CourseController) Create(c *gin.Context) {
 
 	programID := *prodi.ProgramID
 
-	// Check if course code already exists
+	// Check if course code already exists for the same year
 	var existingCourse models.Course
-	if err := cc.db.Where("code = ? AND program_id = ?", req.Code, programID).First(&existingCourse).Error; err == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Kode mata kuliah '" + req.Code + "' sudah ada"})
+	if err := cc.db.Where("code = ? AND program_id = ? AND tahun = ?", req.Code, programID, req.Tahun).First(&existingCourse).Error; err == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Kode mata kuliah '" + req.Code + "' untuk tahun " + req.Tahun + " sudah ada"})
 		return
 	}
 
 	// Create course
-	// Note: Category is stored separately or in a different table
-	// For now we'll just store the basic course info
 	course := models.Course{
 		ID:        uuid.New(),
 		ProgramID: &programID,
@@ -171,6 +171,7 @@ func (cc *CourseController) Create(c *gin.Context) {
 		Title:     req.Title,
 		Credits:   &req.Credits,
 		Semester:  &req.Semester,
+		Tahun:     req.Tahun,
 	}
 
 	if err := cc.db.Create(&course).Error; err != nil {
@@ -203,6 +204,7 @@ func (cc *CourseController) Update(c *gin.Context) {
 		Title    string `json:"title"`
 		Credits  int    `json:"credits"`
 		Semester int    `json:"semester"`
+		Tahun    string `json:"tahun"`
 		Category string `json:"category"`
 	}
 
@@ -224,7 +226,9 @@ func (cc *CourseController) Update(c *gin.Context) {
 	if req.Semester > 0 {
 		course.Semester = &req.Semester
 	}
-	// Note: Category handling removed as model doesn't have Description field
+	if req.Tahun != "" {
+		course.Tahun = req.Tahun
+	}
 
 	if err := cc.db.Save(&course).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update course"})
@@ -331,17 +335,21 @@ func (cc *CourseController) ImportCSV(c *gin.Context) {
 			continue
 		}
 
-		// Parse data: No,Kode MK,Mata Kuliah,SKS,Semester
+		// Parse data: No,Kode MK,Mata Kuliah,SKS,Semester,Tahun
 		code := strings.TrimSpace(record[1])
 		title := strings.TrimSpace(record[2])
 		credits, _ := strconv.Atoi(strings.TrimSpace(record[3]))
 		semester, _ := strconv.Atoi(strings.TrimSpace(record[4]))
+		tahun := strings.TrimSpace(record[5])
+		if tahun == "" {
+			tahun = strconv.Itoa(time.Now().Year())
+		}
 
-		// Check if course already exists
+		// Check if course already exists for that year
 		var existingCourse models.Course
-		if err := cc.db.Where("code = ? AND program_id = ?", code, programID).First(&existingCourse).Error; err == nil {
+		if err := cc.db.Where("code = ? AND program_id = ? AND tahun = ?", code, programID, tahun).First(&existingCourse).Error; err == nil {
 			failed++
-			errors = append(errors, fmt.Sprintf("Row %d: Course '%s' already exists", i+2, code))
+			errors = append(errors, fmt.Sprintf("Row %d: Course '%s' for year %s already exists", i+2, code, tahun))
 			continue
 		}
 
@@ -353,6 +361,7 @@ func (cc *CourseController) ImportCSV(c *gin.Context) {
 			Title:     title,
 			Credits:   &credits,
 			Semester:  &semester,
+			Tahun:     tahun,
 		}
 
 		if err := cc.db.Create(&course).Error; err != nil {

@@ -78,6 +78,9 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 			courses.PUT("/:id", courseController.Update)
 			courses.DELETE("/:id", courseController.Delete)
 			courses.POST("/import", courseController.ImportCSV)
+			courses.GET("/template/excel", courseController.DownloadTemplate)
+			courses.POST("/import/excel", courseController.ImportExcel)
+			courses.GET("/export/excel", courseController.ExportExcel)
 		}
 
 		// Dosens routes

@@ -18,12 +18,15 @@ export default function CourseManagement() {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [categories, setCategories] = useState([]);
   const [newCategory, setNewCategory] = useState('');
+  const [showExcelUpload, setShowExcelUpload] = useState(false);
+  const [excelFile, setExcelFile] = useState(null);
   const [formData, setFormData] = useState({
     code: '',
     title: '',
     credits: '',
     semester: '',
     category: '',
+    tahun: new Date().getFullYear().toString(),
   });
   
   const userRole = localStorage.getItem('role');
@@ -225,6 +228,7 @@ export default function CourseManagement() {
         title: formData.title,
         credits: parseInt(formData.credits),
         semester: parseInt(formData.semester),
+        tahun: formData.tahun,
         description: formData.category ? `Kategori: ${formData.category}` : '',
       };
 
@@ -247,7 +251,7 @@ export default function CourseManagement() {
       setShowAddModal(false);
       setEditMode(false);
       setEditingCourse(null);
-      setFormData({ code: '', title: '', credits: '', semester: '', category: '' });
+      setFormData({ code: '', title: '', credits: '', semester: '', category: '', tahun: new Date().getFullYear().toString() });
       loadCourses();
       
       // Clear status after 3 seconds
@@ -269,6 +273,7 @@ export default function CourseManagement() {
       credits: course.credits?.toString() || '',
       semester: course.semester?.toString() || '',
       category: category,
+      tahun: course.tahun || new Date().getFullYear().toString(),
     });
     setEditMode(true);
     setShowAddModal(true);
@@ -278,7 +283,7 @@ export default function CourseManagement() {
     setShowAddModal(false);
     setEditMode(false);
     setEditingCourse(null);
-    setFormData({ code: '', title: '', credits: '', semester: '', category: '' });
+    setFormData({ code: '', title: '', credits: '', semester: '', category: '', tahun: new Date().getFullYear().toString() });
   };
 
   const handleAddCategory = () => {
@@ -291,6 +296,117 @@ export default function CourseManagement() {
   const handleDeleteCategory = (category) => {
     if (confirm(`Hapus kategori "${category}"?`)) {
       setCategories(categories.filter(c => c !== category));
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const response = await fetch('http://103.151.145.182:8080/api/v1/courses/template/excel', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      
+      if (!response.ok) throw new Error('Failed to download template');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Template_Mata_Kuliah_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Failed to download template:', error);
+      alert('Gagal download template: ' + error.message);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (!selectedProgram) {
+      alert('Pilih program studi terlebih dahulu');
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://103.151.145.182:8080/api/v1/courses/export/excel?program_id=${selectedProgram}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      
+      if (!response.ok) throw new Error('Failed to export');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Mata_Kuliah_Export_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      setUploadStatus({
+        success: true,
+        message: 'Berhasil export mata kuliah ke Excel!',
+      });
+      setTimeout(() => setUploadStatus(null), 3000);
+    } catch (error) {
+      console.error('Failed to export:', error);
+      alert('Gagal export: ' + error.message);
+    }
+  };
+
+  const handleExcelUpload = async () => {
+    if (!excelFile || !selectedProgram) {
+      alert('Pilih file Excel dan program studi terlebih dahulu');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const formData = new FormData();
+      formData.append('file', excelFile);
+      formData.append('program_id', selectedProgram);
+
+      const response = await fetch('http://103.151.145.182:8080/api/v1/courses/import/excel', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Import failed');
+      }
+
+      setUploadStatus({
+        success: true,
+        message: data.message || `Berhasil import ${data.imported_count} mata kuliah`,
+        details: data.failed_count > 0 ? `${data.failed_count} gagal, ${data.errors?.slice(0, 3).join(', ')}` : null,
+      });
+      
+      setExcelFile(null);
+      setShowExcelUpload(false);
+      loadCourses();
+      setTimeout(() => setUploadStatus(null), 5000);
+    } catch (error) {
+      console.error('Failed to import Excel:', error);
+      setUploadStatus({
+        success: false,
+        message: 'Import gagal',
+        details: error.message,
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -360,12 +476,12 @@ export default function CourseManagement() {
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">Manajemen Mata Kuliah</h1>
           <p className="text-sm md:text-base text-gray-600 mt-1">Kelola data mata kuliah program studi</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => {
               setEditMode(false);
               setEditingCourse(null);
-              setFormData({ code: '', title: '', credits: '', semester: '', category: '' });
+              setFormData({ code: '', title: '', credits: '', semester: '', category: '', tahun: new Date().getFullYear().toString() });
               setShowAddModal(true);
             }}
             className="flex items-center gap-2 px-3 md:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm md:text-base"
@@ -374,8 +490,32 @@ export default function CourseManagement() {
             <span className="hidden sm:inline">Tambah</span>
           </button>
           <button
-            onClick={() => setShowUpload(!showUpload)}
+            onClick={handleDownloadTemplate}
+            className="flex items-center gap-2 px-3 md:px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm md:text-base"
+            title="Download Template Excel"
+          >
+            <FileText className="w-4 h-4 md:w-5 md:h-5" />
+            <span className="hidden sm:inline">Template</span>
+          </button>
+          <button
+            onClick={() => setShowExcelUpload(!showExcelUpload)}
             className="flex items-center gap-2 px-3 md:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm md:text-base"
+          >
+            <Upload className="w-4 h-4 md:w-5 md:h-5" />
+            <span className="hidden sm:inline">Import Excel</span>
+          </button>
+          <button
+            onClick={handleExportExcel}
+            className="flex items-center gap-2 px-3 md:px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm md:text-base"
+            disabled={!selectedProgram}
+            title="Export ke Excel"
+          >
+            <FileText className="w-4 h-4 md:w-5 md:h-5" />
+            <span className="hidden sm:inline">Export</span>
+          </button>
+          <button
+            onClick={() => setShowUpload(!showUpload)}
+            className="flex items-center gap-2 px-3 md:px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm md:text-base"
           >
             <Upload className="w-4 h-4 md:w-5 md:h-5" />
             <span className="hidden sm:inline">Import CSV</span>
@@ -395,6 +535,71 @@ export default function CourseManagement() {
           }}
           setUploadStatus={setUploadStatus}
         />
+      )}
+
+      {/* Excel Upload Section */}
+      {showExcelUpload && (
+        <div className="mb-6 bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Import Mata Kuliah dari Excel</h3>
+          
+          <div className="space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-800">
+                📋 <strong>Petunjuk:</strong>
+              </p>
+              <ol className="text-sm text-blue-700 mt-2 ml-4 list-decimal space-y-1">
+                <li>Download template Excel terlebih dahulu dengan klik tombol "Template"</li>
+                <li>Isi data mata kuliah sesuai format template (jangan ubah header)</li>
+                <li>Pastikan kolom Tahun diisi (contoh: 2025, 2024, 2026)</li>
+                <li>Upload file Excel yang sudah diisi</li>
+              </ol>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                File Excel (.xlsx)
+              </label>
+              <input
+                type="file"
+                accept=".xlsx"
+                onChange={(e) => setExcelFile(e.target.files[0])}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Format: No, Kode MK, Mata Kuliah, SKS, Semester, Tahun
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleExcelUpload}
+                disabled={!excelFile || loading}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Importing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-5 h-5" />
+                    <span>Import Excel</span>
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => {
+                  setShowExcelUpload(false);
+                  setExcelFile(null);
+                }}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Upload Status */}
@@ -472,6 +677,7 @@ export default function CourseManagement() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mata Kuliah</th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">SKS</th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Semester</th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Tahun</th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-80">Actions</th>
               </tr>
             </thead>
@@ -491,6 +697,11 @@ export default function CourseManagement() {
                     <td className="px-6 py-4 text-sm text-gray-900">{course.title}</td>
                     <td className="px-6 py-4 text-sm text-gray-600 text-center whitespace-nowrap">{course.credits || '-'}</td>
                     <td className="px-6 py-4 text-sm text-gray-600 text-center whitespace-nowrap">{course.semester || '-'}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600 text-center whitespace-nowrap">
+                      <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-purple-50 text-purple-700 rounded">
+                        {course.tahun || '2025'}
+                      </span>
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-center gap-1.5">
                         {hasRPS ? (
@@ -582,6 +793,9 @@ export default function CourseManagement() {
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="font-medium">Semester:</span> {course.semester || '-'}
+                  </span>
+                  <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-purple-50 text-purple-700 rounded">
+                    📅 {course.tahun || '2025'}
                   </span>
                 </div>
                 
@@ -831,6 +1045,22 @@ function AddCourseModal({ show, onClose, onSubmit, formData, setFormData, loadin
               onChange={(e) => setFormData({ ...formData, semester: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
               placeholder="Contoh: 5"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Tahun Akademik
+            </label>
+            <input
+              type="number"
+              required
+              min="2020"
+              max="2050"
+              value={formData.tahun}
+              onChange={(e) => setFormData({ ...formData, tahun: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              placeholder="Contoh: 2025"
             />
           </div>
 
