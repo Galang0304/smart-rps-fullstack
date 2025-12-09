@@ -382,27 +382,27 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	replaceMap := docx.PlaceholderMap{}
 
 	// Basic Info
-	replaceMap["{{KODE_MK}}"] = rps.Course.Code
-	replaceMap["{{NAMA_MK}}"] = rps.Course.Title
-	replaceMap["{{SKS}}"] = fmt.Sprintf("%d", rps.Course.Credits)
-	replaceMap["{{SKS_TEORI}}"] = fmt.Sprintf("%d", rps.Course.Credits)
-	replaceMap["{{SKS_PRAKTIK}}"] = "0"
-	replaceMap["{{SEMESTER}}"] = ""
-	replaceMap["{{TGL_PENYUSUNAN}}"] = time.Now().Format("02/01/2006")
-	replaceMap["{{RUMPUN_MK}}"] = ""
-	replaceMap["{{NAMA_PENYUSUN}}"] = ""
-	replaceMap["{{KOORDINATOR_MK}}"] = ""
-	replaceMap["{{KETUA_PRODI}}"] = ""
-	replaceMap["{{DESKRIPSI_MK}}"] = ""
-	replaceMap["{{MK_PRASYARAT}}"] = ""
-	replaceMap["{{REFERENSI_LIST}}"] = ""
+	replaceMap["{KODE_MK}"] = rps.Course.Code
+	replaceMap["{NAMA_MK}"] = rps.Course.Title
+	replaceMap["{SKS}"] = fmt.Sprintf("%d", rps.Course.Credits)
+	replaceMap["{SKS_TEORI}"] = fmt.Sprintf("%d", rps.Course.Credits)
+	replaceMap["{SKS_PRAKTIK}"] = "0"
+	replaceMap["{SEMESTER}"] = ""
+	replaceMap["{TGL_PENYUSUNAN}"] = time.Now().Format("02/01/2006")
+	replaceMap["{RUMPUN_MK}"] = ""
+	replaceMap["{NAMA_PENYUSUN}"] = ""
+	replaceMap["{KOORDINATOR_MK}"] = ""
+	replaceMap["{KETUA_PRODI}"] = ""
+	replaceMap["{DESKRIPSI_MK}"] = ""
+	replaceMap["{MK_PRASYARAT}"] = ""
+	replaceMap["{REFERENSI_LIST}"] = ""
 
 	if rps.Course.Program != nil {
-		replaceMap["{{PROGRAM_STUDI}}"] = rps.Course.Program.Name
+		replaceMap["{PROGRAM_STUDI}"] = rps.Course.Program.Name
 	}
 
 	// CPL_LIST (Capaian Pembelajaran Lulusan)
-	replaceMap["{{CPL_LIST}}"] = ""
+	replaceMap["{CPL_LIST}"] = ""
 
 	// CPMK_LIST (Capaian Pembelajaran Mata Kuliah)
 	cpmkListText := ""
@@ -414,9 +414,9 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 			}
 		}
 	}
-	replaceMap["{{CPMK_LIST}}"] = cpmkListText
+	replaceMap["{CPMK_LIST}"] = cpmkListText
 	// Backward compatibility
-	replaceMap["{{CPMK}}"] = cpmkListText
+	replaceMap["{CPMK}"] = cpmkListText
 
 	// SUB_CPMK_LIST (Sub Capaian Pembelajaran)
 	subCPMKListText := ""
@@ -429,9 +429,9 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 			}
 		}
 	}
-	replaceMap["{{SUB_CPMK_LIST}}"] = subCPMKListText
+	replaceMap["{SUB_CPMK_LIST}"] = subCPMKListText
 	// Backward compatibility
-	replaceMap["{{SUB_CPMK}}"] = subCPMKListText
+	replaceMap["{SUB_CPMK}"] = subCPMKListText
 
 	// TOPIK_LIST (Bahan Kajian/Topik)
 	topikListText := ""
@@ -445,7 +445,7 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 			}
 		}
 	}
-	replaceMap["{{TOPIK_LIST}}"] = topikListText
+	replaceMap["{TOPIK_LIST}"] = topikListText
 
 	// RENCANA PEMBELAJARAN PER MINGGU (untuk tabel)
 	mingguText := ""
@@ -476,17 +476,17 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 		}
 	}
 
-	replaceMap["{{MINGGU_KE}}"] = mingguText
-	replaceMap["{{SUB_CPMK_MINGGUAN}}"] = subCPMKMingguanText
-	replaceMap["{{INDIKATOR_MINGGUAN}}"] = indikatorMingguanText
-	replaceMap["{{TOPIK_MINGGUAN}}"] = topikMingguanText
-	replaceMap["{{METODE_PEMBELAJARAN}}"] = metodePembelajaranText
-	replaceMap["{{ESTIMASI_WAKTU}}"] = estimasiWaktuText
-	replaceMap["{{KRITERIA_PENILAIAN}}"] = kriteriaPenilaianText
-	replaceMap["{{BOBOT_NILAI}}"] = bobotNilaiText
+	replaceMap["{MINGGU_KE}"] = mingguText
+	replaceMap["{SUB_CPMK_MINGGUAN}"] = subCPMKMingguanText
+	replaceMap["{INDIKATOR_MINGGUAN}"] = indikatorMingguanText
+	replaceMap["{TOPIK_MINGGUAN}"] = topikMingguanText
+	replaceMap["{METODE_PEMBELAJARAN}"] = metodePembelajaranText
+	replaceMap["{ESTIMASI_WAKTU}"] = estimasiWaktuText
+	replaceMap["{KRITERIA_PENILAIAN}"] = kriteriaPenilaianText
+	replaceMap["{BOBOT_NILAI}"] = bobotNilaiText
 
 	// Backward compatibility
-	replaceMap["{{TOPIK_PEMBELAJARAN}}"] = topikMingguanText
+	replaceMap["{TOPIK_PEMBELAJARAN}"] = topikMingguanText
 
 	// Tugas - Support untuk 3 tugas terpisah (format baru sesuai template)
 	if tugasData, ok := result["tugas"].([]interface{}); ok {
@@ -494,30 +494,30 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 			if i < len(tugasData) {
 				if tugas, ok := tugasData[i].(map[string]interface{}); ok {
 					// Format baru sesuai template yang diberikan
-					replaceMap[fmt.Sprintf("{{SUB_CPMK_TUGAS_%d}}", i+1)] = getString(tugas, "sub_cpmk")
-					replaceMap[fmt.Sprintf("{{INDIKATOR_TUGAS_%d}}", i+1)] = getString(tugas, "indikator")
-					replaceMap[fmt.Sprintf("{{JUDUL_TUGAS_%d}}", i+1)] = getString(tugas, "judul_tugas")
-					replaceMap[fmt.Sprintf("{{BATAS_TUGAS_%d}}", i+1)] = getString(tugas, "batas_waktu")
-					replaceMap[fmt.Sprintf("{{PETUNJUK_TUGAS_%d}}", i+1)] = getString(tugas, "petunjuk_pengerjaan")
-					replaceMap[fmt.Sprintf("{{LUARAN_TUGAS_%d}}", i+1)] = getString(tugas, "luaran_tugas")
-					replaceMap[fmt.Sprintf("{{KRITERIA_TUGAS_%d}}", i+1)] = getString(tugas, "kriteria")
-					replaceMap[fmt.Sprintf("{{TEKNIK_PENILAIAN_TUGAS_%d}}", i+1)] = getString(tugas, "teknik_penilaian")
-					replaceMap[fmt.Sprintf("{{BOBOT_TUGAS_%d}}", i+1)] = fmt.Sprintf("%v", tugas["bobot"])
+					replaceMap[fmt.Sprintf("{SUB_CPMK_TUGAS_%d}", i+1)] = getString(tugas, "sub_cpmk")
+					replaceMap[fmt.Sprintf("{INDIKATOR_TUGAS_%d}", i+1)] = getString(tugas, "indikator")
+					replaceMap[fmt.Sprintf("{JUDUL_TUGAS_%d}", i+1)] = getString(tugas, "judul_tugas")
+					replaceMap[fmt.Sprintf("{BATAS_TUGAS_%d}", i+1)] = getString(tugas, "batas_waktu")
+					replaceMap[fmt.Sprintf("{PETUNJUK_TUGAS_%d}", i+1)] = getString(tugas, "petunjuk_pengerjaan")
+					replaceMap[fmt.Sprintf("{LUARAN_TUGAS_%d}", i+1)] = getString(tugas, "luaran_tugas")
+					replaceMap[fmt.Sprintf("{KRITERIA_TUGAS_%d}", i+1)] = getString(tugas, "kriteria")
+					replaceMap[fmt.Sprintf("{TEKNIK_PENILAIAN_TUGAS_%d}", i+1)] = getString(tugas, "teknik_penilaian")
+					replaceMap[fmt.Sprintf("{BOBOT_TUGAS_%d}", i+1)] = fmt.Sprintf("%v", tugas["bobot"])
 
 					// Backward compatibility - format lama
-					replaceMap[fmt.Sprintf("{{TUGAS_%d_NAMA_MK}}", i+1)] = rps.Course.Title
-					replaceMap[fmt.Sprintf("{{TUGAS_%d_KODE_MK}}", i+1)] = rps.Course.Code
-					replaceMap[fmt.Sprintf("{{TUGAS_%d_SEMESTER}}", i+1)] = ""
-					replaceMap[fmt.Sprintf("{{TUGAS_%d_SKS}}", i+1)] = fmt.Sprintf("%d", rps.Course.Credits)
-					replaceMap[fmt.Sprintf("{{TUGAS_%d_SUB_CPMK}}", i+1)] = getString(tugas, "sub_cpmk")
-					replaceMap[fmt.Sprintf("{{TUGAS_%d_INDIKATOR}}", i+1)] = getString(tugas, "indikator")
-					replaceMap[fmt.Sprintf("{{TUGAS_%d_JUDUL}}", i+1)] = getString(tugas, "judul_tugas")
-					replaceMap[fmt.Sprintf("{{TUGAS_%d_BATAS_WAKTU}}", i+1)] = getString(tugas, "batas_waktu")
-					replaceMap[fmt.Sprintf("{{TUGAS_%d_PETUNJUK}}", i+1)] = getString(tugas, "petunjuk_pengerjaan")
-					replaceMap[fmt.Sprintf("{{TUGAS_%d_LUARAN}}", i+1)] = getString(tugas, "luaran_tugas")
-					replaceMap[fmt.Sprintf("{{TUGAS_%d_KRITERIA}}", i+1)] = getString(tugas, "kriteria")
-					replaceMap[fmt.Sprintf("{{TUGAS_%d_TEKNIK}}", i+1)] = getString(tugas, "teknik_penilaian")
-					replaceMap[fmt.Sprintf("{{TUGAS_%d_BOBOT}}", i+1)] = fmt.Sprintf("%v", tugas["bobot"])
+					replaceMap[fmt.Sprintf("{TUGAS_%d_NAMA_MK}", i+1)] = rps.Course.Title
+					replaceMap[fmt.Sprintf("{TUGAS_%d_KODE_MK}", i+1)] = rps.Course.Code
+					replaceMap[fmt.Sprintf("{TUGAS_%d_SEMESTER}", i+1)] = ""
+					replaceMap[fmt.Sprintf("{TUGAS_%d_SKS}", i+1)] = fmt.Sprintf("%d", rps.Course.Credits)
+					replaceMap[fmt.Sprintf("{TUGAS_%d_SUB_CPMK}", i+1)] = getString(tugas, "sub_cpmk")
+					replaceMap[fmt.Sprintf("{TUGAS_%d_INDIKATOR}", i+1)] = getString(tugas, "indikator")
+					replaceMap[fmt.Sprintf("{TUGAS_%d_JUDUL}", i+1)] = getString(tugas, "judul_tugas")
+					replaceMap[fmt.Sprintf("{TUGAS_%d_BATAS_WAKTU}", i+1)] = getString(tugas, "batas_waktu")
+					replaceMap[fmt.Sprintf("{TUGAS_%d_PETUNJUK}", i+1)] = getString(tugas, "petunjuk_pengerjaan")
+					replaceMap[fmt.Sprintf("{TUGAS_%d_LUARAN}", i+1)] = getString(tugas, "luaran_tugas")
+					replaceMap[fmt.Sprintf("{TUGAS_%d_KRITERIA}", i+1)] = getString(tugas, "kriteria")
+					replaceMap[fmt.Sprintf("{TUGAS_%d_TEKNIK}", i+1)] = getString(tugas, "teknik_penilaian")
+					replaceMap[fmt.Sprintf("{TUGAS_%d_BOBOT}", i+1)] = fmt.Sprintf("%v", tugas["bobot"])
 
 					// Daftar Rujukan
 					rujukanText := ""
@@ -528,35 +528,35 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 							}
 						}
 					}
-					replaceMap[fmt.Sprintf("{{TUGAS_%d_RUJUKAN}}", i+1)] = rujukanText
+					replaceMap[fmt.Sprintf("{TUGAS_%d_RUJUKAN}", i+1)] = rujukanText
 				}
 			} else {
 				// Jika tugas tidak ada, kosongkan placeholder (format baru)
-				replaceMap[fmt.Sprintf("{{SUB_CPMK_TUGAS_%d}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{INDIKATOR_TUGAS_%d}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{JUDUL_TUGAS_%d}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{BATAS_TUGAS_%d}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{PETUNJUK_TUGAS_%d}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{LUARAN_TUGAS_%d}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{KRITERIA_TUGAS_%d}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{TEKNIK_PENILAIAN_TUGAS_%d}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{BOBOT_TUGAS_%d}}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{SUB_CPMK_TUGAS_%d}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{INDIKATOR_TUGAS_%d}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{JUDUL_TUGAS_%d}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{BATAS_TUGAS_%d}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{PETUNJUK_TUGAS_%d}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{LUARAN_TUGAS_%d}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{KRITERIA_TUGAS_%d}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TEKNIK_PENILAIAN_TUGAS_%d}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{BOBOT_TUGAS_%d}", i+1)] = ""
 
 				// Backward compatibility - format lama
-				replaceMap[fmt.Sprintf("{{TUGAS_%d_NAMA_MK}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{TUGAS_%d_KODE_MK}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{TUGAS_%d_SEMESTER}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{TUGAS_%d_SKS}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{TUGAS_%d_SUB_CPMK}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{TUGAS_%d_INDIKATOR}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{TUGAS_%d_JUDUL}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{TUGAS_%d_BATAS_WAKTU}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{TUGAS_%d_PETUNJUK}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{TUGAS_%d_LUARAN}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{TUGAS_%d_KRITERIA}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{TUGAS_%d_TEKNIK}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{TUGAS_%d_BOBOT}}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{{TUGAS_%d_RUJUKAN}}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TUGAS_%d_NAMA_MK}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TUGAS_%d_KODE_MK}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TUGAS_%d_SEMESTER}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TUGAS_%d_SKS}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TUGAS_%d_SUB_CPMK}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TUGAS_%d_INDIKATOR}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TUGAS_%d_JUDUL}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TUGAS_%d_BATAS_WAKTU}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TUGAS_%d_PETUNJUK}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TUGAS_%d_LUARAN}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TUGAS_%d_KRITERIA}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TUGAS_%d_TEKNIK}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TUGAS_%d_BOBOT}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TUGAS_%d_RUJUKAN}", i+1)] = ""
 			}
 		}
 	}
