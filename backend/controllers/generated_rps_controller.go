@@ -349,9 +349,12 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 
 	var rps models.GeneratedRPS
 	// Use Unscoped() to include soft-deleted courses so export still works
+	// Also preload Program.Prodi for kaprodi name
 	if err := gc.db.Preload("Course", func(db *gorm.DB) *gorm.DB {
 		return db.Unscoped()
 	}).Preload("Course.Program", func(db *gorm.DB) *gorm.DB {
+		return db.Unscoped()
+	}).Preload("Course.Program.Prodi", func(db *gorm.DB) *gorm.DB {
 		return db.Unscoped()
 	}).First(&rps, "id = ?", rpsUUID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "RPS not found"})
@@ -381,24 +384,44 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	// Read template
 	replaceMap := docx.PlaceholderMap{}
 
+	// Helper to safely get int from pointer
+	getIntValue := func(ptr *int) string {
+		if ptr != nil {
+			return fmt.Sprintf("%d", *ptr)
+		}
+		return ""
+	}
+
 	// Basic Info
 	replaceMap["{KODE_MK}"] = rps.Course.Code
 	replaceMap["{NAMA_MK}"] = rps.Course.Title
-	replaceMap["{SKS}"] = fmt.Sprintf("%d", rps.Course.Credits)
-	replaceMap["{SKS_TEORI}"] = fmt.Sprintf("%d", rps.Course.Credits)
+	replaceMap["{SKS}"] = getIntValue(rps.Course.Credits)
+	replaceMap["{SKS_TEORI}"] = getIntValue(rps.Course.Credits)
 	replaceMap["{SKS_PRAKTIK}"] = "0"
-	replaceMap["{SEMESTER}"] = ""
+	replaceMap["{SEMESTER}"] = getIntValue(rps.Course.Semester)
 	replaceMap["{TGL_PENYUSUNAN}"] = time.Now().Format("02/01/2006")
 	replaceMap["{RUMPUN_MK}"] = ""
 	replaceMap["{NAMA_PENYUSUN}"] = ""
 	replaceMap["{KOORDINATOR_MK}"] = ""
-	replaceMap["{KETUA_PRODI}"] = ""
 	replaceMap["{DESKRIPSI_MK}"] = ""
 	replaceMap["{MK_PRASYARAT}"] = ""
 	replaceMap["{REFERENSI_LIST}"] = ""
+	replaceMap["{NAMA_DOSEN}"] = ""
 
+	// Get Prodi info
 	if rps.Course.Program != nil {
 		replaceMap["{PROGRAM_STUDI}"] = rps.Course.Program.Name
+		if rps.Course.Program.Prodi != nil {
+			replaceMap["{KETUA_PRODI}"] = rps.Course.Program.Prodi.NamaKaprodi
+			replaceMap["{FAKULTAS}"] = rps.Course.Program.Prodi.Fakultas
+		} else {
+			replaceMap["{KETUA_PRODI}"] = ""
+			replaceMap["{FAKULTAS}"] = ""
+		}
+	} else {
+		replaceMap["{PROGRAM_STUDI}"] = ""
+		replaceMap["{KETUA_PRODI}"] = ""
+		replaceMap["{FAKULTAS}"] = ""
 	}
 
 	// CPL_LIST (Capaian Pembelajaran Lulusan)
