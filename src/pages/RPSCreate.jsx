@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Bot, Save, Loader2, Sparkles, X, Plus, Trash2, BookOpen } from 'lucide-react';
-import { courseAPI, aiHelperAPI, generatedRPSAPI } from '../services/api';
+import { courseAPI, aiHelperAPI, generatedRPSAPI, API_BASE_URL } from '../services/api';
 import apiClient from '../services/api';
 
 export default function RPSCreate() {
@@ -818,7 +818,7 @@ function TugasStep({ course, formData, setFormData }) {
         `Minggu ${i+1}: ${t.topik || 'Belum diisi'}`
       ).join('\n');
 
-      const response = await fetch('http://localhost:8080/api/v1/ai/generate/tugas', {
+      const response = await fetch(`${API_BASE_URL}/ai/generate/tugas`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

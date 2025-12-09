@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { FileText, Download, Loader2, CheckCircle, Clock, AlertCircle, Trash2, Check } from 'lucide-react';
-import { generatedRPSAPI, courseAPI } from '../services/api';
+import { generatedRPSAPI, courseAPI, API_BASE_URL } from '../services/api';
 
 export default function RPSList() {
   const [rpsList, setRpsList] = useState([]);
@@ -218,7 +218,7 @@ export default function RPSList() {
                     Edit RPS
                   </Link>
                   <button
-                    onClick={() => window.open(`http://localhost:8080/api/v1/generated/${rps.id}/export`, '_blank')}
+                    onClick={() => window.open(`${API_BASE_URL}/generated/${rps.id}/export`, '_blank')}
                     className="flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
                   >
                     <Download className="w-4 h-4" />
