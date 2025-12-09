@@ -245,17 +245,25 @@ func (cc *CPMKController) DownloadTemplate(c *gin.Context) {
 	subSheet := "Sub-CPMK Template"
 	f.NewSheet(subSheet)
 
-	// Sub-CPMK headers
-	subHeaders := []string{"NO", "MATA KULIAH", "CPMK", "SUB CPMK 1", "SUB CPMK 2", "SUB CPMK 3", "SUB CPMK 4", "SUB CPMK 5"}
+	// Set column widths for Sub-CPMK sheet
+	f.SetColWidth(subSheet, "A", "A", 5)
+	f.SetColWidth(subSheet, "B", "B", 40)
+	f.SetColWidth(subSheet, "C", "C", 60)
+	f.SetColWidth(subSheet, "D", "M", 50) // Sub-CPMK columns
+
+	// Sub-CPMK headers (up to 10 Sub-CPMKs)
+	subHeaders := []string{"NO", "MATA KULIAH", "CPMK", "SUB CPMK 1", "SUB CPMK 2", "SUB CPMK 3", "SUB CPMK 4", "SUB CPMK 5", "SUB CPMK 6", "SUB CPMK 7", "SUB CPMK 8", "SUB CPMK 9", "SUB CPMK 10"}
 	for i, header := range subHeaders {
 		cell := string(rune('A'+i)) + "1"
 		f.SetCellValue(subSheet, cell, header)
 		f.SetCellStyle(subSheet, cell, cell, headerStyle)
 	}
+	f.SetRowHeight(subSheet, 1, 25)
 
 	// Example Sub-CPMK data
 	subExampleData := [][]interface{}{
-		{1, "BAHASA INDONESIA", "Menjelaskan kedudukan, fungsi, dan ragam Bahasa Indonesia", "Mahasiswa mampu menjelaskan sejarah Bahasa Indonesia", "", "", "", ""},
+		{1, "Bahasa Indonesia", "Menjelaskan kedudukan, fungsi, dan ragam Bahasa Indonesia", "Mahasiswa mampu menjelaskan sejarah Bahasa Indonesia", "Mahasiswa mampu mengidentifikasi fungsi bahasa", "", "", "", "", "", "", "", ""},
+		{2, "Algoritma & Pemrograman", "Memahami konsep algoritma", "Menjelaskan definisi algoritma", "Membedakan jenis-jenis algoritma", "", "", "", "", "", "", "", ""},
 	}
 
 	for i, row := range subExampleData {
@@ -265,6 +273,7 @@ func (cc *CPMKController) DownloadTemplate(c *gin.Context) {
 			f.SetCellValue(subSheet, cell, value)
 			f.SetCellStyle(subSheet, cell, cell, dataStyle)
 		}
+		f.SetRowHeight(subSheet, rowNum, 40)
 	}
 
 	// Instructions sheet
@@ -282,16 +291,18 @@ func (cc *CPMKController) DownloadTemplate(c *gin.Context) {
 		"",
 		"Sheet 2: Sub-CPMK Template",
 		"- Kolom A: Nomor urut",
-		"- Kolom B: Nama Mata Kuliah",
+		"- Kolom B: Nama Mata Kuliah (harus sama dengan Sheet 1)",
 		"- Kolom C: CPMK (harus sama persis dengan CPMK di Sheet 1)",
-		"- Kolom D-H: Sub-CPMK 1 sampai Sub-CPMK 5",
+		"- Kolom D-M: Sub-CPMK 1 sampai Sub-CPMK 10",
 		"",
 		"CATATAN PENTING:",
 		"1. Jangan ubah nama kolom header",
-		"2. Nama Mata Kuliah harus sesuai dengan data di sistem",
-		"3. CPMK di Sub-CPMK sheet harus sama persis dengan CPMK di Sheet 1",
-		"4. Kolom yang kosong boleh dibiarkan kosong",
-		"5. Hapus contoh data sebelum mengisi data Anda",
+		"2. Nama Mata Kuliah harus SAMA PERSIS dengan data di sistem",
+		"3. CPMK di Sub-CPMK sheet harus SAMA PERSIS dengan CPMK di Sheet 1",
+		"4. Import bersifat REPLACE - data lama akan dihapus dan diganti dengan data baru",
+		"5. Kolom yang kosong boleh dibiarkan kosong",
+		"6. Hapus contoh data sebelum mengisi data Anda",
+		"7. Sistem mendukung case-insensitive matching untuk CPMK description",
 	}
 
 	for i, instruction := range instructions {
@@ -340,9 +351,13 @@ func (cc *CPMKController) ImportExcel(c *gin.Context) {
 	}
 	defer f.Close()
 
-	imported := 0
+	importedCPMK := 0
+	importedSubCPMK := 0
 	failed := 0
 	var errors []string
+
+	// Track CPMK mapping for Sub-CPMK import
+	cpmkMapping := make(map[string]map[string]uuid.UUID) // courseName -> cpmkDesc -> cpmkID
 
 	// Import CPMK from Sheet 1
 	cpmkRows, err := f.GetRows("CPMK Template")
@@ -374,6 +389,11 @@ func (cc *CPMKController) ImportExcel(c *gin.Context) {
 		// Delete existing CPMK for this course
 		cc.db.Where("course_id = ?", course.ID).Delete(&models.CPMK{})
 
+		// Initialize mapping for this course
+		if cpmkMapping[courseName] == nil {
+			cpmkMapping[courseName] = make(map[string]uuid.UUID)
+		}
+
 		// Import CPMKs (columns D onwards)
 		for j := 3; j < len(row) && j < 11; j++ { // Max 8 CPMKs
 			cpmkDesc := strings.TrimSpace(row[j])
@@ -393,7 +413,10 @@ func (cc *CPMKController) ImportExcel(c *gin.Context) {
 				errors = append(errors, fmt.Sprintf("Baris %d: Gagal simpan CPMK %d", i+2, j-2))
 				continue
 			}
-			imported++
+
+			// Store mapping for Sub-CPMK import (use lowercase for case-insensitive matching)
+			cpmkMapping[courseName][strings.ToLower(cpmkDesc)] = cpmk.ID
+			importedCPMK++
 		}
 	}
 
@@ -412,21 +435,26 @@ func (cc *CPMKController) ImportExcel(c *gin.Context) {
 				continue
 			}
 
-			// Find course and CPMK
-			var course models.Course
-			if err := cc.db.Where("title = ?", courseName).First(&course).Error; err != nil {
-				errors = append(errors, fmt.Sprintf("Sub-CPMK Baris %d: Mata kuliah tidak ditemukan", i+2))
-				continue
+			// Find CPMK ID from mapping (case-insensitive)
+			cpmkID, found := cpmkMapping[courseName][strings.ToLower(cpmkDesc)]
+			if !found {
+				// Try to find from database as fallback
+				var course models.Course
+				if err := cc.db.Where("title = ?", courseName).First(&course).Error; err != nil {
+					errors = append(errors, fmt.Sprintf("Sub-CPMK Baris %d: Mata kuliah '%s' tidak ditemukan", i+2, courseName))
+					continue
+				}
+
+				var cpmk models.CPMK
+				if err := cc.db.Where("course_id = ? AND description = ?", course.ID, cpmkDesc).First(&cpmk).Error; err != nil {
+					errors = append(errors, fmt.Sprintf("Sub-CPMK Baris %d: CPMK '%s' tidak ditemukan untuk '%s'", i+2, cpmkDesc, courseName))
+					continue
+				}
+				cpmkID = cpmk.ID
 			}
 
-			var cpmk models.CPMK
-			if err := cc.db.Where("course_id = ? AND description = ?", course.ID, cpmkDesc).First(&cpmk).Error; err != nil {
-				errors = append(errors, fmt.Sprintf("Sub-CPMK Baris %d: CPMK tidak ditemukan", i+2))
-				continue
-			}
-
-			// Import Sub-CPMKs
-			for j := 3; j < len(row) && j < 8; j++ { // Max 5 Sub-CPMKs
+			// Import Sub-CPMKs (columns D onwards)
+			for j := 3; j < len(row) && j < 13; j++ { // Support up to 10 Sub-CPMKs
 				subDesc := strings.TrimSpace(row[j])
 				if subDesc == "" {
 					continue
@@ -434,25 +462,28 @@ func (cc *CPMKController) ImportExcel(c *gin.Context) {
 
 				subCPMK := models.SubCPMK{
 					ID:            uuid.New(),
-					CPMKId:        cpmk.ID,
-					SubCPMKNumber: j - 2,
+					CPMKId:        cpmkID,
+					SubCPMKNumber: j - 2, // Sub-CPMK 1, 2, 3, ...
 					Description:   subDesc,
 				}
 
 				if err := cc.db.Create(&subCPMK).Error; err != nil {
 					failed++
+					errors = append(errors, fmt.Sprintf("Sub-CPMK Baris %d: Gagal simpan Sub-CPMK %d", i+2, j-2))
 					continue
 				}
+				importedSubCPMK++
 			}
 		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"success":        true,
-		"message":        fmt.Sprintf("Import selesai: %d CPMK berhasil, %d gagal", imported, failed),
-		"imported_count": imported,
-		"failed_count":   failed,
-		"errors":         errors,
+		"success":           true,
+		"message":           fmt.Sprintf("Import selesai: %d CPMK, %d Sub-CPMK berhasil | %d gagal", importedCPMK, importedSubCPMK, failed),
+		"imported_cpmk":     importedCPMK,
+		"imported_sub_cpmk": importedSubCPMK,
+		"failed_count":      failed,
+		"errors":            errors,
 	})
 }
 
