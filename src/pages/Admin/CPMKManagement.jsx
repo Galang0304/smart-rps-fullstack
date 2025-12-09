@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Upload, Download, FileText, Plus, Trash2, Edit, Loader2, AlertCircle, CheckCircle, BookOpen } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Upload, Download, FileText, Plus, Trash2, Edit, Loader2, AlertCircle, CheckCircle, BookOpen, Search, Filter, X } from 'lucide-react';
 import { courseAPI } from '../../services/api';
 
 export default function CPMKManagement() {
@@ -22,6 +22,12 @@ export default function CPMKManagement() {
   const [subCpmkCsvFile, setSubCpmkCsvFile] = useState(null);
   const [editingCpmk, setEditingCpmk] = useState(null);
   const [editingSubCpmk, setEditingSubCpmk] = useState(null);
+  
+  // Filter states
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'with-cpmk', 'without-cpmk'
+  const [filterSKS, setFilterSKS] = useState('all'); // 'all', '2', '3', '4'
+  const [filterYear, setFilterYear] = useState('all');
 
   const userRole = localStorage.getItem('role');
   const prodiId = localStorage.getItem('prodi_id');
@@ -420,7 +426,48 @@ export default function CPMKManagement() {
     }
   };
 
+  // Get unique years from courses
+  const availableYears = useMemo(() => {
+    const years = [...new Set(courses.map(c => c.tahun || '2025'))].sort((a, b) => b - a);
+    return years;
+  }, [courses]);
+
+  // Filtered courses
+  const filteredCourses = useMemo(() => {
+    return courses.filter(course => {
+      // Search filter
+      const matchesSearch = searchTerm === '' || 
+        course.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        course.code?.toLowerCase().includes(searchTerm.toLowerCase());
+
+      // Status filter
+      const matchesStatus = filterStatus === 'all' ||
+        (filterStatus === 'with-cpmk' && course.cpmkCount > 0) ||
+        (filterStatus === 'without-cpmk' && course.cpmkCount === 0);
+
+      // SKS filter
+      const matchesSKS = filterSKS === 'all' || 
+        String(course.credits) === filterSKS;
+
+      // Year filter
+      const matchesYear = filterYear === 'all' || 
+        String(course.tahun || '2025') === filterYear;
+
+      return matchesSearch && matchesStatus && matchesSKS && matchesYear;
+    });
+  }, [courses, searchTerm, filterStatus, filterSKS, filterYear]);
+
   const selectedCourseName = courses.find(c => c.id === selectedCourse)?.title || '';
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSearchTerm('');
+    setFilterStatus('all');
+    setFilterSKS('all');
+    setFilterYear('all');
+  };
+
+  const hasActiveFilters = searchTerm !== '' || filterStatus !== 'all' || filterSKS !== 'all' || filterYear !== 'all';
 
   return (
     <div>
@@ -490,6 +537,103 @@ export default function CPMKManagement() {
         </div>
       </div>
 
+      {/* Filter Section */}
+      <div className="mb-6 bg-white rounded-xl shadow p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <Filter className="w-5 h-5 text-gray-600" />
+          <h2 className="text-lg font-semibold text-gray-900">Filter Mata Kuliah</h2>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="ml-auto flex items-center gap-1 px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4" />
+              <span>Clear Filters</span>
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Search */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              <Search className="w-4 h-4 inline mr-1" />
+              Cari Mata Kuliah
+            </label>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Nama atau kode..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* Status Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Status CPMK
+            </label>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">Semua</option>
+              <option value="with-cpmk">Sudah Ada CPMK</option>
+              <option value="without-cpmk">Belum Ada CPMK</option>
+            </select>
+          </div>
+
+          {/* SKS Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              SKS
+            </label>
+            <select
+              value={filterSKS}
+              onChange={(e) => setFilterSKS(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">Semua SKS</option>
+              <option value="2">2 SKS</option>
+              <option value="3">3 SKS</option>
+              <option value="4">4 SKS</option>
+            </select>
+          </div>
+
+          {/* Year Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Tahun Kurikulum
+            </label>
+            <select
+              value={filterYear}
+              onChange={(e) => setFilterYear(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">Semua Tahun</option>
+              {availableYears.map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Filter Summary */}
+        <div className="mt-4 flex items-center justify-between text-sm">
+          <p className="text-gray-600">
+            Menampilkan <span className="font-semibold text-gray-900">{filteredCourses.length}</span> dari <span className="font-semibold text-gray-900">{courses.length}</span> mata kuliah
+          </p>
+          {hasActiveFilters && (
+            <div className="flex items-center gap-2 text-blue-600">
+              <Filter className="w-4 h-4" />
+              <span>Filter aktif</span>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Courses Table */}
       <div className="bg-white rounded-xl shadow overflow-hidden">
         {loading ? (
@@ -525,7 +669,7 @@ export default function CPMKManagement() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {courses.map((course, index) => (
+                {filteredCourses.map((course, index) => (
                   <tr key={course.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {index + 1}
@@ -578,10 +722,24 @@ export default function CPMKManagement() {
               </tbody>
             </table>
             
+            {/* Empty States */}
             {courses.length === 0 && (
               <div className="flex flex-col items-center justify-center h-64 text-gray-500">
                 <BookOpen className="w-12 h-12 mb-2 opacity-50" />
                 <p className="font-medium">Belum ada mata kuliah</p>
+              </div>
+            )}
+            
+            {courses.length > 0 && filteredCourses.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+                <Search className="w-12 h-12 mb-2 opacity-50" />
+                <p className="font-medium">Tidak ada mata kuliah yang sesuai filter</p>
+                <button
+                  onClick={clearFilters}
+                  className="mt-4 px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                >
+                  Clear Filters
+                </button>
               </div>
             )}
           </div>
