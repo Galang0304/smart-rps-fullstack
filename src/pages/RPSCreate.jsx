@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Bot, Save, Loader2, Sparkles, X, Plus, Trash2, BookOpen } from 'lucide-react';
+import { Bot, Save, Loader2, Sparkles, X, Plus, Trash2, BookOpen, Eye, EyeOff, Database, PenLine } from 'lucide-react';
 import { courseAPI, aiHelperAPI, generatedRPSAPI, API_BASE_URL } from '../services/api';
 import apiClient from '../services/api';
+import WordPreview from '../components/WordPreview';
+import InputModeSelector from '../components/InputModeSelector';
 
 export default function RPSCreate() {
   const { courseId } = useParams();
@@ -22,6 +24,9 @@ export default function RPSCreate() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
+  const [showPreview, setShowPreview] = useState(false);
+  const [savedRpsId, setSavedRpsId] = useState(editRpsId || null);
+  const [hasDBCpmk, setHasDBCpmk] = useState(false);
   
   const [formData, setFormData] = useState({
     cpmk: [
@@ -369,64 +374,98 @@ export default function RPSCreate() {
         </div>
       </div>
 
-      {/* Current Step Content */}
-      {!selectedCourseId && !courseId && !courseIdFromQuery ? (
-        <div className="bg-gray-50 rounded-lg shadow p-12 mb-6 text-center">
-          <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">Pilih Mata Kuliah Terlebih Dahulu</h3>
-          <p className="text-gray-500">
-            Silakan pilih mata kuliah dari dropdown di atas untuk mulai membuat RPS
-          </p>
-        </div>
-      ) : (
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <CurrentStepComponent
-            course={course}
-            formData={formData}
-            setFormData={setFormData}
-          />
-        </div>
-      )}
-
-      {/* Navigation Buttons */}
-      <div className="flex justify-between">
+      {/* Toggle Preview Button */}
+      <div className="mb-4 flex justify-end">
         <button
-          onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
-          disabled={currentStep === 1 || !selectedCourseId}
-          className="px-6 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={() => setShowPreview(!showPreview)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+            showPreview 
+              ? 'bg-blue-600 text-white hover:bg-blue-700' 
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
         >
-          Kembali
+          {showPreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          {showPreview ? 'Sembunyikan Preview' : 'Lihat Preview Word'}
         </button>
-        
-        <div className="flex gap-3">
-          {currentStep < steps.length ? (
-            <button
-              onClick={() => setCurrentStep(currentStep + 1)}
-              disabled={!selectedCourseId}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Lanjut
-            </button>
+      </div>
+
+      {/* Main Content with Optional Preview */}
+      <div className={`grid gap-6 ${showPreview ? 'lg:grid-cols-2' : 'grid-cols-1'}`}>
+        {/* Form Section */}
+        <div>
+          {/* Current Step Content */}
+          {!selectedCourseId && !courseId && !courseIdFromQuery ? (
+            <div className="bg-gray-50 rounded-lg shadow p-12 mb-6 text-center">
+              <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-700 mb-2">Pilih Mata Kuliah Terlebih Dahulu</h3>
+              <p className="text-gray-500">
+                Silakan pilih mata kuliah dari dropdown di atas untuk mulai membuat RPS
+              </p>
+            </div>
           ) : (
-            <button
-              onClick={handleSave}
-              disabled={saving || !selectedCourseId}
-              className="flex items-center gap-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Menyimpan...</span>
-                </>
-              ) : (
-                <>
-                  <Save className="w-5 h-5" />
-                  <span>Simpan RPS</span>
-                </>
-              )}
-            </button>
+            <div className="bg-white rounded-lg shadow p-6 mb-6">
+              <CurrentStepComponent
+                course={course}
+                formData={formData}
+                setFormData={setFormData}
+                hasDBCpmk={hasDBCpmk}
+                setHasDBCpmk={setHasDBCpmk}
+              />
+            </div>
           )}
+
+          {/* Navigation Buttons */}
+          <div className="flex justify-between">
+            <button
+              onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
+              disabled={currentStep === 1 || !selectedCourseId}
+              className="px-6 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Kembali
+            </button>
+            
+            <div className="flex gap-3">
+              {currentStep < steps.length ? (
+                <button
+                  onClick={() => setCurrentStep(currentStep + 1)}
+                  disabled={!selectedCourseId}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Lanjut
+                </button>
+              ) : (
+                <button
+                  onClick={handleSave}
+                  disabled={saving || !selectedCourseId}
+                  className="flex items-center gap-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-5 h-5" />
+                      <span>Simpan RPS</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
+
+        {/* Preview Section */}
+        {showPreview && (
+          <div className="lg:sticky lg:top-4 lg:self-start">
+            <WordPreview 
+              course={course} 
+              formData={formData} 
+              rpsId={savedRpsId}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -434,12 +473,41 @@ export default function RPSCreate() {
 
 // === STEP COMPONENTS ===
 
-function CPMKStep({ course, formData, setFormData }) {
+function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
   const [generating, setGenerating] = useState(false);
+  const [loadingDB, setLoadingDB] = useState(false);
+  const [inputMode, setInputMode] = useState(null); // 'manual', 'database', 'ai'
+  const [checkingDB, setCheckingDB] = useState(true);
   const userRole = localStorage.getItem('role');
 
-  const handleGenerate = async () => {
-    setGenerating(true);
+  // Check if database has CPMK for this course
+  useEffect(() => {
+    const checkDBData = async () => {
+      if (!course?.id) return;
+      setCheckingDB(true);
+      try {
+        // Try to get CPMK from database via a test call
+        const res = await aiHelperAPI.generateCPMK({
+          course_id: course.id,
+          course_code: course.code,
+          course_title: course.title,
+          credits: course.credits,
+          existing_cpl: [],
+          check_only: true, // Add flag to just check
+        });
+        setHasDBCpmk(res.data.source === 'database');
+      } catch (error) {
+        setHasDBCpmk(false);
+      } finally {
+        setCheckingDB(false);
+      }
+    };
+    checkDBData();
+  }, [course?.id]);
+
+  const handleLoadFromDB = async () => {
+    setLoadingDB(true);
+    setInputMode('database');
     try {
       const res = await aiHelperAPI.generateCPMK({
         course_id: course.id,
@@ -449,64 +517,151 @@ function CPMKStep({ course, formData, setFormData }) {
         existing_cpl: [],
       });
       
-      // Check source to inform user if data came from database
-      const source = res.data.source;
-      if (source === 'database') {
+      if (res.data.source === 'database') {
+        const generatedItems = res.data.data.items;
+        // Replace all CPMK with database data
+        setFormData({ ...formData, cpmk: generatedItems });
         alert('✅ CPMK berhasil dimuat dari database!');
-      } else if (source === 'ai') {
-        alert('✨ CPMK berhasil di-generate dengan AI (tidak ada data di database)');
+      } else {
+        alert('❌ Tidak ada data CPMK di database untuk mata kuliah ini');
+        setInputMode(null);
       }
+    } catch (error) {
+      console.error('Failed to load CPMK from DB:', error);
+      alert('Gagal memuat CPMK dari database');
+      setInputMode(null);
+    } finally {
+      setLoadingDB(false);
+    }
+  };
+
+  const handleGenerateAI = async () => {
+    setGenerating(true);
+    setInputMode('ai');
+    try {
+      const res = await aiHelperAPI.generateCPMK({
+        course_id: course.id,
+        course_code: course.code,
+        course_title: course.title,
+        credits: course.credits,
+        existing_cpl: [],
+        force_ai: true, // Force AI generation
+      });
       
-      // Ganti isi form yang ada dengan hasil generate
       const generatedItems = res.data.data.items;
-      const updatedCPMK = [...formData.cpmk];
+      setFormData({ ...formData, cpmk: generatedItems });
       
-      // Hanya isi sejumlah form yang ada, jangan tambah form baru
-      for (let i = 0; i < updatedCPMK.length && i < generatedItems.length; i++) {
-        updatedCPMK[i] = generatedItems[i];
+      if (res.data.source === 'database') {
+        alert('✅ CPMK berhasil dimuat dari database!');
+      } else {
+        alert('✨ CPMK berhasil di-generate dengan AI!');
       }
-      
-      setFormData({ ...formData, cpmk: updatedCPMK });
     } catch (error) {
       console.error('Failed to generate CPMK:', error);
       alert('Gagal generate CPMK. Pastikan Gemini API key sudah diset.');
+      setInputMode(null);
     } finally {
       setGenerating(false);
     }
   };
 
+  const handleManualMode = () => {
+    setInputMode('manual');
+  };
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold text-gray-900 mb-2">
           Capaian Pembelajaran Mata Kuliah (CPMK)
         </h2>
-        {userRole !== 'dosen' && (
-          <button
-            onClick={handleGenerate}
-            disabled={generating}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
-          >
-            {generating ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Generating...</span>
-              </>
-            ) : (
-              <>
-                <Bot className="w-5 h-5" />
-                <span>Generate dengan AI</span>
-              </>
-            )}
-          </button>
-        )}
+        <p className="text-sm text-gray-600">
+          Pilih metode untuk mengisi CPMK: input manual, ambil dari database, atau generate dengan AI.
+        </p>
       </div>
 
+      {/* Input Mode Selector */}
+      {userRole !== 'dosen' && (
+        <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+          <p className="text-sm font-medium text-gray-700 mb-3">Pilih Metode Input:</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Manual Input */}
+            <button
+              onClick={handleManualMode}
+              className={`p-4 border-2 rounded-lg text-left transition-all ${
+                inputMode === 'manual' 
+                  ? 'border-blue-500 bg-blue-50' 
+                  : 'border-gray-200 bg-white hover:border-blue-300'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <PenLine className={`w-6 h-6 ${inputMode === 'manual' ? 'text-blue-600' : 'text-gray-500'}`} />
+                <div>
+                  <p className="font-medium">Input Manual</p>
+                  <p className="text-xs text-gray-500">Isi data sendiri</p>
+                </div>
+              </div>
+            </button>
+
+            {/* From Database */}
+            <button
+              onClick={handleLoadFromDB}
+              disabled={loadingDB || checkingDB}
+              className={`p-4 border-2 rounded-lg text-left transition-all ${
+                inputMode === 'database' 
+                  ? 'border-green-500 bg-green-50' 
+                  : hasDBCpmk 
+                    ? 'border-gray-200 bg-white hover:border-green-300' 
+                    : 'border-gray-200 bg-gray-100 opacity-60'
+              } ${(loadingDB || checkingDB) ? 'cursor-wait' : ''}`}
+            >
+              <div className="flex items-center gap-3">
+                {loadingDB ? (
+                  <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
+                ) : (
+                  <Database className={`w-6 h-6 ${inputMode === 'database' ? 'text-green-600' : hasDBCpmk ? 'text-gray-500' : 'text-gray-400'}`} />
+                )}
+                <div>
+                  <p className="font-medium">Dari Database</p>
+                  <p className="text-xs text-gray-500">
+                    {checkingDB ? 'Mengecek...' : hasDBCpmk ? 'Data tersedia ✓' : 'Tidak ada data'}
+                  </p>
+                </div>
+              </div>
+            </button>
+
+            {/* Generate AI */}
+            <button
+              onClick={handleGenerateAI}
+              disabled={generating}
+              className={`p-4 border-2 rounded-lg text-left transition-all ${
+                inputMode === 'ai' 
+                  ? 'border-purple-500 bg-purple-50' 
+                  : 'border-gray-200 bg-white hover:border-purple-300'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                {generating ? (
+                  <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
+                ) : (
+                  <Bot className={`w-6 h-6 ${inputMode === 'ai' ? 'text-purple-600' : 'text-gray-500'}`} />
+                )}
+                <div>
+                  <p className="font-medium">Generate AI</p>
+                  <p className="text-xs text-gray-500">Buat dengan Gemini</p>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* CPMK Form */}
       <div className="space-y-3">
         {formData.cpmk.map((item, index) => (
           <div key={index} className="p-4 border border-gray-200 rounded-lg">
             <div className="flex items-start gap-3">
-              <span className="font-semibold text-blue-600">{item.code}</span>
+              <span className="font-semibold text-blue-600 min-w-[70px]">{item.code}</span>
               <div className="flex-1">
                 <textarea
                   value={item.description}
@@ -514,9 +669,10 @@ function CPMKStep({ course, formData, setFormData }) {
                     const newCPMK = [...formData.cpmk];
                     newCPMK[index].description = e.target.value;
                     setFormData({ ...formData, cpmk: newCPMK });
+                    if (!inputMode) setInputMode('manual');
                   }}
-                  placeholder="Masukkan deskripsi CPMK atau klik 'Generate dengan AI'"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none"
+                  placeholder="Masukkan deskripsi CPMK..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   rows={2}
                 />
               </div>
@@ -525,7 +681,7 @@ function CPMKStep({ course, formData, setFormData }) {
                   const newCPMK = formData.cpmk.filter((_, i) => i !== index);
                   setFormData({ ...formData, cpmk: newCPMK });
                 }}
-                className="text-red-500 hover:text-red-700"
+                className="text-red-500 hover:text-red-700 p-1"
                 title="Hapus CPMK"
               >
                 <X className="w-5 h-5" />
@@ -537,8 +693,9 @@ function CPMKStep({ course, formData, setFormData }) {
           onClick={() => {
             const newCPMK = [...formData.cpmk, { code: `CPMK-${formData.cpmk.length + 1}`, description: '' }];
             setFormData({ ...formData, cpmk: newCPMK });
+            if (!inputMode) setInputMode('manual');
           }}
-          className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600"
+          className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors"
         >
           + Tambah CPMK
         </button>
