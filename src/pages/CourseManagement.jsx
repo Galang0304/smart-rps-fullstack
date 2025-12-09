@@ -20,6 +20,7 @@ export default function CourseManagement() {
   const [newCategory, setNewCategory] = useState('');
   const [showExcelUpload, setShowExcelUpload] = useState(false);
   const [excelFile, setExcelFile] = useState(null);
+  const [selectedYear, setSelectedYear] = useState('all');
   const [formData, setFormData] = useState({
     code: '',
     title: '',
@@ -201,15 +202,26 @@ export default function CourseManagement() {
     }
   }, [selectedProgram, loadCourses]);
 
+  // Get unique years from courses
+  const availableYears = Array.isArray(courses) 
+    ? [...new Set(courses.map(c => c.tahun || '2025'))].sort((a, b) => b.localeCompare(a))
+    : [];
+
   const filteredCourses = Array.isArray(courses) ? courses.filter((course) => {
     const searchLower = searchQuery.toLowerCase();
     const category = course.description?.replace('Kategori: ', '').trim() || '';
     
-    return (
+    // Filter by search query
+    const matchesSearch = (
       course.title?.toLowerCase().includes(searchLower) ||
       course.code?.toLowerCase().includes(searchLower) ||
       category.toLowerCase().includes(searchLower)
     );
+    
+    // Filter by year
+    const matchesYear = selectedYear === 'all' || (course.tahun || '2025') === selectedYear;
+    
+    return matchesSearch && matchesYear;
   }) : [];
 
   const handleAddCourse = async (e) => {
@@ -641,6 +653,21 @@ export default function CourseManagement() {
             />
           </div>
         </div>
+        
+        {/* Filter Tahun */}
+        <select
+          value={selectedYear}
+          onChange={(e) => setSelectedYear(e.target.value)}
+          className="px-3 md:px-4 py-2 text-sm md:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-purple-50"
+        >
+          <option value="all">Semua Tahun</option>
+          {availableYears.map((year) => (
+            <option key={year} value={year}>
+              Tahun {year}
+            </option>
+          ))}
+        </select>
+        
         {/* Hanya tampilkan dropdown program jika admin atau jika ada lebih dari 1 program */}
         {(userRole === 'admin' || programs.length > 1) && (
           <select
