@@ -19,6 +19,7 @@ export default function DosenManagement() {
   const [resetUsername, setResetUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [currentUserProdi, setCurrentUserProdi] = useState(null);
+  const [courseSearch, setCourseSearch] = useState('');
   const [formData, setFormData] = useState({
     prodi_id: '',
     nidn: '',
@@ -288,6 +289,7 @@ export default function DosenManagement() {
       setSelectedDosenForCourses(null);
       setAllCourses([]);
       setDosenCourses([]);
+      setCourseSearch(''); // Reset search
     } catch (error) {
       alert('Gagal menyimpan: ' + (error.response?.data?.message || error.message));
     }
@@ -747,17 +749,34 @@ export default function DosenManagement() {
       {showCoursesModal && selectedDosenForCourses && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="mb-4">
-              <h2 className="text-xl font-bold">Kelola Mata Kuliah Dosen</h2>
-              <p className="text-gray-600 text-sm mt-1">
-                Dosen: <span className="font-medium">{selectedDosenForCourses.nama_lengkap}</span>
-              </p>
-              <p className="text-gray-600 text-sm">
-                Prodi: <span className="font-medium">{selectedDosenForCourses.prodi_nama || '-'}</span>
-              </p>
-              <p className="text-gray-500 text-xs mt-1">
-                💡 Dosen hanya dapat akses RPS dari mata kuliah yang dipilih di sini
-              </p>
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Kelola Mata Kuliah Dosen</h2>
+              
+              {/* Info Dosen */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-600 mb-1">Dosen</p>
+                    <p className="font-semibold text-gray-900">{selectedDosenForCourses.nama_lengkap}</p>
+                    <p className="text-sm text-gray-600">{selectedDosenForCourses.nidn || 'NIDN: -'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600 mb-1">Program Studi</p>
+                    <p className="font-semibold text-gray-900">{selectedDosenForCourses.prodi_nama || '-'}</p>
+                    <p className="text-sm text-gray-600">{selectedDosenForCourses.email}</p>
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-blue-200">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-700">
+                      <span className="font-medium text-blue-700">{dosenCourses.length}</span> mata kuliah dipilih dari <span className="font-medium text-blue-700">{allCourses.length}</span> tersedia
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      💡 Dosen hanya dapat akses RPS dari mata kuliah yang dipilih
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {!selectedDosenForCourses.prodi_id ? (
@@ -773,12 +792,33 @@ export default function DosenManagement() {
                 <p className="text-gray-500 text-sm mt-1">Tambahkan mata kuliah di prodi {selectedDosenForCourses.prodi_nama} terlebih dahulu</p>
               </div>
             ) : (
-              <div className="space-y-2 mb-4">
-                <p className="text-sm text-gray-700 mb-3 font-medium">
+              <div className="space-y-4 mb-4">
+                {/* Search Bar */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <input
+                    type="text"
+                    value={courseSearch}
+                    onChange={(e) => setCourseSearch(e.target.value)}
+                    placeholder="Cari kode atau nama mata kuliah..."
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <p className="text-sm text-gray-700 font-medium">
                   Pilih mata kuliah yang diampu oleh dosen:
                 </p>
                 <div className="max-h-[400px] overflow-y-auto space-y-2">
-                  {allCourses.map((course) => {
+                  {allCourses
+                    .filter(course => {
+                      if (!courseSearch) return true;
+                      const search = courseSearch.toLowerCase();
+                      return (
+                        course.code?.toLowerCase().includes(search) ||
+                        course.title?.toLowerCase().includes(search)
+                      );
+                    })
+                    .map((course) => {
                     const isAssigned = dosenCourses.some(c => c.id === course.id);
                     return (
                       <div
@@ -808,12 +848,31 @@ export default function DosenManagement() {
                               <span>SKS: {course.credits || '-'}</span>
                               <span>•</span>
                               <span>Semester: {course.semester || '-'}</span>
+                              {course.program && (
+                                <>
+                                  <span>•</span>
+                                  <span>Program: {course.program.title || '-'}</span>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
                       </div>
                     );
                   })}
+                  {allCourses.filter(course => {
+                    if (!courseSearch) return true;
+                    const search = courseSearch.toLowerCase();
+                    return (
+                      course.code?.toLowerCase().includes(search) ||
+                      course.title?.toLowerCase().includes(search)
+                    );
+                  }).length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <Search className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                      <p>Tidak ada mata kuliah yang sesuai dengan pencarian "{courseSearch}"</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -825,6 +884,7 @@ export default function DosenManagement() {
                   setSelectedDosenForCourses(null);
                   setAllCourses([]);
                   setDosenCourses([]);
+                  setCourseSearch(''); // Reset search
                 }}
                 className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
@@ -832,9 +892,11 @@ export default function DosenManagement() {
               </button>
               <button
                 onClick={saveCoursesAssignment}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                disabled={!selectedDosenForCourses.prodi_id}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                Simpan & Kirim Email
+                <Mail className="w-4 h-4" />
+                <span>Simpan & Kirim Email</span>
               </button>
             </div>
           </div>
