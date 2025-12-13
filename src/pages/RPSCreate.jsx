@@ -612,7 +612,7 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
         }))
       };
 
-      const res = await apiClient.post('/api/v1/cpmk/batch', payload);
+      const res = await apiClient.post('/cpmk/batch', payload);
       
       if (res.data.success) {
         // Mark all saved CPMK as fromDB
