@@ -146,16 +146,22 @@ func duplicateTablesInXML(xmlContent string, rps *models.GeneratedRPS, dosens []
 	tugasData, ok := result["tugas"].([]interface{})
 	if !ok || len(tugasData) == 0 {
 		// No tugas, just replace basic placeholders
+		fmt.Println("No tugas data found")
 		return replacePlaceholders(xmlContent, rps, dosens, result, 0, nil), nil
 	}
+
+	fmt.Printf("Found %d tugas items\n", len(tugasData))
 
 	// Find table template pattern (table yang mengandung placeholder tugas)
 	// Pattern: <w:tbl>...</w:tbl> yang mengandung {JUDUL_TUGAS} atau {SUB_CPMK_TUGAS}
 	tablePattern := regexp.MustCompile(`(?s)<w:tbl>.*?{[^}]*TUGAS[^}]*}.*?</w:tbl>`)
 	tableMatches := tablePattern.FindAllString(xmlContent, -1)
 
+	fmt.Printf("Found %d table matches with TUGAS placeholder\n", len(tableMatches))
+
 	if len(tableMatches) == 0 {
 		// No tugas table found, just replace placeholders
+		fmt.Println("No tugas table template found")
 		return replacePlaceholders(xmlContent, rps, dosens, result, 0, nil), nil
 	}
 
@@ -258,11 +264,11 @@ func replacePlaceholders(content string, rps *models.GeneratedRPS, dosens []mode
 		if rujukanText == "" {
 			rujukanText = "[Belum ada daftar rujukan]"
 		}
-		replaceMap["{DAFTAR_RUJUKAN}"+suffix] = xmlEscape(rujukanText)
-		replaceMap["{DAFTAR_RUJUKAN}"] = xmlEscape(rujukanText)
+		replaceMap["{DAFTAR_RUJUKAN}"+suffix] = rujukanText
+		replaceMap["{DAFTAR_RUJUKAN}"] = rujukanText
 	}
 
-	// Replace all placeholders
+	// Replace all placeholders - escape XML pada saat replace
 	resultStr := content
 	for placeholder, value := range replaceMap {
 		resultStr = strings.ReplaceAll(resultStr, placeholder, xmlEscape(value))
