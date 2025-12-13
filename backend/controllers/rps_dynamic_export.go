@@ -139,9 +139,17 @@ func addBasicInfoTable(doc *document.Document, rps *models.GeneratedRPS, dosens 
 	// Row 5: SKS dan Semester
 	row2 := table.AddRow()
 	addCellWithBold(row2.AddCell(), "BOBOT (SKS)")
-	addCellNormal(row2.AddCell(), fmt.Sprintf("%d", *rps.Course.Credits))
+	sks := "0"
+	if rps.Course.Credits != nil {
+		sks = fmt.Sprintf("%d", *rps.Course.Credits)
+	}
+	addCellNormal(row2.AddCell(), sks)
 	addCellWithBold(row2.AddCell(), "SEMESTER")
-	addCellNormal(row2.AddCell(), fmt.Sprintf("%d", *rps.Course.Semester))
+	semester := "0"
+	if rps.Course.Semester != nil {
+		semester = fmt.Sprintf("%d", *rps.Course.Semester)
+	}
+	addCellNormal(row2.AddCell(), semester)
 }
 
 func addCPMKSection(doc *document.Document, cpmkData []interface{}) {
@@ -262,13 +270,18 @@ func addDynamicTugasTables(doc *document.Document, tugasData []interface{}, rps 
 			addTugasHeaderRow(table, "Identitas Mata Kuliah")
 			addTugasDataRow(table, "Nama MK", rps.Course.Title)
 			addTugasDataRow(table, "Kode", rps.Course.Code)
-			addTugasDataRow(table, "Semester", fmt.Sprintf("%d", *rps.Course.Semester))
-			addTugasDataRow(table, "SKS", fmt.Sprintf("%d", *rps.Course.Credits))
-
-			// Sub-CPMK & Indikator section
-			addTugasHeaderRow(table, "Sub-CPMK & Indikator")
-			addTugasDataRow(table, "Sub-CPMK", getStringValue(tugas, "sub_cpmk"))
-			addTugasDataRow(table, "Indikator", getStringValue(tugas, "indikator"))
+		
+		semester := "0"
+		if rps.Course.Semester != nil {
+			semester = fmt.Sprintf("%d", *rps.Course.Semester)
+		}
+		addTugasDataRow(table, "Semester", semester)
+		
+		sks := "0"
+		if rps.Course.Credits != nil {
+			sks = fmt.Sprintf("%d", *rps.Course.Credits)
+		}
+		addTugasDataRow(table, "SKS", sks)
 
 			// Rencana Tugas section
 			addTugasHeaderRow(table, "Rencana Tugas")
