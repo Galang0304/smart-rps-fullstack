@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/syrlramadhan/dokumentasi-rps-api/controllers"
+	"smart-rps-backend/controllers"
 	"gorm.io/gorm"
 )
 

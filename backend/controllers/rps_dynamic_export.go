@@ -8,14 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"smart-rps-backend/models"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/syrlramadhan/dokumentasi-rps-api/models"
 	"github.com/unidoc/unioffice/color"
 	"github.com/unidoc/unioffice/document"
-	"github.com/unidoc/unioffice/measurement"
 	"github.com/unidoc/unioffice/schema/soo/wml"
-	"gorm.io/gorm"
 )
 
 // ExportDynamic - Export RPS dengan tabel tugas yang dinamis
@@ -58,20 +57,20 @@ func (gc *GeneratedRPSController) ExportDynamic(c *gin.Context) {
 
 	// Add title
 	addTitle(doc, "RENCANA PEMBELAJARAN SEMESTER (RPS)")
-	
+
 	// Add basic info table
 	addBasicInfoTable(doc, &rps, dosens)
-	
+
 	// Add CPMK section
 	if cpmkData, ok := result["cpmk"].([]interface{}); ok {
 		addCPMKSection(doc, cpmkData)
 	}
-	
+
 	// Add Sub-CPMK section
 	if subCpmkData, ok := result["sub_cpmk"].([]interface{}); ok {
 		addSubCPMKSection(doc, subCpmkData)
 	}
-	
+
 	// Add Rencana Pembelajaran table
 	if topikData, ok := result["topik"].([]interface{}); ok {
 		addRencanaPembelajaranTable(doc, topikData)
@@ -109,34 +108,34 @@ func addTitle(doc *document.Document, title string) {
 
 func addBasicInfoTable(doc *document.Document, rps *models.GeneratedRPS, dosens []models.Dosen) {
 	doc.AddParagraph() // Space
-	
+
 	table := doc.AddTable()
 	table.Properties().SetWidthPercent(100)
-	
+
 	// Row 1: Perguruan Tinggi
 	addTableRow(table, "PERGURUAN TINGGI", "Universitas Muhammadiyah Makassar")
-	
+
 	// Row 2: Fakultas
 	fakultas := ""
 	if len(dosens) > 0 && dosens[0].Prodi != nil {
 		fakultas = dosens[0].Prodi.Fakultas
 	}
 	addTableRow(table, "FAKULTAS", fakultas)
-	
+
 	// Row 3: Program Studi
 	prodi := ""
 	if rps.Course.Program != nil {
 		prodi = rps.Course.Program.Name
 	}
 	addTableRow(table, "PROGRAM STUDI", prodi)
-	
+
 	// Row 4: Nama MK, Kode, SKS, Semester
 	row := table.AddRow()
 	addCellWithBold(row.AddCell(), "NAMA MATA KULIAH")
 	addCellNormal(row.AddCell(), rps.Course.Title)
 	addCellWithBold(row.AddCell(), "KODE MK")
 	addCellNormal(row.AddCell(), rps.Course.Code)
-	
+
 	// Row 5: SKS dan Semester
 	row2 := table.AddRow()
 	addCellWithBold(row2.AddCell(), "BOBOT (SKS)")
@@ -147,15 +146,15 @@ func addBasicInfoTable(doc *document.Document, rps *models.GeneratedRPS, dosens 
 
 func addCPMKSection(doc *document.Document, cpmkData []interface{}) {
 	doc.AddParagraph().AddRun().AddText("CAPAIAN PEMBELAJARAN MATA KULIAH (CPMK)")
-	
+
 	table := doc.AddTable()
 	table.Properties().SetWidthPercent(100)
-	
+
 	// Header
 	header := table.AddRow()
 	addCellWithBold(header.AddCell(), "Kode")
 	addCellWithBold(header.AddCell(), "Deskripsi")
-	
+
 	// Data rows
 	for _, item := range cpmkData {
 		if cpmk, ok := item.(map[string]interface{}); ok {
@@ -168,16 +167,16 @@ func addCPMKSection(doc *document.Document, cpmkData []interface{}) {
 
 func addSubCPMKSection(doc *document.Document, subCpmkData []interface{}) {
 	doc.AddParagraph().AddRun().AddText("SUB-CAPAIAN PEMBELAJARAN MATA KULIAH (Sub-CPMK)")
-	
+
 	table := doc.AddTable()
 	table.Properties().SetWidthPercent(100)
-	
+
 	// Header
 	header := table.AddRow()
 	addCellWithBold(header.AddCell(), "Kode")
 	addCellWithBold(header.AddCell(), "Deskripsi")
 	addCellWithBold(header.AddCell(), "CPMK")
-	
+
 	// Data rows
 	for _, item := range subCpmkData {
 		if subCpmk, ok := item.(map[string]interface{}); ok {
@@ -193,10 +192,10 @@ func addRencanaPembelajaranTable(doc *document.Document, topikData []interface{}
 	doc.AddParagraph()
 	para := doc.AddParagraph()
 	para.AddRun().AddText("RENCANA PEMBELAJARAN")
-	
+
 	table := doc.AddTable()
 	table.Properties().SetWidthPercent(100)
-	
+
 	// Header
 	header := table.AddRow()
 	addCellWithBold(header.AddCell(), "Minggu")
@@ -207,7 +206,7 @@ func addRencanaPembelajaranTable(doc *document.Document, topikData []interface{}
 	addCellWithBold(header.AddCell(), "Waktu")
 	addCellWithBold(header.AddCell(), "Kriteria")
 	addCellWithBold(header.AddCell(), "Bobot")
-	
+
 	// Data rows
 	for _, item := range topikData {
 		if topik, ok := item.(map[string]interface{}); ok {
@@ -229,10 +228,10 @@ func addDynamicTugasTables(doc *document.Document, tugasData []interface{}, rps 
 	if len(dosens) > 0 {
 		namaDosen = dosens[0].NamaLengkap
 	}
-	
+
 	// Add page break before tugas section
 	doc.AddParagraph()
-	
+
 	for i, item := range tugasData {
 		if tugas, ok := item.(map[string]interface{}); ok {
 			// Add title for each tugas
@@ -242,16 +241,16 @@ func addDynamicTugasTables(doc *document.Document, tugasData []interface{}, rps 
 			titleRun.AddText(fmt.Sprintf("RENCANA TUGAS %d", i+1))
 			titleRun.Properties().SetBold(true)
 			titleRun.Properties().SetSize(14)
-			
+
 			// Create table for this tugas
 			table := doc.AddTable()
 			table.Properties().SetWidthPercent(100)
-			
+
 			// Header row with logo and title
 			headerRow := table.AddRow()
 			logoCell := headerRow.AddCell()
 			addCellNormal(logoCell, "[LOGO]")
-			
+
 			titleCell := headerRow.AddCell()
 			titleCell.Properties().SetColumnSpan(3)
 			titlePara := titleCell.AddParagraph()
@@ -265,32 +264,32 @@ func addDynamicTugasTables(doc *document.Document, tugasData []interface{}, rps 
 			run.Properties().SetBold(true)
 			titlePara.AddRun().AddBreak()
 			titlePara.AddRun().AddText("RENCANA TUGAS MAHASISWA")
-			
+
 			// Identitas Mata Kuliah section
 			addTugasHeaderRow(table, "Identitas Mata Kuliah")
 			addTugasDataRow(table, "Nama MK", rps.Course.Title)
 			addTugasDataRow(table, "Kode", rps.Course.Code)
 			addTugasDataRow(table, "Semester", fmt.Sprintf("%d", *rps.Course.Semester))
 			addTugasDataRow(table, "SKS", fmt.Sprintf("%d", *rps.Course.Credits))
-			
+
 			// Sub-CPMK & Indikator section
 			addTugasHeaderRow(table, "Sub-CPMK & Indikator")
 			addTugasDataRow(table, "Sub-CPMK", getString(tugas, "sub_cpmk"))
 			addTugasDataRow(table, "Indikator", getString(tugas, "indikator"))
-			
+
 			// Rencana Tugas section
 			addTugasHeaderRow(table, "Rencana Tugas")
 			addTugasDataRow(table, "Judul Tugas", getString(tugas, "judul_tugas"))
 			addTugasDataRow(table, "Batas Waktu", getString(tugas, "batas_waktu"))
 			addTugasDataRow(table, "Petunjuk Pengerjaan Tugas", getString(tugas, "petunjuk_pengerjaan"))
 			addTugasDataRow(table, "Luaran Tugas", getString(tugas, "luaran_tugas"))
-			
+
 			// Penilaian section
 			addTugasHeaderRow(table, "Penilaian")
 			addTugasDataRow(table, "Kriteria", getString(tugas, "kriteria"))
 			addTugasDataRow(table, "Teknik Penilaian", getString(tugas, "teknik_penilaian"))
 			addTugasDataRow(table, "Bobot (%)", fmt.Sprintf("%v", tugas["bobot"]))
-			
+
 			// Daftar Rujukan section
 			rujukanText := ""
 			if rujukan, ok := tugas["daftar_rujukan"].([]interface{}); ok && len(rujukan) > 0 {
@@ -305,7 +304,7 @@ func addDynamicTugasTables(doc *document.Document, tugasData []interface{}, rps 
 			}
 			addTugasHeaderRow(table, "Daftar Rujukan")
 			addTugasDataRow(table, "", rujukanText)
-			
+
 			// Add space between tugas
 			doc.AddParagraph()
 		}
@@ -329,7 +328,7 @@ func addTugasDataRow(table document.Table, label string, value string) {
 	labelCell := row.AddCell()
 	labelCell.Properties().SetWidthAuto()
 	addCellWithBold(labelCell, label)
-	
+
 	valueCell := row.AddCell()
 	addCellNormal(valueCell, value)
 }

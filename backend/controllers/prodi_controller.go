@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/syrlramadhan/dokumentasi-rps-api/models"
-	"github.com/syrlramadhan/dokumentasi-rps-api/services"
+	"smart-rps-backend/models"
+	"smart-rps-backend/services"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )

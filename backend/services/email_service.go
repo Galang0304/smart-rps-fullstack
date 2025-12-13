@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/smtp"
 
-	"github.com/syrlramadhan/dokumentasi-rps-api/config"
+	"smart-rps-backend/config"
 )
 
 type EmailService struct {

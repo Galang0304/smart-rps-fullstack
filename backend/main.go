@@ -4,10 +4,11 @@ import (
 	"log"
 	"os"
 
+	"smart-rps-backend/config"
+	"smart-rps-backend/models"
+	"smart-rps-backend/routes"
+
 	"github.com/gin-gonic/gin"
-	"github.com/syrlramadhan/dokumentasi-rps-api/config"
-	"github.com/syrlramadhan/dokumentasi-rps-api/models"
-	"github.com/syrlramadhan/dokumentasi-rps-api/routes"
 )
 
 func main() {

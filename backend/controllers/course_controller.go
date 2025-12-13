@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/syrlramadhan/dokumentasi-rps-api/models"
+	"smart-rps-backend/models"
 	"gorm.io/gorm"
 )
 
