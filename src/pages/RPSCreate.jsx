@@ -1113,7 +1113,22 @@ function SubCPMKStep({ course, formData, setFormData }) {
           ))}
           <button
             onClick={() => {
-              const newSubCPMK = [...formData.subCPMK, { code: `Sub-CPMK-${formData.subCPMK.length + 1}`, description: '', cpmk_id: formData.cpmk[selectedCPMK]?.code || 'CPMK-1', fromDB: false }];
+              // Hitung jumlah Sub-CPMK yang sudah ada untuk CPMK yang dipilih
+              const selectedCpmkCode = formData.cpmk[selectedCPMK]?.code || 'CPMK-1';
+              const existingSubCpmksForThisCpmk = formData.subCPMK.filter(
+                sub => sub.cpmk_id === selectedCpmkCode
+              );
+              const nextNumber = existingSubCpmksForThisCpmk.length + 1;
+              
+              // Extract CPMK number from code (e.g., "CPMK-2" -> "2")
+              const cpmkNumber = selectedCpmkCode.split('-')[1] || '1';
+              
+              const newSubCPMK = [...formData.subCPMK, { 
+                code: `Sub-CPMK-${cpmkNumber}-${nextNumber}`, 
+                description: '', 
+                cpmk_id: selectedCpmkCode, 
+                fromDB: false 
+              }];
               setFormData({ ...formData, subCPMK: newSubCPMK });
             }}
             className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600"
