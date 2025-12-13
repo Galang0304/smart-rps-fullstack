@@ -16,12 +16,14 @@ import Dashboard from './pages/Dashboard';
 import CourseManagement from './pages/CourseManagement';
 import RPSCreate from './pages/RPSCreate';
 import RPSListPage from './pages/RPSList';
+import Home from './pages/Home';
 
 // Dosen Pages
 import DosenDashboard from './pages/Dosen/Dashboard';
 import DosenRPSList from './pages/Dosen/RPSList';
 import DosenMataKuliah from './pages/Dosen/MataKuliah';
 
+        <Route path="/" element={<Home />} />
 // Protected Route Component
 function ProtectedRoute({ children, allowedRoles }) {
   const token = localStorage.getItem('token');

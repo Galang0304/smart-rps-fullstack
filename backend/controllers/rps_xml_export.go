@@ -168,14 +168,14 @@ func duplicateTablesInXML(xmlContent string, rps *models.GeneratedRPS, dosens []
 
 		// Remove all occurrences of tables with this tugas number
 		resultXML = tablePattern.ReplaceAllString(resultXML, "")
-		
+
 		// Also try pattern without underscore (e.g., {JUDUL_TUGAS} {NO_TUGAS} where NO_TUGAS = i)
 		// This is less precise, so we do it carefully
 	}
 
 	// Replace remaining basic placeholders (non-tugas)
 	resultXML = replacePlaceholders(resultXML, rps, dosens, result, 0, nil)
-	
+
 	return resultXML, nil
 }
 
