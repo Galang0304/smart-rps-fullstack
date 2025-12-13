@@ -712,21 +712,6 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
                 </div>
               </div>
             </button>
-
-            {/* Generate AI - DIHAPUS, sekarang generate per field */}
-            <button
-              onClick={handleManualMode}
-              disabled={generating}
-              className="p-4 border-2 rounded-lg text-left transition-all border-gray-200 bg-white hover:border-blue-300"
-            >
-              <div className="flex items-center gap-3">
-                <PenLine className="w-6 h-6 text-blue-500" />
-                <div>
-                  <p className="font-medium">Input Manual</p>
-                  <p className="text-xs text-gray-500">Generate AI per field tersedia di bawah</p>
-                </div>
-              </div>
-            </button>
           </div>
         </div>
       )}
