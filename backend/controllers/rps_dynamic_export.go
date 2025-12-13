@@ -84,7 +84,8 @@ func (gc *GeneratedRPSController) ExportDynamic(c *gin.Context) {
 	// Write to buffer
 	var buf bytes.Buffer
 	if err := doc.Save(&buf); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save document"})
+		fmt.Printf("Error saving document: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to save document: %v", err)})
 		return
 	}
 
