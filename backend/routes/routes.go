@@ -129,6 +129,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 			generated.PATCH("/:id/status", generatedRPSController.UpdateStatus)
 			generated.DELETE("/:id", generatedRPSController.Delete)
 			generated.GET("/:id/export", generatedRPSController.Export)
+			generated.GET("/:id/export-dynamic", generatedRPSController.ExportDynamic) // NEW: Dynamic table export
 		}
 
 		// AI Helper routes
