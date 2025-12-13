@@ -23,7 +23,6 @@ import DosenDashboard from './pages/Dosen/Dashboard';
 import DosenRPSList from './pages/Dosen/RPSList';
 import DosenMataKuliah from './pages/Dosen/MataKuliah';
 
-        <Route path="/" element={<Home />} />
 // Protected Route Component
 function ProtectedRoute({ children, allowedRoles }) {
   const token = localStorage.getItem('token');
@@ -45,6 +44,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         {/* Public Routes */}
+        <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         
         {/* Admin Routes */}
