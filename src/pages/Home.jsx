@@ -269,14 +269,6 @@ export default function Home() {
     </div>
   );
 }
-                    5 Kaprodi sebagai koordinator program studi dalam penyusunan dan sinkronisasi RPS.
-                  </p>
-                </div>
-              </div>
-              <div className="md:ml-auto text-blue-700 font-semibold text-sm">
-                5 orang
-              </div>
-            </div>
 
             <div className="border-l-2 border-dashed border-blue-100 h-4 ml-5 md:ml-6"></div>
 
