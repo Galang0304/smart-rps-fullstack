@@ -3,8 +3,9 @@ package routes
 import (
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"smart-rps-backend/controllers"
+
+	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
@@ -129,7 +130,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 			generated.PATCH("/:id/status", generatedRPSController.UpdateStatus)
 			generated.DELETE("/:id", generatedRPSController.Delete)
 			generated.GET("/:id/export", generatedRPSController.Export)
-			generated.GET("/:id/export-dynamic", generatedRPSController.ExportDynamic) // Dynamic with unioffice (requires license)
+			generated.GET("/:id/export-dynamic", generatedRPSController.ExportDynamic)           // Dynamic with unioffice (requires license)
 			generated.GET("/:id/export-auto", generatedRPSController.ExportWithTableDuplication) // FREE: Auto duplicate tables
 		}
 

@@ -14,9 +14,10 @@ import (
 	"strings"
 	"time"
 
+	"smart-rps-backend/models"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"smart-rps-backend/models"
 )
 
 // ExportWithTableDuplication - Export RPS dengan duplikasi tabel tugas otomatis
@@ -171,7 +172,7 @@ func duplicateTablesInXML(xmlContent string, rps *models.GeneratedRPS, dosens []
 
 		// Clone table and replace placeholders
 		newTable := replacePlaceholders(tugasTableTemplate, rps, dosens, result, i+1, tugas)
-		
+
 		// Add paragraph break between tables
 		if i > 0 {
 			allTugasTables.WriteString("<w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>")
@@ -199,7 +200,7 @@ func replacePlaceholders(content string, rps *models.GeneratedRPS, dosens []mode
 	// Basic info
 	replaceMap["{NAMA_MK}"] = rps.Course.Title
 	replaceMap["{KODE_MK}"] = rps.Course.Code
-	
+
 	if rps.Course.Credits != nil {
 		replaceMap["{SKS}"] = fmt.Sprintf("%d", *rps.Course.Credits)
 	}
@@ -222,7 +223,7 @@ func replacePlaceholders(content string, rps *models.GeneratedRPS, dosens []mode
 	// If tugasIndex > 0, replace tugas-specific placeholders
 	if tugasIndex > 0 && tugas != nil {
 		suffix := fmt.Sprintf("_%d", tugasIndex)
-		
+
 		replaceMap["{NO_TUGAS}"] = fmt.Sprintf("%d", tugasIndex)
 		replaceMap["{SUB_CPMK_TUGAS}"+suffix] = getStringValue(tugas, "sub_cpmk")
 		replaceMap["{INDIKATOR_TUGAS}"+suffix] = getStringValue(tugas, "indikator")
@@ -262,12 +263,12 @@ func replacePlaceholders(content string, rps *models.GeneratedRPS, dosens []mode
 	}
 
 	// Replace all placeholders
-	result := content
+	resultStr := content
 	for placeholder, value := range replaceMap {
-		result = strings.ReplaceAll(result, placeholder, xmlEscape(value))
+		resultStr = strings.ReplaceAll(resultStr, placeholder, xmlEscape(value))
 	}
 
-	return result
+	return resultStr
 }
 
 func xmlEscape(s string) string {
@@ -276,10 +277,10 @@ func xmlEscape(s string) string {
 	s = strings.ReplaceAll(s, "<", "&lt;")
 	s = strings.ReplaceAll(s, ">", "&gt;")
 	s = strings.ReplaceAll(s, "\"", "&quot;")
-	
+
 	// Convert newlines to Word line breaks
 	s = strings.ReplaceAll(s, "\n", "<w:br/>")
-	
+
 	return s
 }
 
