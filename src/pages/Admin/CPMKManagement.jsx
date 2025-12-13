@@ -337,6 +337,88 @@ export default function CPMKManagement() {
     }
   };
 
+  const handleDeleteSubCPMK = async (cpmkId, subCpmkId, subCpmkDesc) => {
+    if (!confirm(`Yakin ingin menghapus Sub-CPMK "${subCpmkDesc}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://103.151.145.182:8080/api/v1/cpmk/${cpmkId}/sub-cpmk/${subCpmkId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setUploadStatus({
+          success: true,
+          message: 'Sub-CPMK berhasil dihapus!',
+        });
+        // Reload CPMK data
+        const newData = await loadCPMKForCourse(selectedCourse.id);
+        setCpmkData(newData);
+        setTimeout(() => setUploadStatus(null), 3000);
+      }
+    } catch (error) {
+      console.error('Failed to delete Sub-CPMK:', error);
+      alert('Gagal menghapus Sub-CPMK: ' + error.message);
+    }
+  };
+
+  const handleEditCPMK = (cpmk) => {
+    setEditingCpmk({
+      id: cpmk.id,
+      cpmk_number: cpmk.cpmk_number,
+      description: cpmk.description,
+    });
+    setShowEditModal(true);
+  };
+
+  const handleSaveEditCPMK = async () => {
+    if (!editingCpmk.description) {
+      alert('Deskripsi CPMK harus diisi!');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await fetch(`http://103.151.145.182:8080/api/v1/cpmk/${editingCpmk.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          description: editingCpmk.description,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setUploadStatus({
+          success: true,
+          message: 'CPMK berhasil diupdate!',
+        });
+        setShowEditModal(false);
+        setEditingCpmk(null);
+        const newData = await loadCPMKForCourse(selectedCourse.id);
+        setCpmkData(newData);
+        setTimeout(() => setUploadStatus(null), 3000);
+      } else {
+        throw new Error(data.error || 'Gagal mengupdate CPMK');
+      }
+    } catch (error) {
+      console.error('Failed to update CPMK:', error);
+      alert('Gagal mengupdate CPMK: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleAddCpmk = async () => {
     if (!newCpmk.cpmk_number || !newCpmk.description) {
       alert('Nomor CPMK dan deskripsi harus diisi!');
@@ -946,13 +1028,22 @@ export default function CPMKManagement() {
                           </div>
                           <p className="text-gray-900 leading-relaxed">{cpmk.description}</p>
                         </div>
-                        <button
-                          onClick={() => handleDeleteSingleCPMK(cpmk.id, cpmk.description)}
-                          className="ml-4 p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
-                          title="Hapus CPMK ini"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleEditCPMK(cpmk)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            title="Edit CPMK ini"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSingleCPMK(cpmk.id, cpmk.description)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Hapus CPMK ini"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
 
                       {/* Sub-CPMKs */}
@@ -978,6 +1069,13 @@ export default function CPMKManagement() {
                                   {sub.sub_cpmk_number}
                                 </span>
                                 <p className="text-sm text-gray-700 flex-1 leading-relaxed">{sub.description}</p>
+                                <button
+                                  onClick={() => handleDeleteSubCPMK(cpmk.id, sub.id, sub.description)}
+                                  className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors flex-shrink-0"
+                                  title="Hapus Sub-CPMK ini"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
                               </div>
                             ))}
                           </div>
@@ -1096,6 +1194,84 @@ export default function CPMKManagement() {
                   Batal
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit CPMK Modal */}
+      {showEditModal && editingCpmk && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Edit CPMK</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mata Kuliah
+                </label>
+                <input
+                  type="text"
+                  value={selectedCourse?.title || ''}
+                  disabled
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nomor CPMK
+                </label>
+                <input
+                  type="number"
+                  value={editingCpmk.cpmk_number}
+                  disabled
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Deskripsi CPMK <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={editingCpmk.description}
+                  onChange={(e) => setEditingCpmk({ ...editingCpmk, description: e.target.value })}
+                  placeholder="Contoh: Mahasiswa mampu menjelaskan konsep dasar..."
+                  rows={4}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleSaveEditCPMK}
+                disabled={loading}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Menyimpan...</span>
+                  </>
+                ) : (
+                  <>
+                    <Edit className="w-5 h-5" />
+                    <span>Update CPMK</span>
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingCpmk(null);
+                }}
+                disabled={loading}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Batal
+              </button>
             </div>
           </div>
         </div>
