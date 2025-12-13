@@ -815,6 +815,7 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
 
 function SubCPMKStep({ course, formData, setFormData }) {
   const [generating, setGenerating] = useState(false);
+  const [generatingIndex, setGeneratingIndex] = useState(null); // Track which Sub-CPMK is being generated
   const [selectedCPMK, setSelectedCPMK] = useState(0);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -955,6 +956,42 @@ function SubCPMKStep({ course, formData, setFormData }) {
     }
   };
 
+  const handleGenerateAIForSubCPMK = async (index) => {
+    if (!formData.cpmk[selectedCPMK] || !formData.cpmk[selectedCPMK].description.trim()) {
+      alert('Pilih CPMK yang sudah terisi terlebih dahulu');
+      return;
+    }
+    
+    setGenerating(true);
+    setGeneratingIndex(index);
+    try {
+      const res = await aiHelperAPI.generateSubCPMK({
+        course_id: course.id,
+        course_code: course.code,
+        course_title: course.title,
+        cpmk: formData.cpmk[selectedCPMK].description,
+      });
+      
+      if (res.data.data.items && res.data.data.items.length > 0) {
+        // Get the first generated description
+        const generatedDescription = res.data.data.items[0].description;
+        
+        // Update only the specific Sub-CPMK
+        const newSubCPMK = [...formData.subCPMK];
+        newSubCPMK[index].description = generatedDescription;
+        newSubCPMK[index].cpmk_id = formData.cpmk[selectedCPMK].code;
+        newSubCPMK[index].fromDB = false;
+        setFormData({ ...formData, subCPMK: newSubCPMK });
+      }
+    } catch (error) {
+      console.error('Failed to generate Sub-CPMK:', error);
+      alert('Gagal generate Sub-CPMK. Pastikan Gemini API key sudah diset.');
+    } finally {
+      setGenerating(false);
+      setGeneratingIndex(null);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -1038,10 +1075,23 @@ function SubCPMKStep({ course, formData, setFormData }) {
                     }
                     setFormData({ ...formData, subCPMK: newSubCPMK });
                   }}
-                  placeholder="Masukkan Sub-CPMK atau klik 'Generate AI'"
+                  placeholder="Masukkan Sub-CPMK atau klik 'AI'"
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none"
                   rows={2}
                 />
+                <button
+                  onClick={() => handleGenerateAIForSubCPMK(index)}
+                  disabled={generating && generatingIndex === index}
+                  className="flex items-center gap-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Generate dengan AI"
+                >
+                  {generating && generatingIndex === index ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Bot className="w-4 h-4" />
+                  )}
+                  <span className="text-sm">AI</span>
+                </button>
                 <button
                   onClick={() => {
                     if (item.fromDB) {
