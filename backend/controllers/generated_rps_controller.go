@@ -430,6 +430,7 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	// if rps.Course.Prerequisites != "" {
 	// 	mkPrasyarat = rps.Course.Prerequisites
 	// }
+	replaceMap["{MK_PRASYARAT}"] = mkPrasyarat
 	replaceMap["{REFERENSI_LIST}"] = ""
 
 	// Get Prodi info - fallback to Program.Prodi if dosen doesn't have fakultas
