@@ -545,45 +545,8 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
   };
 
   const handleGenerateAI = async () => {
-    setGenerating(true);
-    setInputMode('ai');
-    try {
-      const res = await aiHelperAPI.generateCPMK({
-        course_id: course.id,
-        course_code: course.code,
-        course_title: course.title,
-        credits: course.credits,
-        existing_cpl: [],
-        force_ai: true, // Force AI generation
-      });
-      
-      const generatedItems = res.data.data.items.map(item => ({
-        ...item,
-        fromDB: false // Mark as AI-generated
-      }));
-      
-      // Merge AI-generated with existing CPMK
-      const existingCpmks = formData.cpmk.filter(c => c.description && c.description.trim());
-      
-      // Ask user if they want to merge or replace
-      const shouldMerge = existingCpmks.length > 0 && 
-        confirm(`Anda sudah memiliki ${existingCpmks.length} CPMK. Gabung dengan hasil AI (${generatedItems.length} CPMK)?`);
-      
-      if (shouldMerge) {
-        const merged = [...existingCpmks, ...generatedItems];
-        setFormData({ ...formData, cpmk: merged });
-        alert(`✨ Berhasil menggabungkan ${existingCpmks.length} CPMK existing dengan ${generatedItems.length} CPMK dari AI!`);
-      } else {
-        setFormData({ ...formData, cpmk: generatedItems });
-        alert('✨ CPMK berhasil di-generate dengan AI!');
-      }
-    } catch (error) {
-      console.error('Failed to generate CPMK:', error);
-      alert('Gagal generate CPMK. Pastikan Gemini API key sudah diset.');
-      setInputMode(null);
-    } finally {
-      setGenerating(false);
-    }
+    // Hapus tombol global generate - sekarang generate per CPMK saja
+    setInputMode('manual');
   };
 
   const handleManualMode = () => {
@@ -715,25 +678,17 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
               </div>
             </button>
 
-            {/* Generate AI */}
+            {/* Generate AI - DIHAPUS, sekarang generate per field */}
             <button
-              onClick={handleGenerateAI}
+              onClick={handleManualMode}
               disabled={generating}
-              className={`p-4 border-2 rounded-lg text-left transition-all ${
-                inputMode === 'ai' 
-                  ? 'border-purple-500 bg-purple-50' 
-                  : 'border-gray-200 bg-white hover:border-purple-300'
-              }`}
+              className="p-4 border-2 rounded-lg text-left transition-all border-gray-200 bg-white hover:border-blue-300"
             >
               <div className="flex items-center gap-3">
-                {generating ? (
-                  <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
-                ) : (
-                  <Bot className={`w-6 h-6 ${inputMode === 'ai' ? 'text-purple-600' : 'text-gray-500'}`} />
-                )}
+                <PenLine className="w-6 h-6 text-blue-500" />
                 <div>
-                  <p className="font-medium">Generate AI</p>
-                  <p className="text-xs text-gray-500">Buat dengan Gemini</p>
+                  <p className="font-medium">Input Manual</p>
+                  <p className="text-xs text-gray-500">Generate AI per field tersedia di bawah</p>
                 </div>
               </div>
             </button>
