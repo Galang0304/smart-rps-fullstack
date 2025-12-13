@@ -475,6 +475,7 @@ export default function RPSCreate() {
 
 function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
   const [generating, setGenerating] = useState(false);
+  const [generatingIndex, setGeneratingIndex] = useState(null); // Track which CPMK is being generated
   const [loadingDB, setLoadingDB] = useState(false);
   const [inputMode, setInputMode] = useState(null); // 'manual', 'database', 'ai'
   const [checkingDB, setCheckingDB] = useState(true);
@@ -547,6 +548,40 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
   const handleGenerateAI = async () => {
     // Hapus tombol global generate - sekarang generate per CPMK saja
     setInputMode('manual');
+  };
+
+  const handleGenerateAIForCPMK = async (index) => {
+    setGenerating(true);
+    setGeneratingIndex(index);
+    try {
+      const res = await aiHelperAPI.generateCPMK({
+        course_id: course.id,
+        course_code: course.code,
+        course_title: course.title,
+        credits: course.credits,
+        existing_cpl: [],
+        force_ai: true,
+      });
+      
+      if (res.data.data.items && res.data.data.items.length > 0) {
+        // Get the generated description
+        const generatedDescription = res.data.data.items[0].description;
+        
+        // Update only the specific CPMK
+        const newCPMK = [...formData.cpmk];
+        newCPMK[index].description = generatedDescription;
+        newCPMK[index].fromDB = false;
+        setFormData({ ...formData, cpmk: newCPMK });
+        
+        if (!inputMode) setInputMode('manual');
+      }
+    } catch (error) {
+      console.error('Failed to generate CPMK:', error);
+      alert('Gagal generate CPMK. Pastikan Gemini API key sudah diset.');
+    } finally {
+      setGenerating(false);
+      setGeneratingIndex(null);
+    }
   };
 
   const handleManualMode = () => {
@@ -732,6 +767,19 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
                   rows={2}
                 />
               </div>
+              <button
+                onClick={() => handleGenerateAIForCPMK(index)}
+                disabled={generating && generatingIndex === index}
+                className="flex items-center gap-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Generate dengan AI"
+              >
+                {generating && generatingIndex === index ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Bot className="w-4 h-4" />
+                )}
+                <span className="text-sm">AI</span>
+              </button>
               <button
                 onClick={() => {
                   if (item.fromDB) {
