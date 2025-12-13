@@ -667,82 +667,53 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	// Backward compatibility
 	replaceMap["{TOPIK_PEMBELAJARAN}"] = topikMingguanText
 
-	// Tugas - Support untuk 4 tugas terpisah (format baru sesuai template)
+	// Tugas - DINAMIS: Support untuk sebanyak apapun tugas yang dosen inginkan
 	if tugasData, ok := result["tugas"].([]interface{}); ok {
-		for i := 0; i < 4; i++ {
-			if i < len(tugasData) {
-				if tugas, ok := tugasData[i].(map[string]interface{}); ok {
-					// Format baru sesuai template yang diberikan
-					replaceMap[fmt.Sprintf("{SUB_CPMK_TUGAS_%d}", i+1)] = getString(tugas, "sub_cpmk")
-					replaceMap[fmt.Sprintf("{INDIKATOR_TUGAS_%d}", i+1)] = getString(tugas, "indikator")
-					replaceMap[fmt.Sprintf("{JUDUL_TUGAS_%d}", i+1)] = getString(tugas, "judul_tugas")
-					replaceMap[fmt.Sprintf("{BATAS_TUGAS_%d}", i+1)] = getString(tugas, "batas_waktu")
-					replaceMap[fmt.Sprintf("{PETUNJUK_TUGAS_%d}", i+1)] = getString(tugas, "petunjuk_pengerjaan")
-					replaceMap[fmt.Sprintf("{LUARAN_TUGAS_%d}", i+1)] = getString(tugas, "luaran_tugas")
-					replaceMap[fmt.Sprintf("{KRITERIA_TUGAS_%d}", i+1)] = getString(tugas, "kriteria")
-					replaceMap[fmt.Sprintf("{TEKNIK_PENILAIAN_TUGAS_%d}", i+1)] = getString(tugas, "teknik_penilaian")
-					replaceMap[fmt.Sprintf("{BOBOT_TUGAS_%d}", i+1)] = fmt.Sprintf("%v", tugas["bobot"])
-
-					// Backward compatibility - format lama
-					replaceMap[fmt.Sprintf("{TUGAS_%d_NAMA_MK}", i+1)] = rps.Course.Title
-					replaceMap[fmt.Sprintf("{TUGAS_%d_KODE_MK}", i+1)] = rps.Course.Code
-					replaceMap[fmt.Sprintf("{TUGAS_%d_SEMESTER}", i+1)] = ""
-					replaceMap[fmt.Sprintf("{TUGAS_%d_SKS}", i+1)] = fmt.Sprintf("%d", rps.Course.Credits)
-					replaceMap[fmt.Sprintf("{TUGAS_%d_SUB_CPMK}", i+1)] = getString(tugas, "sub_cpmk")
-					replaceMap[fmt.Sprintf("{TUGAS_%d_INDIKATOR}", i+1)] = getString(tugas, "indikator")
-					replaceMap[fmt.Sprintf("{TUGAS_%d_JUDUL}", i+1)] = getString(tugas, "judul_tugas")
-					replaceMap[fmt.Sprintf("{TUGAS_%d_BATAS_WAKTU}", i+1)] = getString(tugas, "batas_waktu")
-					replaceMap[fmt.Sprintf("{TUGAS_%d_PETUNJUK}", i+1)] = getString(tugas, "petunjuk_pengerjaan")
-					replaceMap[fmt.Sprintf("{TUGAS_%d_LUARAN}", i+1)] = getString(tugas, "luaran_tugas")
-					replaceMap[fmt.Sprintf("{TUGAS_%d_KRITERIA}", i+1)] = getString(tugas, "kriteria")
-					replaceMap[fmt.Sprintf("{TUGAS_%d_TEKNIK}", i+1)] = getString(tugas, "teknik_penilaian")
-					replaceMap[fmt.Sprintf("{TUGAS_%d_BOBOT}", i+1)] = fmt.Sprintf("%v", tugas["bobot"])
-
-					// Daftar Rujukan - Format yang lebih baik
-					rujukanText := ""
-					if rujukan, ok := tugas["daftar_rujukan"].([]interface{}); ok && len(rujukan) > 0 {
-						for j, ref := range rujukan {
-							if refStr, ok := ref.(string); ok && refStr != "" {
-								// Format APA style dengan numbering
-								rujukanText += fmt.Sprintf("%d. %s\n", j+1, strings.TrimSpace(refStr))
-							}
-						}
-					}
-					// Jika tidak ada rujukan, berikan placeholder informatif
-					if rujukanText == "" {
-						rujukanText = "[Belum ada daftar rujukan]"
-					}
-					replaceMap[fmt.Sprintf("{TUGAS_%d_RUJUKAN}", i+1)] = rujukanText
-					replaceMap[fmt.Sprintf("{DAFTAR_RUJUKAN_%d}", i+1)] = rujukanText
-				}
-			} else {
-				// Jika tugas tidak ada, kosongkan placeholder (format baru)
-				replaceMap[fmt.Sprintf("{SUB_CPMK_TUGAS_%d}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{INDIKATOR_TUGAS_%d}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{JUDUL_TUGAS_%d}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{BATAS_TUGAS_%d}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{PETUNJUK_TUGAS_%d}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{LUARAN_TUGAS_%d}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{KRITERIA_TUGAS_%d}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{TEKNIK_PENILAIAN_TUGAS_%d}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{BOBOT_TUGAS_%d}", i+1)] = ""
+		// Iterasi sebanyak jumlah tugas yang ada (UNLIMITED)
+		for i := 0; i < len(tugasData); i++ {
+			if tugas, ok := tugasData[i].(map[string]interface{}); ok {
+				// Format baru sesuai template yang diberikan
+				replaceMap[fmt.Sprintf("{SUB_CPMK_TUGAS_%d}", i+1)] = getString(tugas, "sub_cpmk")
+				replaceMap[fmt.Sprintf("{INDIKATOR_TUGAS_%d}", i+1)] = getString(tugas, "indikator")
+				replaceMap[fmt.Sprintf("{JUDUL_TUGAS_%d}", i+1)] = getString(tugas, "judul_tugas")
+				replaceMap[fmt.Sprintf("{BATAS_TUGAS_%d}", i+1)] = getString(tugas, "batas_waktu")
+				replaceMap[fmt.Sprintf("{PETUNJUK_TUGAS_%d}", i+1)] = getString(tugas, "petunjuk_pengerjaan")
+				replaceMap[fmt.Sprintf("{LUARAN_TUGAS_%d}", i+1)] = getString(tugas, "luaran_tugas")
+				replaceMap[fmt.Sprintf("{KRITERIA_TUGAS_%d}", i+1)] = getString(tugas, "kriteria")
+				replaceMap[fmt.Sprintf("{TEKNIK_PENILAIAN_TUGAS_%d}", i+1)] = getString(tugas, "teknik_penilaian")
+				replaceMap[fmt.Sprintf("{BOBOT_TUGAS_%d}", i+1)] = fmt.Sprintf("%v", tugas["bobot"])
 
 				// Backward compatibility - format lama
-				replaceMap[fmt.Sprintf("{TUGAS_%d_NAMA_MK}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{TUGAS_%d_KODE_MK}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TUGAS_%d_NAMA_MK}", i+1)] = rps.Course.Title
+				replaceMap[fmt.Sprintf("{TUGAS_%d_KODE_MK}", i+1)] = rps.Course.Code
 				replaceMap[fmt.Sprintf("{TUGAS_%d_SEMESTER}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{TUGAS_%d_SKS}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{TUGAS_%d_SUB_CPMK}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{TUGAS_%d_INDIKATOR}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{TUGAS_%d_JUDUL}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{TUGAS_%d_BATAS_WAKTU}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{TUGAS_%d_PETUNJUK}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{TUGAS_%d_LUARAN}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{TUGAS_%d_KRITERIA}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{TUGAS_%d_TEKNIK}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{TUGAS_%d_BOBOT}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{TUGAS_%d_RUJUKAN}", i+1)] = ""
-				replaceMap[fmt.Sprintf("{DAFTAR_RUJUKAN_%d}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TUGAS_%d_SKS}", i+1)] = fmt.Sprintf("%d", rps.Course.Credits)
+				replaceMap[fmt.Sprintf("{TUGAS_%d_SUB_CPMK}", i+1)] = getString(tugas, "sub_cpmk")
+				replaceMap[fmt.Sprintf("{TUGAS_%d_INDIKATOR}", i+1)] = getString(tugas, "indikator")
+				replaceMap[fmt.Sprintf("{TUGAS_%d_JUDUL}", i+1)] = getString(tugas, "judul_tugas")
+				replaceMap[fmt.Sprintf("{TUGAS_%d_BATAS_WAKTU}", i+1)] = getString(tugas, "batas_waktu")
+				replaceMap[fmt.Sprintf("{TUGAS_%d_PETUNJUK}", i+1)] = getString(tugas, "petunjuk_pengerjaan")
+				replaceMap[fmt.Sprintf("{TUGAS_%d_LUARAN}", i+1)] = getString(tugas, "luaran_tugas")
+				replaceMap[fmt.Sprintf("{TUGAS_%d_KRITERIA}", i+1)] = getString(tugas, "kriteria")
+				replaceMap[fmt.Sprintf("{TUGAS_%d_TEKNIK}", i+1)] = getString(tugas, "teknik_penilaian")
+				replaceMap[fmt.Sprintf("{TUGAS_%d_BOBOT}", i+1)] = fmt.Sprintf("%v", tugas["bobot"])
+
+				// Daftar Rujukan - Format yang lebih baik
+				rujukanText := ""
+				if rujukan, ok := tugas["daftar_rujukan"].([]interface{}); ok && len(rujukan) > 0 {
+					for j, ref := range rujukan {
+						if refStr, ok := ref.(string); ok && refStr != "" {
+							// Format APA style dengan numbering
+							rujukanText += fmt.Sprintf("%d. %s\n", j+1, strings.TrimSpace(refStr))
+						}
+					}
+				}
+				// Jika tidak ada rujukan, berikan placeholder informatif
+				if rujukanText == "" {
+					rujukanText = "[Belum ada daftar rujukan]"
+				}
+				replaceMap[fmt.Sprintf("{TUGAS_%d_RUJUKAN}", i+1)] = rujukanText
+				replaceMap[fmt.Sprintf("{DAFTAR_RUJUKAN_%d}", i+1)] = rujukanText
 			}
 		}
 	}
