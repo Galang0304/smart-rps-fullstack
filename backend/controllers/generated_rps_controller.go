@@ -424,16 +424,12 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	replaceMap["{NAMA_DOSEN}"] = namaDosen
 	replaceMap["{DOSEN}"] = namaDosen // Alias untuk template
 
-	// Mata Kuliah Prasyarat - ambil dari data course jika ada
-	mkPrasyarat := ""
-	if rps.Course.Prerequisites != "" {
-		mkPrasyarat = rps.Course.Prerequisites
-	} else {
-		mkPrasyarat = "Tidak ada"
-	}
-	replaceMap["{MK_PRASYARAT}"] = mkPrasyarat
-
-	// Referensi
+	// Mata Kuliah Prasyarat - untuk sementara hardcode, nanti bisa ditambahkan field di Course model
+	mkPrasyarat := "Tidak ada"
+	// TODO: Tambahkan field Prerequisites ke Course model jika diperlukan
+	// if rps.Course.Prerequisites != "" {
+	// 	mkPrasyarat = rps.Course.Prerequisites
+	// }
 	replaceMap["{REFERENSI_LIST}"] = ""
 
 	// Get Prodi info - fallback to Program.Prodi if dosen doesn't have fakultas
