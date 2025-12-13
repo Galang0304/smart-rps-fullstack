@@ -9,10 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"smart-rps-backend/models"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/lukasjarosch/go-docx"
-	"smart-rps-backend/models"
 	"gorm.io/gorm"
 )
 
@@ -675,10 +676,10 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	// Backward compatibility
 	replaceMap["{TOPIK_PEMBELAJARAN}"] = topikMingguanText
 
-	// Tugas - DINAMIS: Support untuk sebanyak apapun tugas yang dosen inginkan
+	// Tugas - DINAMIS: Support sampai 20 tugas
 	if tugasData, ok := result["tugas"].([]interface{}); ok {
-		// Iterasi sebanyak jumlah tugas yang ada (UNLIMITED)
-		for i := 0; i < len(tugasData); i++ {
+		// Iterasi sebanyak jumlah tugas yang ada (max 20)
+		for i := 0; i < len(tugasData) && i < 20; i++ {
 			if tugas, ok := tugasData[i].(map[string]interface{}); ok {
 				// Format baru sesuai template yang diberikan
 				replaceMap[fmt.Sprintf("{SUB_CPMK_TUGAS_%d}", i+1)] = getString(tugas, "sub_cpmk")
@@ -691,42 +692,49 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 				replaceMap[fmt.Sprintf("{TEKNIK_PENILAIAN_TUGAS_%d}", i+1)] = getString(tugas, "teknik_penilaian")
 				replaceMap[fmt.Sprintf("{BOBOT_TUGAS_%d}", i+1)] = fmt.Sprintf("%v", tugas["bobot"])
 
-				// Backward compatibility - format lama
-				replaceMap[fmt.Sprintf("{TUGAS_%d_NAMA_MK}", i+1)] = rps.Course.Title
-				replaceMap[fmt.Sprintf("{TUGAS_%d_KODE_MK}", i+1)] = rps.Course.Code
-				replaceMap[fmt.Sprintf("{TUGAS_%d_SEMESTER}", i+1)] = fmt.Sprintf("%d", rps.Course.Semester)
-				replaceMap[fmt.Sprintf("{TUGAS_%d_SKS}", i+1)] = fmt.Sprintf("%d", rps.Course.Credits)
-				replaceMap[fmt.Sprintf("{TUGAS_%d_SUB_CPMK}", i+1)] = getString(tugas, "sub_cpmk")
-				replaceMap[fmt.Sprintf("{TUGAS_%d_INDIKATOR}", i+1)] = getString(tugas, "indikator")
-				replaceMap[fmt.Sprintf("{TUGAS_%d_JUDUL}", i+1)] = getString(tugas, "judul_tugas")
-				replaceMap[fmt.Sprintf("{TUGAS_%d_BATAS_WAKTU}", i+1)] = getString(tugas, "batas_waktu")
-				replaceMap[fmt.Sprintf("{TUGAS_%d_PETUNJUK}", i+1)] = getString(tugas, "petunjuk_pengerjaan")
-				replaceMap[fmt.Sprintf("{TUGAS_%d_LUARAN}", i+1)] = getString(tugas, "luaran_tugas")
-				replaceMap[fmt.Sprintf("{TUGAS_%d_KRITERIA}", i+1)] = getString(tugas, "kriteria")
-				replaceMap[fmt.Sprintf("{TUGAS_%d_TEKNIK}", i+1)] = getString(tugas, "teknik_penilaian")
-				replaceMap[fmt.Sprintf("{TUGAS_%d_BOBOT}", i+1)] = fmt.Sprintf("%v", tugas["bobot"])
-
-				// Tambahan untuk template baru
-				replaceMap[fmt.Sprintf("{TUGAS_%d_DOSEN}", i+1)] = namaDosen
-				replaceMap[fmt.Sprintf("{TUGAS_%d_MK_PRASYARAT}", i+1)] = mkPrasyarat
-
 				// Daftar Rujukan - Format yang lebih baik
 				rujukanText := ""
 				if rujukan, ok := tugas["daftar_rujukan"].([]interface{}); ok && len(rujukan) > 0 {
 					for j, ref := range rujukan {
 						if refStr, ok := ref.(string); ok && refStr != "" {
-							// Format APA style dengan numbering
 							rujukanText += fmt.Sprintf("%d. %s\n", j+1, strings.TrimSpace(refStr))
 						}
 					}
 				}
-				// Jika tidak ada rujukan, berikan placeholder informatif
 				if rujukanText == "" {
 					rujukanText = "[Belum ada daftar rujukan]"
 				}
-				replaceMap[fmt.Sprintf("{TUGAS_%d_RUJUKAN}", i+1)] = rujukanText
 				replaceMap[fmt.Sprintf("{DAFTAR_RUJUKAN_%d}", i+1)] = rujukanText
 			}
+		}
+
+		// Clear unused tugas placeholders (dari N+1 sampai 20)
+		numTugas := len(tugasData)
+		for i := numTugas + 1; i <= 20; i++ {
+			replaceMap[fmt.Sprintf("{SUB_CPMK_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{INDIKATOR_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{JUDUL_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{BATAS_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{PETUNJUK_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{LUARAN_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{KRITERIA_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{TEKNIK_PENILAIAN_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{BOBOT_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{DAFTAR_RUJUKAN_%d}", i)] = ""
+		}
+	} else {
+		// Tidak ada tugas sama sekali, clear semua placeholder
+		for i := 1; i <= 20; i++ {
+			replaceMap[fmt.Sprintf("{SUB_CPMK_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{INDIKATOR_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{JUDUL_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{BATAS_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{PETUNJUK_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{LUARAN_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{KRITERIA_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{TEKNIK_PENILAIAN_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{BOBOT_TUGAS_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{DAFTAR_RUJUKAN_%d}", i)] = ""
 		}
 	}
 

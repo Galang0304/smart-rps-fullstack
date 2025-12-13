@@ -144,60 +144,36 @@ func processDocxWithTableDuplication(templatePath string, rps *models.GeneratedR
 func duplicateTablesInXML(xmlContent string, rps *models.GeneratedRPS, dosens []models.Dosen, result map[string]interface{}) (string, error) {
 	// Get tugas data
 	tugasData, ok := result["tugas"].([]interface{})
-	if !ok || len(tugasData) == 0 {
-		// No tugas, just replace basic placeholders
-		fmt.Println("No tugas data found")
-		return replacePlaceholders(xmlContent, rps, dosens, result, 0, nil), nil
+	if !ok {
+		tugasData = []interface{}{} // Empty array if no tugas
 	}
 
-	fmt.Printf("Found %d tugas items\n", len(tugasData))
+	numTugas := len(tugasData)
+	fmt.Printf("Found %d tugas items\n", numTugas)
 
-	// Find table template pattern (table yang mengandung placeholder tugas)
-	// Pattern: <w:tbl>...</w:tbl> yang mengandung {JUDUL_TUGAS} atau {SUB_CPMK_TUGAS}
-	tablePattern := regexp.MustCompile(`(?s)<w:tbl>.*?{[^}]*TUGAS[^}]*}.*?</w:tbl>`)
-	tableMatches := tablePattern.FindAllString(xmlContent, -1)
-
-	fmt.Printf("Found %d table matches with TUGAS placeholder\n", len(tableMatches))
-
-	if len(tableMatches) == 0 {
-		// No tugas table found, just replace placeholders
-		fmt.Println("No tugas table template found")
-		return replacePlaceholders(xmlContent, rps, dosens, result, 0, nil), nil
-	}
-
-	// Use first table as template
-	tugasTableTemplate := tableMatches[0]
-
-	// Generate tables for all tugas
-	var allTugasTables strings.Builder
-	for i, tugasItem := range tugasData {
-		tugas, ok := tugasItem.(map[string]interface{})
-		if !ok {
-			continue
+	// Replace placeholders for existing tugas (1 to N)
+	resultXML := xmlContent
+	for i := 0; i < numTugas && i < 20; i++ {
+		if tugas, ok := tugasData[i].(map[string]interface{}); ok {
+			resultXML = replacePlaceholders(resultXML, rps, dosens, result, i+1, tugas)
 		}
-
-		// Clone table and replace placeholders
-		newTable := replacePlaceholders(tugasTableTemplate, rps, dosens, result, i+1, tugas)
-
-		// Add paragraph break between tables
-		if i > 0 {
-			allTugasTables.WriteString("<w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>")
-		}
-		allTugasTables.WriteString(newTable)
 	}
 
-	// Replace original table with all generated tables
-	resultXML := strings.Replace(xmlContent, tugasTableTemplate, allTugasTables.String(), 1)
+	// Remove unused tables (from N+1 to 20)
+	// Find and delete tables containing placeholder for unused tugas numbers
+	for i := numTugas + 1; i <= 20; i++ {
+		// Pattern to match table containing specific tugas placeholder
+		pattern := fmt.Sprintf(`(?s)<w:tbl>.*?\{[^}]*TUGAS[^}]*_%d\}.*?</w:tbl>`, i)
+		tablePattern := regexp.MustCompile(pattern)
 
-	// Remove any remaining tugas tables (if multiple templates exist)
-	for i := 1; i < len(tableMatches); i++ {
-		resultXML = strings.Replace(resultXML, tableMatches[i], "", 1)
+		// Remove all occurrences of tables with this tugas number
+		resultXML = tablePattern.ReplaceAllString(resultXML, "")
+
+		// Also try pattern without underscore (e.g., {JUDUL_TUGAS} {NO_TUGAS} where NO_TUGAS = i)
+		// This is less precise, so we do it carefully
 	}
 
-	// Replace remaining placeholders (non-tugas)
-	resultXML = replacePlaceholders(resultXML, rps, dosens, result, 0, nil)
-
-	return resultXML, nil
+	// Replace remaining basic placeholders (non-tugas)
 }
 
 func replacePlaceholders(content string, rps *models.GeneratedRPS, dosens []models.Dosen, result map[string]interface{}, tugasIndex int, tugas map[string]interface{}) string {
