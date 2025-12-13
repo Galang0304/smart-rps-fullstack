@@ -411,8 +411,6 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	replaceMap["{NAMA_PENYUSUN}"] = ""
 	replaceMap["{KOORDINATOR_MK}"] = ""
 	replaceMap["{DESKRIPSI_MK}"] = ""
-	replaceMap["{MK_PRASYARAT}"] = ""
-	replaceMap["{REFERENSI_LIST}"] = ""
 
 	// Get Dosen name and Fakultas from dosen data
 	namaDosen := ""
@@ -424,6 +422,19 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 		}
 	}
 	replaceMap["{NAMA_DOSEN}"] = namaDosen
+	replaceMap["{DOSEN}"] = namaDosen // Alias untuk template
+
+	// Mata Kuliah Prasyarat - ambil dari data course jika ada
+	mkPrasyarat := ""
+	if rps.Course.Prerequisites != "" {
+		mkPrasyarat = rps.Course.Prerequisites
+	} else {
+		mkPrasyarat = "Tidak ada"
+	}
+	replaceMap["{MK_PRASYARAT}"] = mkPrasyarat
+
+	// Referensi
+	replaceMap["{REFERENSI_LIST}"] = ""
 
 	// Get Prodi info - fallback to Program.Prodi if dosen doesn't have fakultas
 	if rps.Course.Program != nil {
@@ -686,7 +697,7 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 				// Backward compatibility - format lama
 				replaceMap[fmt.Sprintf("{TUGAS_%d_NAMA_MK}", i+1)] = rps.Course.Title
 				replaceMap[fmt.Sprintf("{TUGAS_%d_KODE_MK}", i+1)] = rps.Course.Code
-				replaceMap[fmt.Sprintf("{TUGAS_%d_SEMESTER}", i+1)] = ""
+				replaceMap[fmt.Sprintf("{TUGAS_%d_SEMESTER}", i+1)] = fmt.Sprintf("%d", rps.Course.Semester)
 				replaceMap[fmt.Sprintf("{TUGAS_%d_SKS}", i+1)] = fmt.Sprintf("%d", rps.Course.Credits)
 				replaceMap[fmt.Sprintf("{TUGAS_%d_SUB_CPMK}", i+1)] = getString(tugas, "sub_cpmk")
 				replaceMap[fmt.Sprintf("{TUGAS_%d_INDIKATOR}", i+1)] = getString(tugas, "indikator")
@@ -697,6 +708,10 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 				replaceMap[fmt.Sprintf("{TUGAS_%d_KRITERIA}", i+1)] = getString(tugas, "kriteria")
 				replaceMap[fmt.Sprintf("{TUGAS_%d_TEKNIK}", i+1)] = getString(tugas, "teknik_penilaian")
 				replaceMap[fmt.Sprintf("{TUGAS_%d_BOBOT}", i+1)] = fmt.Sprintf("%v", tugas["bobot"])
+
+				// Tambahan untuk template baru
+				replaceMap[fmt.Sprintf("{TUGAS_%d_DOSEN}", i+1)] = namaDosen
+				replaceMap[fmt.Sprintf("{TUGAS_%d_MK_PRASYARAT}", i+1)] = mkPrasyarat
 
 				// Daftar Rujukan - Format yang lebih baik
 				rujukanText := ""
