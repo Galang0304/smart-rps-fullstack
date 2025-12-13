@@ -47,7 +47,7 @@ func (gc *GeneratedRPSController) ExportDynamic(c *gin.Context) {
 
 	// Parse RPS data
 	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(rps.RPSData), &result); err != nil {
+	if err := json.Unmarshal([]byte(rps.Result), &result); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse RPS data"})
 		return
 	}
@@ -159,8 +159,8 @@ func addCPMKSection(doc *document.Document, cpmkData []interface{}) {
 	for _, item := range cpmkData {
 		if cpmk, ok := item.(map[string]interface{}); ok {
 			row := table.AddRow()
-			addCellNormal(row.AddCell(), getString(cpmk, "code"))
-			addCellNormal(row.AddCell(), getString(cpmk, "description"))
+			addCellNormal(row.AddCell(), getStringValue(cpmk, "code"))
+			addCellNormal(row.AddCell(), getStringValue(cpmk, "description"))
 		}
 	}
 }
@@ -181,9 +181,9 @@ func addSubCPMKSection(doc *document.Document, subCpmkData []interface{}) {
 	for _, item := range subCpmkData {
 		if subCpmk, ok := item.(map[string]interface{}); ok {
 			row := table.AddRow()
-			addCellNormal(row.AddCell(), getString(subCpmk, "code"))
-			addCellNormal(row.AddCell(), getString(subCpmk, "description"))
-			addCellNormal(row.AddCell(), getString(subCpmk, "cpmk_id"))
+			addCellNormal(row.AddCell(), getStringValue(subCpmk, "code"))
+			addCellNormal(row.AddCell(), getStringValue(subCpmk, "description"))
+			addCellNormal(row.AddCell(), getStringValue(subCpmk, "cpmk_id"))
 		}
 	}
 }
@@ -212,9 +212,9 @@ func addRencanaPembelajaranTable(doc *document.Document, topikData []interface{}
 		if topik, ok := item.(map[string]interface{}); ok {
 			row := table.AddRow()
 			addCellNormal(row.AddCell(), fmt.Sprintf("%v", topik["week"]))
-			addCellNormal(row.AddCell(), getString(topik, "topic"))
-			addCellNormal(row.AddCell(), getString(topik, "description"))
-			addCellNormal(row.AddCell(), getString(topik, "topic"))
+			addCellNormal(row.AddCell(), getStringValue(topik, "topic"))
+			addCellNormal(row.AddCell(), getStringValue(topik, "description"))
+			addCellNormal(row.AddCell(), getStringValue(topik, "topic"))
 			addCellNormal(row.AddCell(), "Ceramah, Diskusi")
 			addCellNormal(row.AddCell(), "150")
 			addCellNormal(row.AddCell(), "Kehadiran, Partisipasi")
@@ -224,11 +224,6 @@ func addRencanaPembelajaranTable(doc *document.Document, topikData []interface{}
 }
 
 func addDynamicTugasTables(doc *document.Document, tugasData []interface{}, rps *models.GeneratedRPS, dosens []models.Dosen) {
-	namaDosen := ""
-	if len(dosens) > 0 {
-		namaDosen = dosens[0].NamaLengkap
-	}
-
 	// Add page break before tugas section
 	doc.AddParagraph()
 
@@ -274,20 +269,20 @@ func addDynamicTugasTables(doc *document.Document, tugasData []interface{}, rps 
 
 			// Sub-CPMK & Indikator section
 			addTugasHeaderRow(table, "Sub-CPMK & Indikator")
-			addTugasDataRow(table, "Sub-CPMK", getString(tugas, "sub_cpmk"))
-			addTugasDataRow(table, "Indikator", getString(tugas, "indikator"))
+			addTugasDataRow(table, "Sub-CPMK", getStringValue(tugas, "sub_cpmk"))
+			addTugasDataRow(table, "Indikator", getStringValue(tugas, "indikator"))
 
 			// Rencana Tugas section
 			addTugasHeaderRow(table, "Rencana Tugas")
-			addTugasDataRow(table, "Judul Tugas", getString(tugas, "judul_tugas"))
-			addTugasDataRow(table, "Batas Waktu", getString(tugas, "batas_waktu"))
-			addTugasDataRow(table, "Petunjuk Pengerjaan Tugas", getString(tugas, "petunjuk_pengerjaan"))
-			addTugasDataRow(table, "Luaran Tugas", getString(tugas, "luaran_tugas"))
+			addTugasDataRow(table, "Judul Tugas", getStringValue(tugas, "judul_tugas"))
+			addTugasDataRow(table, "Batas Waktu", getStringValue(tugas, "batas_waktu"))
+			addTugasDataRow(table, "Petunjuk Pengerjaan Tugas", getStringValue(tugas, "petunjuk_pengerjaan"))
+			addTugasDataRow(table, "Luaran Tugas", getStringValue(tugas, "luaran_tugas"))
 
 			// Penilaian section
 			addTugasHeaderRow(table, "Penilaian")
-			addTugasDataRow(table, "Kriteria", getString(tugas, "kriteria"))
-			addTugasDataRow(table, "Teknik Penilaian", getString(tugas, "teknik_penilaian"))
+			addTugasDataRow(table, "Kriteria", getStringValue(tugas, "kriteria"))
+			addTugasDataRow(table, "Teknik Penilaian", getStringValue(tugas, "teknik_penilaian"))
 			addTugasDataRow(table, "Bobot (%)", fmt.Sprintf("%v", tugas["bobot"]))
 
 			// Daftar Rujukan section
@@ -351,7 +346,7 @@ func addCellNormal(cell document.Cell, text string) {
 	para.AddRun().AddText(text)
 }
 
-func getString(m map[string]interface{}, key string) string {
+func getStringValue(m map[string]interface{}, key string) string {
 	if val, ok := m[key]; ok {
 		if str, ok := val.(string); ok {
 			return str
