@@ -52,7 +52,7 @@ func (gc *GeneratedRPSController) ExportWithTableDuplication(c *gin.Context) {
 	}
 
 	// Get template path
-	templatePath := filepath.Join("templates", "template_rps.xml")
+	templatePath := filepath.Join("templates", "template_rps.docx")
 	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Template not found"})
 		return
