@@ -2,150 +2,117 @@ import { Link } from 'react-router-dom';
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-blue-50">
-      {/* Navigation */}
-      <header className="fixed inset-x-0 top-0 z-40 backdrop-blur-md bg-white/70 border-b border-blue-100">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-blue-600 shadow-sm shadow-blue-300" />
-            <span className="text-xl font-semibold text-blue-900">SMART RPS</span>
-          </div>
-          <nav className="hidden md:flex items-center gap-6">
-            <a href="#features" className="text-blue-900/80 hover:text-blue-900 transition">Fitur</a>
-            <a href="#how" className="text-blue-900/80 hover:text-blue-900 transition">Cara Kerja</a>
-            <a href="#contact" className="text-blue-900/80 hover:text-blue-900 transition">Kontak</a>
-          </nav>
-          <div className="flex items-center gap-3">
-            <Link to="/login" className="px-4 py-2 rounded-lg text-blue-900 hover:bg-blue-100 transition">Masuk</Link>
-            <Link to="/login" className="px-4 py-2 rounded-lg bg-blue-600 text-white shadow-md shadow-blue-300 hover:bg-blue-700 transition">Mulai</Link>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-white">
+      {/* Header */}
+      <div className="text-center py-12 bg-white border-b border-blue-100">
+        <h1 className="text-4xl font-bold text-blue-900 mb-2">SMART RPS</h1>
+        <div className="w-20 h-1 bg-blue-600 mx-auto mb-4"></div>
+        <p className="text-lg font-medium text-blue-800">SISTEM MANAJEMEN RPS</p>
+        <p className="text-blue-700 mt-1">UNIVERSITAS MUHAMMADIYAH MAKASSAR</p>
+      </div>
 
-      {/* Hero */}
-      <section className="pt-28 pb-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-2 gap-10 items-center">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 border border-blue-100 px-3 py-1 mb-4">
-                <span className="h-2 w-2 rounded-full bg-blue-600" />
-                <span className="text-xs font-medium text-blue-800">Sederhana, cepat, dan rapi</span>
-              </div>
-              <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-blue-900">
-                Susun RPS Modern untuk Perkuliahan Anda
-              </h1>
-              <p className="mt-4 text-blue-900/80 leading-relaxed">
-                Buat, kelola, dan ekspor RPS dengan mudah. Warna biru-putih yang bersih, antarmuka minimalis, dan pengalaman yang profesional.
-              </p>
-              <div className="mt-8 flex gap-4">
-                <Link to="/login" className="px-5 py-3 rounded-xl bg-blue-600 text-white font-medium shadow-lg shadow-blue-300 hover:bg-blue-700 transition">
-                  Buat RPS Sekarang
-                </Link>
-                <a href="#features" className="px-5 py-3 rounded-xl bg-white text-blue-900 font-medium border border-blue-200 hover:bg-blue-50 transition">
-                  Lihat Fitur
-                </a>
-              </div>
-
-              {/* Trust badges */}
-              <div className="mt-10 flex items-center gap-6 text-blue-900/60">
-                <div className="flex items-center gap-2">
-                  <div className="h-6 w-6 rounded-md bg-blue-100" />
-                  <span>Terintegrasi</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="h-6 w-6 rounded-md bg-blue-100" />
-                  <span>Efisien</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="h-6 w-6 rounded-md bg-blue-100" />
-                  <span>Terstruktur</span>
-                </div>
-              </div>
+      {/* Main Content */}
+      <div className="max-w-6xl mx-auto px-4 py-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+          
+          {/* Admin Card */}
+          <div className="bg-gradient-to-b from-blue-500 to-blue-600 rounded-lg p-6 text-white text-center shadow-lg">
+            <div className="w-24 h-24 bg-blue-400 rounded-full mx-auto mb-4 flex items-center justify-center">
+              <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 0010 16a5.986 5.986 0 004.546-2.084A5 5 0 0010 11z" clipRule="evenodd" />
+              </svg>
             </div>
-
-            {/* Visual card */}
-            <div className="relative">
-              <div className="rounded-2xl border border-blue-100 bg-white shadow-xl shadow-blue-100/60 overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-600 to-blue-500 h-24" />
-                <div className="p-6">
-                  <div className="grid grid-cols-3 gap-4">
-                    {[...Array(6)].map((_, i) => (
-                      <div key={i} className="h-24 rounded-xl border border-blue-100 bg-blue-50" />
-                    ))}
-                  </div>
-                  <div className="mt-6 h-12 rounded-xl bg-blue-600/10 border border-blue-200" />
-                </div>
-              </div>
-              <div className="absolute -bottom-6 -left-6 h-24 w-24 rounded-2xl bg-blue-50 border border-blue-100" />
-              <div className="absolute -top-6 -right-6 h-20 w-20 rounded-full bg-white border border-blue-100" />
-            </div>
+            <h3 className="text-lg font-bold mb-2">ADMIN</h3>
+            <p className="text-sm font-medium bg-white text-blue-600 px-3 py-1 rounded mb-3">Kelola Sistem</p>
+            <Link to="/login" className="inline-block bg-white text-blue-600 px-4 py-2 rounded font-medium hover:bg-blue-50 transition">
+              Masuk
+            </Link>
           </div>
-        </div>
-      </section>
 
-      {/* Features */}
-      <section id="features" className="py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-3 gap-6">
-            {[
-              {
-                title: 'Penyusunan Cepat',
-                desc: 'Antarmuka sederhana memudahkan Anda menyusun RPS hanya dalam beberapa langkah.',
-              },
-              {
-                title: 'Ekspor Dokumen',
-                desc: 'Ekspor ke Word dengan template biru-putih profesional yang bersih.',
-              },
-              {
-                title: 'Manajemen Terpusat',
-                desc: 'Kelola mata kuliah, dosen, dan RPS dalam satu tempat yang rapi.',
-              },
-            ].map((f, i) => (
-              <div key={i} className="rounded-2xl border border-blue-100 bg-white p-6 shadow-sm hover:shadow-md transition">
-                <div className="h-10 w-10 rounded-lg bg-blue-600 mb-4 shadow-sm shadow-blue-300" />
-                <h3 className="text-lg font-semibold text-blue-900">{f.title}</h3>
-                <p className="mt-2 text-sm text-blue-900/80">{f.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section id="how" className="py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="rounded-2xl border border-blue-100 bg-white p-8">
-            <h2 className="text-2xl font-bold text-blue-900">Cara Kerja</h2>
-            <div className="mt-6 grid md:grid-cols-3 gap-6">
-              {[
-                'Masuk dan pilih mata kuliah',
-                'Susun CPMK, Sub-CPMK, dan RPS',
-                'Ekspor dokumen RPS yang rapi',
-              ].map((step, i) => (
-                <div key={i} className="p-6 rounded-xl bg-blue-50 border border-blue-100">
-                  <div className="text-sm font-medium text-blue-900">Langkah {i + 1}</div>
-                  <div className="mt-2 text-blue-900/80">{step}</div>
-                </div>
-              ))}
+          {/* Kaprodi Card */}
+          <div className="bg-gradient-to-b from-blue-500 to-blue-600 rounded-lg p-6 text-white text-center shadow-lg">
+            <div className="w-24 h-24 bg-blue-400 rounded-full mx-auto mb-4 flex items-center justify-center">
+              <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+              </svg>
             </div>
-            <div className="mt-8">
-              <Link to="/login" className="px-5 py-3 rounded-xl bg-blue-600 text-white font-medium shadow-lg shadow-blue-300 hover:bg-blue-700 transition">
-                Coba Sekarang
-              </Link>
+            <h3 className="text-lg font-bold mb-2">KAPRODI</h3>
+            <p className="text-sm font-medium bg-white text-blue-600 px-3 py-1 rounded mb-3">Kepala Program Studi</p>
+            <Link to="/login" className="inline-block bg-white text-blue-600 px-4 py-2 rounded font-medium hover:bg-blue-50 transition">
+              Masuk
+            </Link>
+          </div>
+
+          {/* Prodi Card */}
+          <div className="bg-gradient-to-b from-blue-500 to-blue-600 rounded-lg p-6 text-white text-center shadow-lg">
+            <div className="w-24 h-24 bg-blue-400 rounded-full mx-auto mb-4 flex items-center justify-center">
+              <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold mb-2">PRODI</h3>
+            <p className="text-sm font-medium bg-white text-blue-600 px-3 py-1 rounded mb-3">Program Studi</p>
+            <Link to="/login" className="inline-block bg-white text-blue-600 px-4 py-2 rounded font-medium hover:bg-blue-50 transition">
+              Masuk
+            </Link>
+          </div>
+
+          {/* Dosen Card */}
+          <div className="bg-gradient-to-b from-blue-500 to-blue-600 rounded-lg p-6 text-white text-center shadow-lg">
+            <div className="w-24 h-24 bg-blue-400 rounded-full mx-auto mb-4 flex items-center justify-center">
+              <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M6 6V5a3 3 0 013-3h2a3 3 0 013 3v1h2a2 2 0 012 2v3.57A22.952 22.952 0 0110 13a22.95 22.95 0 01-8-1.43V8a2 2 0 012-2h2zm2-1a1 1 0 011-1h2a1 1 0 011 1v1H8V5zm1 5a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z" clipRule="evenodd" />
+                <path d="M2 13.692V16a2 2 0 002 2h12a2 2 0 002-2v-2.308A24.974 24.974 0 0110 15c-2.796 0-5.487-.46-8-1.308z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold mb-2">DOSEN</h3>
+            <p className="text-sm font-medium bg-white text-blue-600 px-3 py-1 rounded mb-3">Pengajar</p>
+            <Link to="/login" className="inline-block bg-white text-blue-600 px-4 py-2 rounded font-medium hover:bg-blue-50 transition">
+              Masuk
+            </Link>
+          </div>
+
+          {/* Guest Card */}
+          <div className="bg-gradient-to-b from-gray-400 to-gray-500 rounded-lg p-6 text-white text-center shadow-lg">
+            <div className="w-24 h-24 bg-gray-300 rounded-full mx-auto mb-4 flex items-center justify-center">
+              <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 8a6 6 0 01-7.743 5.743L10 14l-2-2H4a2 2 0 01-2-2V6a2 2 0 012-2h12a2 2 0 012 2v2zm-5-4a2 2 0 100 4 2 2 0 000-4zM8.5 8c0-.28.22-.5.5-.5s.5.22.5.5-.22.5-.5.5-.5-.22-.5-.5z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold mb-2">GUEST</h3>
+            <p className="text-sm font-medium bg-white text-gray-600 px-3 py-1 rounded mb-3">Pengunjung</p>
+            <a href="#info" className="inline-block bg-white text-gray-600 px-4 py-2 rounded font-medium hover:bg-gray-50 transition">
+              Info
+            </a>
+          </div>
+
+        </div>
+
+        {/* Info Section */}
+        <div id="info" className="mt-16 text-center">
+          <h2 className="text-2xl font-bold text-blue-900 mb-6">Tentang SMART RPS</h2>
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="p-6 bg-blue-50 rounded-lg border border-blue-100">
+              <h3 className="text-lg font-semibold text-blue-900 mb-3">Manajemen RPS</h3>
+              <p className="text-blue-800">Kelola Rencana Pembelajaran Semester dengan mudah dan terstruktur</p>
+            </div>
+            <div className="p-6 bg-blue-50 rounded-lg border border-blue-100">
+              <h3 className="text-lg font-semibold text-blue-900 mb-3">Multi-Role Access</h3>
+              <p className="text-blue-800">Akses sesuai peran: Admin, Kaprodi, Prodi, dan Dosen</p>
+            </div>
+            <div className="p-6 bg-blue-50 rounded-lg border border-blue-100">
+              <h3 className="text-lg font-semibold text-blue-900 mb-3">Export Dokumen</h3>
+              <p className="text-blue-800">Ekspor RPS ke format Word yang rapi dan profesional</p>
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
       {/* Footer */}
-      <footer id="contact" className="py-12 border-t border-blue-100">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="text-blue-900/70">© {new Date().getFullYear()} SMART RPS</div>
-          <div className="flex items-center gap-4">
-            <a href="#" className="text-blue-900/70 hover:text-blue-900">Privacy</a>
-            <a href="#" className="text-blue-900/70 hover:text-blue-900">Terms</a>
-            <a href="#" className="text-blue-900/70 hover:text-blue-900">Support</a>
-          </div>
+      <footer className="bg-blue-900 text-white py-8 mt-16">
+        <div className="max-w-6xl mx-auto px-4 text-center">
+          <p className="text-blue-200">© {new Date().getFullYear()} Universitas Muhammadiyah Makassar</p>
+          <p className="text-blue-300 text-sm mt-2">Sistem Manajemen Rencana Pembelajaran Semester</p>
         </div>
       </footer>
     </div>
