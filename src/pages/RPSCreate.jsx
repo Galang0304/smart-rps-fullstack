@@ -995,18 +995,19 @@ function SubCPMKStep({ course, formData, setFormData }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">Sub-CPMK</h2>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-semibold text-gray-900">Sub-CPMK</h2>
           <select
             value={selectedCPMK}
             onChange={(e) => setSelectedCPMK(Number(e.target.value))}
-            className="px-3 py-2 border border-gray-300 rounded-lg"
-            disabled={formData.cpmk.length === 0}
+            className="px-3 py-2 border border-gray-300 rounded-lg bg-white"
           >
             {formData.cpmk.map((cpmk, index) => (
               <option key={index} value={index}>{cpmk.code}</option>
             ))}
           </select>
+        </div>
+        <div className="flex gap-2">
           {userRole !== 'dosen' && (
             <>
               <button
