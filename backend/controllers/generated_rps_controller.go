@@ -284,9 +284,9 @@ func getString(data map[string]interface{}, key string) string {
 // Create - Create new RPS
 func (gc *GeneratedRPSController) Create(c *gin.Context) {
 	var input struct {
-		CourseID *uuid.UUID `json:"course_id"`
-		Result   []byte     `json:"result" binding:"required"`
-		Status   string     `json:"status"`
+		CourseID *uuid.UUID      `json:"course_id"`
+		Result   json.RawMessage `json:"result" binding:"required"`
+		Status   string          `json:"status"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -296,7 +296,7 @@ func (gc *GeneratedRPSController) Create(c *gin.Context) {
 
 	rps := models.GeneratedRPS{
 		CourseID: input.CourseID,
-		Result:   input.Result,
+		Result:   []byte(input.Result),
 		Status:   input.Status,
 	}
 
@@ -374,8 +374,8 @@ func (gc *GeneratedRPSController) Update(c *gin.Context) {
 	}
 
 	var input struct {
-		Result []byte `json:"result"`
-		Status string `json:"status"`
+		Result json.RawMessage `json:"result"`
+		Status string          `json:"status"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -384,7 +384,7 @@ func (gc *GeneratedRPSController) Update(c *gin.Context) {
 	}
 
 	if input.Result != nil {
-		rps.Result = input.Result
+		rps.Result = []byte(input.Result)
 	}
 	if input.Status != "" {
 		rps.Status = input.Status
