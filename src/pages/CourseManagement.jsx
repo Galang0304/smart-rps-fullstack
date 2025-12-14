@@ -926,9 +926,6 @@ export default function CourseManagement() {
                               <span>Buat RPS</span>
                             </Link>
                           )
-                              Buat RPS
-                            </Link>
-                          )}
                         )}
                         {!isAdminRoute && (
                           <>
