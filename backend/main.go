@@ -23,7 +23,7 @@ func main() {
 
 	// Auto migrate all models
 	err = db.AutoMigrate(
-		&models.User{},
+		// &models.User{}, // Skip - table already exists with correct structure
 		&models.Prodi{},
 		&models.Program{},
 		&models.Dosen{},
