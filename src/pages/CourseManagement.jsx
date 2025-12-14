@@ -916,13 +916,16 @@ export default function CourseManagement() {
                             )}
                           </>
                         ) : (
-                          {!isAdminRoute && (
+                          !isAdminRoute && (
                             <Link
                               to={(userRole === 'prodi' || userRole === 'kaprodi') ? `/prodi/rps/create?courseId=${course.id}` : `/rps/create/${course.id}`}
                               className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors whitespace-nowrap"
                               title="Buat RPS"
                             >
                               <FileText className="w-3.5 h-3.5" />
+                              <span>Buat RPS</span>
+                            </Link>
+                          )
                               Buat RPS
                             </Link>
                           )}
