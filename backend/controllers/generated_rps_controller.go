@@ -770,14 +770,6 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buf.Bytes())
 }
-	}).Preload("Course.Program.Prodi", func(db *gorm.DB) *gorm.DB {
-		return db.Unscoped()
-	}).First(&rps, "id = ?", rpsUUID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "RPS not found"})
-		return
-	}
-
-	// Safety check: ensure Course is loaded
 	if rps.Course == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Course not found for this RPS"})
 		return
