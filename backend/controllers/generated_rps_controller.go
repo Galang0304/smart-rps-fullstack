@@ -192,6 +192,53 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 		}
 	}
 
+	// Rencana Pembelajaran - DINAMIS: Hanya sebanyak jumlah minggu yang ada
+	if pembelajaranData, ok := result["rencana_pembelajaran"].([]interface{}); ok {
+		numMinggu := len(pembelajaranData)
+		fmt.Printf("Jumlah minggu pembelajaran yang akan di-export: %d\n", numMinggu)
+
+		// Iterasi hanya sebanyak jumlah minggu yang ada
+		for i := 0; i < numMinggu; i++ {
+			if minggu, ok := pembelajaranData[i].(map[string]interface{}); ok {
+				replaceMap[fmt.Sprintf("{MINGGU_%d}", i+1)] = fmt.Sprintf("%d", i+1)
+				replaceMap[fmt.Sprintf("{SUB_CPMK_%d}", i+1)] = getString(minggu, "sub_cpmk")
+				replaceMap[fmt.Sprintf("{INDIKATOR_%d}", i+1)] = getString(minggu, "indikator")
+				replaceMap[fmt.Sprintf("{TOPIK_%d}", i+1)] = getString(minggu, "topik_materi")
+				replaceMap[fmt.Sprintf("{METODE_%d}", i+1)] = getString(minggu, "metode")
+				replaceMap[fmt.Sprintf("{WAKTU_%d}", i+1)] = getString(minggu, "waktu")
+				replaceMap[fmt.Sprintf("{PENGALAMAN_%d}", i+1)] = getString(minggu, "pengalaman_belajar")
+				replaceMap[fmt.Sprintf("{KRITERIA_%d}", i+1)] = getString(minggu, "kriteria_penilaian")
+				replaceMap[fmt.Sprintf("{BOBOT_%d}", i+1)] = getString(minggu, "bobot")
+			}
+		}
+
+		// Clear semua placeholder untuk minggu yang tidak ada (dari N+1 sampai 20)
+		for i := numMinggu + 1; i <= 20; i++ {
+			replaceMap[fmt.Sprintf("{MINGGU_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{SUB_CPMK_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{INDIKATOR_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{TOPIK_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{METODE_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{WAKTU_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{PENGALAMAN_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{KRITERIA_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{BOBOT_%d}", i)] = ""
+		}
+	} else {
+		// Tidak ada rencana pembelajaran sama sekali, clear semua placeholder
+		for i := 1; i <= 20; i++ {
+			replaceMap[fmt.Sprintf("{MINGGU_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{SUB_CPMK_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{INDIKATOR_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{TOPIK_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{METODE_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{WAKTU_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{PENGALAMAN_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{KRITERIA_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{BOBOT_%d}", i)] = ""
+		}
+	}
+
 	// Replace placeholders di template
 	doc, err := docx.Open(templatePath)
 	if err != nil {
