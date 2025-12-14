@@ -357,7 +357,6 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 					subCpmkText = "Mengacu pada Sub-CPMK mata kuliah"
 				}
 				replaceMap[fmt.Sprintf("{SUB_CPMK_%d}", weekNum)] = subCpmkText
-				log.Printf("Week %d: SUB_CPMK = '%s'", weekNum, subCpmkText)
 
 				// Indikator - buat berdasarkan topik
 				indikator := getString(minggu, "indikator")
@@ -370,7 +369,6 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 					}
 				}
 				replaceMap[fmt.Sprintf("{INDIKATOR_%d}", weekNum)] = indikator
-				log.Printf("Week %d: INDIKATOR = '%s'", weekNum, indikator)
 
 				// Topik dan Subtopik
 				topik := getString(minggu, "topic")
@@ -428,7 +426,6 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 				}
 				replaceMap[fmt.Sprintf("{PENILAIAN_%d}", weekNum)] = penilaian
 				replaceMap[fmt.Sprintf("{KRITERIA_%d}", weekNum)] = penilaian
-				log.Printf("Week %d: KRITERIA = '%s'", weekNum, penilaian)
 
 				// Pengalaman belajar
 				pengalamanBelajar := ""
@@ -468,7 +465,6 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 					bobot = "0"
 				}
 				replaceMap[fmt.Sprintf("{BOBOT_%d}", weekNum)] = bobot
-				log.Printf("Week %d: BOBOT = '%s'", weekNum, bobot)
 			}
 		}
 
