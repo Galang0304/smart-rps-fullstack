@@ -27,6 +27,15 @@ func NewGeneratedRPSController(db *gorm.DB) *GeneratedRPSController {
 	return &GeneratedRPSController{db: db}
 }
 
+// Helper to get keys from map
+func getKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 // Export - Export RPS to Word document using template
 func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	id := c.Param("id")
@@ -66,8 +75,25 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	// Parse result JSON
 	var result map[string]interface{}
 	if err := json.Unmarshal(rps.Result, &result); err != nil {
+		log.Printf("ERROR Export - Failed to parse RPS data: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse RPS data"})
 		return
+	}
+
+	// Log untuk debugging
+	log.Printf("Export RPS ID: %s, CourseID: %s", rpsUUID, rps.CourseID)
+	log.Printf("Data keys in result: %v", getKeys(result))
+
+	// Check if topik and tugas exist
+	if topik, ok := result["topik"].([]interface{}); ok {
+		log.Printf("Found %d topik items", len(topik))
+	} else {
+		log.Printf("WARNING: No topik found in result data")
+	}
+	if tugas, ok := result["tugas"].([]interface{}); ok {
+		log.Printf("Found %d tugas items", len(tugas))
+	} else {
+		log.Printf("WARNING: No tugas found in result data")
 	}
 
 	// Load template
@@ -215,7 +241,7 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	if tugasData, ok := result["tugas"].([]interface{}); ok {
 		// Hitung jumlah tugas aktual
 		numTugas := len(tugasData)
-		fmt.Printf("Jumlah tugas yang akan di-export: %d\n", numTugas)
+		log.Printf("Jumlah tugas yang akan di-export: %d", numTugas)
 
 		// Iterasi hanya sebanyak jumlah tugas yang ada
 		for i := 0; i < numTugas; i++ {
@@ -278,7 +304,7 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	// Rencana Pembelajaran - menggunakan data topik
 	if topikData, ok := result["topik"].([]interface{}); ok {
 		numMinggu := len(topikData)
-		fmt.Printf("Jumlah minggu pembelajaran yang akan di-export: %d\n", numMinggu)
+		log.Printf("Jumlah minggu pembelajaran yang akan di-export: %d", numMinggu)
 
 		// Iterasi hanya sebanyak jumlah minggu yang ada
 		for i := 0; i < numMinggu; i++ {
