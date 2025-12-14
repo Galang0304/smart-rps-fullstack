@@ -534,18 +534,20 @@ export default function CourseManagement() {
           <p className="text-sm md:text-base text-gray-600 mt-1">Kelola data mata kuliah program studi</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={() => {
-              setEditMode(false);
-              setEditingCourse(null);
-              setFormData({ code: '', title: '', credits: '', semester: '', category: '', tahun: new Date().getFullYear().toString() });
-              setShowAddModal(true);
-            }}
-            className="flex items-center gap-2 px-3 md:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm md:text-base"
-          >
-            <Plus className="w-4 h-4 md:w-5 md:h-5" />
-            <span className="hidden sm:inline">Tambah</span>
-          </button>
+          {!isAdminRoute && (
+            <button
+              onClick={() => {
+                setEditMode(false);
+                setEditingCourse(null);
+                setFormData({ code: '', title: '', credits: '', semester: '', category: '', tahun: new Date().getFullYear().toString() });
+                setShowAddModal(true);
+              }}
+              className="flex items-center gap-2 px-3 md:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm md:text-base"
+            >
+              <Plus className="w-4 h-4 md:w-5 md:h-5" />
+              <span className="hidden sm:inline">Tambah</span>
+            </button>
+          )}
           <button
             onClick={handleDownloadTemplate}
             className="flex items-center gap-2 px-3 md:px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm md:text-base"
@@ -554,13 +556,15 @@ export default function CourseManagement() {
             <FileText className="w-4 h-4 md:w-5 md:h-5" />
             <span className="hidden sm:inline">Template</span>
           </button>
-          <button
-            onClick={() => setShowExcelUpload(!showExcelUpload)}
-            className="flex items-center gap-2 px-3 md:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm md:text-base"
-          >
-            <Upload className="w-4 h-4 md:w-5 md:h-5" />
-            <span className="hidden sm:inline">Import Excel</span>
-          </button>
+          {!isAdminRoute && (
+            <button
+              onClick={() => setShowExcelUpload(!showExcelUpload)}
+              className="flex items-center gap-2 px-3 md:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm md:text-base"
+            >
+              <Upload className="w-4 h-4 md:w-5 md:h-5" />
+              <span className="hidden sm:inline">Import Excel</span>
+            </button>
+          )}
           <button
             onClick={handleExportExcel}
             className="flex items-center gap-2 px-3 md:px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm md:text-base"
@@ -897,44 +901,52 @@ export default function CourseManagement() {
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               RPS Tersedia
                             </span>
-                            <Link
-                              to={(userRole === 'prodi' || userRole === 'kaprodi') 
-                                ? `/prodi/rps/create/${course.id}?edit=${rpsId}`
-                                : `/rps/create/${course.id}?edit=${rpsId}`
-                              }
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors whitespace-nowrap"
-                              title="Lihat/Edit RPS"
-                            >
-                              <BookOpen className="w-3.5 h-3.5" />
-                              Lihat
-                            </Link>
+                            {!isAdminRoute && (
+                              <Link
+                                to={(userRole === 'prodi' || userRole === 'kaprodi') 
+                                  ? `/prodi/rps/create/${course.id}?edit=${rpsId}`
+                                  : `/rps/create/${course.id}?edit=${rpsId}`
+                                }
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors whitespace-nowrap"
+                                title="Lihat/Edit RPS"
+                              >
+                                <BookOpen className="w-3.5 h-3.5" />
+                                Lihat
+                              </Link>
+                            )}
                           </>
                         ) : (
-                          <Link
-                            to={(userRole === 'prodi' || userRole === 'kaprodi') ? `/prodi/rps/create?courseId=${course.id}` : `/rps/create/${course.id}`}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors whitespace-nowrap"
-                            title="Buat RPS"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            Buat RPS
-                          </Link>
+                          {!isAdminRoute && (
+                            <Link
+                              to={(userRole === 'prodi' || userRole === 'kaprodi') ? `/prodi/rps/create?courseId=${course.id}` : `/rps/create/${course.id}`}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors whitespace-nowrap"
+                              title="Buat RPS"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              Buat RPS
+                            </Link>
+                          )}
                         )}
-                        <button
-                          onClick={() => handleEditCourse(course)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-orange-600 bg-orange-50 hover:bg-orange-100 rounded transition-colors whitespace-nowrap"
-                          title="Edit mata kuliah"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCourse(course.id, course.title)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-red-600 bg-red-50 hover:bg-red-100 rounded transition-colors whitespace-nowrap"
-                          title="Hapus mata kuliah"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Hapus
-                        </button>
+                        {!isAdminRoute && (
+                          <>
+                            <button
+                              onClick={() => handleEditCourse(course)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-orange-600 bg-orange-50 hover:bg-orange-100 rounded transition-colors whitespace-nowrap"
+                              title="Edit mata kuliah"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCourse(course.id, course.title)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-red-600 bg-red-50 hover:bg-red-100 rounded transition-colors whitespace-nowrap"
+                              title="Hapus mata kuliah"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Hapus
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

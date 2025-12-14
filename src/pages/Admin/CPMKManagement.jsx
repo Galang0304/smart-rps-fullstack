@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Upload, Download, FileText, Plus, Trash2, Edit, Loader2, AlertCircle, CheckCircle, BookOpen, Search, Filter, X } from 'lucide-react';
 import { courseAPI } from '../../services/api';
 
 export default function CPMKManagement() {
+  const location = useLocation();
+  const isAdminRoute = location.pathname.startsWith('/admin/');
+  
   const [courses, setCourses] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [cpmkData, setCpmkData] = useState([]);
@@ -560,21 +564,25 @@ export default function CPMKManagement() {
           <p className="text-gray-600 mt-1">Kelola Capaian Pembelajaran Mata Kuliah</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={handleDownloadTemplate}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            title="Download Template Excel"
-          >
-            <Download className="w-5 h-5" />
-            <span className="hidden sm:inline">Template</span>
-          </button>
-          <button
-            onClick={() => setShowImportModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Upload className="w-5 h-5" />
-            <span className="hidden sm:inline">Import</span>
-          </button>
+          {!isAdminRoute && (
+            <>
+              <button
+                onClick={handleDownloadTemplate}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                title="Download Template Excel"
+              >
+                <Download className="w-5 h-5" />
+                <span className="hidden sm:inline">Template</span>
+              </button>
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Upload className="w-5 h-5" />
+                <span className="hidden sm:inline">Import</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -782,12 +790,12 @@ export default function CPMKManagement() {
                         <button
                           onClick={() => handleViewCPMK(course)}
                           className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs"
-                          title="Lihat & Edit CPMK"
+                          title={isAdminRoute ? "Lihat CPMK" : "Lihat & Edit CPMK"}
                         >
                           <BookOpen className="w-3.5 h-3.5" />
                           <span>Lihat</span>
                         </button>
-                        {course.cpmkCount > 0 && (
+                        {!isAdminRoute && course.cpmkCount > 0 && (
                           <button
                             onClick={() => handleDeleteAllCPMK(course)}
                             className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-xs"
@@ -979,20 +987,22 @@ export default function CPMKManagement() {
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">
-                  CPMK & Sub-CPMK: {selectedCourse.title}
+                  {isAdminRoute ? "Lihat CPMK & Sub-CPMK" : "CPMK & Sub-CPMK"}: {selectedCourse.title}
                 </h2>
                 <p className="text-sm text-gray-600 mt-1">
                   {selectedCourse.code} | {cpmkData.length} CPMK
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowAddCpmkModal(true)}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Tambah CPMK</span>
-                </button>
+                {!isAdminRoute && (
+                  <button
+                    onClick={() => setShowAddCpmkModal(true)}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Tambah CPMK</span>
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setShowDetailModal(false);
@@ -1029,20 +1039,24 @@ export default function CPMKManagement() {
                           <p className="text-gray-900 leading-relaxed">{cpmk.description}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleEditCPMK(cpmk)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                            title="Edit CPMK ini"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteSingleCPMK(cpmk.id, cpmk.description)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
-                            title="Hapus CPMK ini"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {!isAdminRoute && (
+                            <>
+                              <button
+                                onClick={() => handleEditCPMK(cpmk)}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                title="Edit CPMK ini"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteSingleCPMK(cpmk.id, cpmk.description)}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Hapus CPMK ini"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -1051,16 +1065,18 @@ export default function CPMKManagement() {
                         <div className="mt-4 pl-6 border-l-2 border-blue-200">
                           <div className="flex items-center justify-between mb-3">
                             <p className="text-xs font-semibold text-gray-600">Sub-CPMK:</p>
-                            <button
-                              onClick={() => {
-                                setSelectedCpmkForSub(cpmk);
-                                setShowAddSubCpmkModal(true);
-                              }}
-                              className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                            >
-                              <Plus className="w-3 h-3" />
-                              <span>Tambah Sub</span>
-                            </button>
+                            {!isAdminRoute && (
+                              <button
+                                onClick={() => {
+                                  setSelectedCpmkForSub(cpmk);
+                                  setShowAddSubCpmkModal(true);
+                                }}
+                                className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>Tambah Sub</span>
+                              </button>
+                            )}
                           </div>
                           <div className="space-y-2">
                             {cpmk.sub_cpmks.map((sub) => (
@@ -1069,13 +1085,15 @@ export default function CPMKManagement() {
                                   {sub.sub_cpmk_number}
                                 </span>
                                 <p className="text-sm text-gray-700 flex-1 leading-relaxed">{sub.description}</p>
-                                <button
-                                  onClick={() => handleDeleteSubCPMK(cpmk.id, sub.id, sub.description)}
-                                  className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors flex-shrink-0"
-                                  title="Hapus Sub-CPMK ini"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                {!isAdminRoute && (
+                                  <button
+                                    onClick={() => handleDeleteSubCPMK(cpmk.id, sub.id, sub.description)}
+                                    className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors flex-shrink-0"
+                                    title="Hapus Sub-CPMK ini"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -1084,16 +1102,18 @@ export default function CPMKManagement() {
                         <div className="mt-4 pl-6 border-l-2 border-gray-200">
                           <div className="flex items-center justify-between">
                             <p className="text-xs text-gray-500 italic">Belum ada Sub-CPMK</p>
-                            <button
-                              onClick={() => {
-                                setSelectedCpmkForSub(cpmk);
-                                setShowAddSubCpmkModal(true);
-                              }}
-                              className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                            >
-                              <Plus className="w-3 h-3" />
-                              <span>Tambah Sub</span>
-                            </button>
+                            {!isAdminRoute && (
+                              <button
+                                onClick={() => {
+                                  setSelectedCpmkForSub(cpmk);
+                                  setShowAddSubCpmkModal(true);
+                                }}
+                                className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>Tambah Sub</span>
+                              </button>
+                            )}
                           </div>
                         </div>
                       )}
