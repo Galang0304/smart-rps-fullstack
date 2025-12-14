@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Upload, Plus, Search, Loader2, CheckCircle, AlertCircle, FileText, BookOpen, CheckCircle2, Trash2, Edit, Settings, Filter, X } from 'lucide-react';
 import { courseAPI, programAPI, prodiAPI, generatedRPSAPI } from '../services/api';
 
 export default function CourseManagement() {
+  const location = useLocation();
+  const isAdminRoute = location.pathname.startsWith('/admin/');
+  
   const [courses, setCourses] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [selectedProgram, setSelectedProgram] = useState('');
