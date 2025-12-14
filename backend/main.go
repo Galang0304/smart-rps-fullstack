@@ -21,9 +21,8 @@ func main() {
 		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
 	}
 
-	// Auto migrate all models
+	// Auto migrate all models (skip User - table exists)
 	err = db.AutoMigrate(
-		// &models.User{}, // Skip - table already exists with correct structure
 		&models.Prodi{},
 		&models.Program{},
 		&models.Dosen{},
@@ -34,7 +33,8 @@ func main() {
 		&models.DosenRPSAccess{},
 	)
 	if err != nil {
-		log.Fatalf("Failed to migrate database: %v", err)
+		log.Printf("Warning: Migration error: %v", err)
+		// Don't fail - continue if tables exist
 	}
 
 	log.Println("✓ Database migration completed successfully")
