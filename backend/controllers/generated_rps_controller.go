@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -128,6 +129,88 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 		replaceMap["{FAKULTAS}"] = fakultasDosen
 	}
 
+	// CPL, CPMK, Sub-CPMK Lists
+	cplList := ""
+	if cpmkData, ok := result["cpmk"].([]interface{}); ok && len(cpmkData) > 0 {
+		for i, cpmk := range cpmkData {
+			if cpmkMap, ok := cpmk.(map[string]interface{}); ok {
+				cplList += fmt.Sprintf("%d. %s\n", i+1, getString(cpmkMap, "description"))
+			}
+		}
+	}
+	if cplList == "" {
+		cplList = "[Belum ada CPL/CPMK]"
+	}
+	replaceMap["{CPL_LIST}"] = cplList
+	replaceMap["{CPMK_LIST}"] = cplList
+
+	subCpmkList := ""
+	if subCpmkData, ok := result["subCPMK"].([]interface{}); ok && len(subCpmkData) > 0 {
+		for i, sub := range subCpmkData {
+			if subMap, ok := sub.(map[string]interface{}); ok {
+				subCpmkList += fmt.Sprintf("%d. %s\n", i+1, getString(subMap, "description"))
+			}
+		}
+	}
+	if subCpmkList == "" {
+		subCpmkList = "[Belum ada Sub-CPMK]"
+	}
+	replaceMap["{SUB_CPMK_LIST}"] = subCpmkList
+
+	// Topik List
+	topikList := ""
+	if topikData, ok := result["topik"].([]interface{}); ok && len(topikData) > 0 {
+		for i, topik := range topikData {
+			if topikMap, ok := topik.(map[string]interface{}); ok {
+				topikList += fmt.Sprintf("%d. %s: %s\n", i+1, getString(topikMap, "topic"), getString(topikMap, "description"))
+			}
+		}
+	}
+	if topikList == "" {
+		topikList = "[Belum ada topik]"
+	}
+	replaceMap["{TOPIK_LIST}"] = topikList
+
+	// Referensi dari tugas
+	referensiSet := make(map[string]bool)
+	if tugasData, ok := result["tugas"].([]interface{}); ok {
+		for _, tugas := range tugasData {
+			if tugasMap, ok := tugas.(map[string]interface{}); ok {
+				if rujukan, ok := tugasMap["daftar_rujukan"].([]interface{}); ok {
+					for _, ref := range rujukan {
+						if refStr, ok := ref.(string); ok && refStr != "" {
+							referensiSet[refStr] = true
+						}
+					}
+				}
+			}
+		}
+	}
+	referensiList := ""
+	i := 1
+	for ref := range referensiSet {
+		referensiList += fmt.Sprintf("%d. %s\n", i, ref)
+		i++
+	}
+	if referensiList == "" {
+		referensiList = "[Belum ada referensi]"
+	}
+	replaceMap["{REFERENSI_LIST}"] = referensiList
+
+	// Default values untuk field yang tidak ada di JSON
+	replaceMap["{RUMPUN_MK}"] = getString(result, "rumpun_mk")
+	if replaceMap["{RUMPUN_MK}"] == "" {
+		replaceMap["{RUMPUN_MK}"] = "-"
+	}
+	replaceMap["{DESKRIPSI_MK}"] = getString(result, "deskripsi")
+	if replaceMap["{DESKRIPSI_MK}"] == "" {
+		replaceMap["{DESKRIPSI_MK}"] = "[Deskripsi mata kuliah belum diisi]"
+	}
+	replaceMap["{MK_PRASYARAT}"] = getString(result, "mk_prasyarat")
+	if replaceMap["{MK_PRASYARAT}"] == "" {
+		replaceMap["{MK_PRASYARAT}"] = "-"
+	}
+
 	// Tugas - DINAMIS: Hanya sebanyak jumlah tugas yang ada
 	if tugasData, ok := result["tugas"].([]interface{}); ok {
 		// Hitung jumlah tugas aktual
@@ -192,23 +275,135 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 		}
 	}
 
-	// Rencana Pembelajaran - DINAMIS: Hanya sebanyak jumlah minggu yang ada
-	if pembelajaranData, ok := result["rencana_pembelajaran"].([]interface{}); ok {
-		numMinggu := len(pembelajaranData)
+	// Rencana Pembelajaran - menggunakan data topik
+	if topikData, ok := result["topik"].([]interface{}); ok {
+		numMinggu := len(topikData)
 		fmt.Printf("Jumlah minggu pembelajaran yang akan di-export: %d\n", numMinggu)
 
 		// Iterasi hanya sebanyak jumlah minggu yang ada
 		for i := 0; i < numMinggu; i++ {
-			if minggu, ok := pembelajaranData[i].(map[string]interface{}); ok {
-				replaceMap[fmt.Sprintf("{MINGGU_%d}", i+1)] = fmt.Sprintf("%d", i+1)
-				replaceMap[fmt.Sprintf("{SUB_CPMK_%d}", i+1)] = getString(minggu, "sub_cpmk")
-				replaceMap[fmt.Sprintf("{INDIKATOR_%d}", i+1)] = getString(minggu, "indikator")
-				replaceMap[fmt.Sprintf("{TOPIK_%d}", i+1)] = getString(minggu, "topik_materi")
-				replaceMap[fmt.Sprintf("{METODE_%d}", i+1)] = getString(minggu, "metode")
-				replaceMap[fmt.Sprintf("{WAKTU_%d}", i+1)] = getString(minggu, "waktu")
-				replaceMap[fmt.Sprintf("{PENGALAMAN_%d}", i+1)] = getString(minggu, "pengalaman_belajar")
-				replaceMap[fmt.Sprintf("{KRITERIA_%d}", i+1)] = getString(minggu, "kriteria_penilaian")
-				replaceMap[fmt.Sprintf("{BOBOT_%d}", i+1)] = getString(minggu, "bobot")
+			if minggu, ok := topikData[i].(map[string]interface{}); ok {
+				weekNum := i + 1
+
+				// Minggu ke-
+				mingguKe := getString(minggu, "week")
+				if mingguKe == "" {
+					mingguKe = fmt.Sprintf("%d", weekNum)
+				}
+				replaceMap[fmt.Sprintf("{MINGGU_%d}", weekNum)] = mingguKe
+
+				// Sub-CPMK - ambil dari metadata atau dari subCPMK
+				subCpmkText := getString(minggu, "sub_cpmk")
+				if subCpmkText == "" {
+					// Coba ambil dari metadata
+					if meta, ok := minggu["metadata"].(map[string]interface{}); ok {
+						if subcpmk, ok := meta["subcpmk"].([]interface{}); ok && len(subcpmk) > 0 {
+							for j, sc := range subcpmk {
+								if scStr, ok := sc.(string); ok {
+									if j > 0 {
+										subCpmkText += ", "
+									}
+									subCpmkText += scStr
+								}
+							}
+						}
+					}
+				}
+				if subCpmkText == "" {
+					subCpmkText = "-"
+				}
+				replaceMap[fmt.Sprintf("{SUB_CPMK_%d}", weekNum)] = subCpmkText
+
+				// Indikator
+				indikator := getString(minggu, "indikator")
+				if indikator == "" {
+					indikator = "-"
+				}
+				replaceMap[fmt.Sprintf("{INDIKATOR_%d}", weekNum)] = indikator
+
+				// Topik dan Subtopik
+				topik := getString(minggu, "topic")
+				deskripsi := getString(minggu, "description")
+				topikFull := topik
+				if deskripsi != "" && deskripsi != topik {
+					topikFull += ": " + deskripsi
+				}
+				replaceMap[fmt.Sprintf("{TOPIK_%d}", weekNum)] = topikFull
+
+				// Aktivitas pembelajaran - ambil dari metadata
+				aktivitas := getString(minggu, "aktivitas")
+				if aktivitas == "" {
+					if meta, ok := minggu["metadata"].(map[string]interface{}); ok {
+						aktivitas = getString(meta, "aktivitas_pembelajaran")
+						if aktivitas == "" {
+							aktivitas = getString(meta, "metode_pembelajaran")
+						}
+					}
+				}
+				if aktivitas == "" {
+					aktivitas = "Kuliah, diskusi, dan latihan"
+				}
+				replaceMap[fmt.Sprintf("{AKTIVITAS_%d}", weekNum)] = aktivitas
+				replaceMap[fmt.Sprintf("{METODE_%d}", weekNum)] = aktivitas
+
+				// Waktu
+				waktu := getString(minggu, "waktu")
+				if waktu == "" {
+					waktu = "3 x 50 menit"
+				}
+				replaceMap[fmt.Sprintf("{WAKTU_%d}", weekNum)] = waktu
+
+				// Penilaian
+				penilaian := getString(minggu, "penilaian")
+				if penilaian == "" {
+					if meta, ok := minggu["metadata"].(map[string]interface{}); ok {
+						penilaian = getString(meta, "penilaian")
+					}
+				}
+				if penilaian == "" {
+					penilaian = "-"
+				}
+				replaceMap[fmt.Sprintf("{PENILAIAN_%d}", weekNum)] = penilaian
+				replaceMap[fmt.Sprintf("{KRITERIA_%d}", weekNum)] = penilaian
+
+				// Pengalaman belajar
+				pengalamanBelajar := ""
+				if pb, ok := minggu["pengalaman_belajar"].([]interface{}); ok {
+					for j, exp := range pb {
+						if expStr, ok := exp.(string); ok {
+							if j > 0 {
+								pengalamanBelajar += ", "
+							}
+							pengalamanBelajar += expStr
+						}
+					}
+				}
+				if pengalamanBelajar == "" {
+					// Coba dari metadata
+					if meta, ok := minggu["metadata"].(map[string]interface{}); ok {
+						if pb, ok := meta["pengalaman_belajar"].([]interface{}); ok {
+							for j, exp := range pb {
+								if expStr, ok := exp.(string); ok {
+									if j > 0 {
+										pengalamanBelajar += ", "
+									}
+									pengalamanBelajar += expStr
+								}
+							}
+						}
+					}
+				}
+				if pengalamanBelajar == "" {
+					pengalamanBelajar = "Mahasiswa mengikuti kuliah dan diskusi"
+				}
+				replaceMap[fmt.Sprintf("{PENGALAMAN_%d}", weekNum)] = pengalamanBelajar
+
+				// Bobot - default 0 jika tidak ada
+				bobot := getString(minggu, "bobot")
+				if bobot == "" {
+					bobot = "0"
+				}
+				replaceMap[fmt.Sprintf("{BOBOT_%d}", weekNum)] = bobot
 			}
 		}
 
@@ -219,9 +414,11 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 			replaceMap[fmt.Sprintf("{INDIKATOR_%d}", i)] = ""
 			replaceMap[fmt.Sprintf("{TOPIK_%d}", i)] = ""
 			replaceMap[fmt.Sprintf("{METODE_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{AKTIVITAS_%d}", i)] = ""
 			replaceMap[fmt.Sprintf("{WAKTU_%d}", i)] = ""
 			replaceMap[fmt.Sprintf("{PENGALAMAN_%d}", i)] = ""
 			replaceMap[fmt.Sprintf("{KRITERIA_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{PENILAIAN_%d}", i)] = ""
 			replaceMap[fmt.Sprintf("{BOBOT_%d}", i)] = ""
 		}
 	} else {
@@ -232,9 +429,11 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 			replaceMap[fmt.Sprintf("{INDIKATOR_%d}", i)] = ""
 			replaceMap[fmt.Sprintf("{TOPIK_%d}", i)] = ""
 			replaceMap[fmt.Sprintf("{METODE_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{AKTIVITAS_%d}", i)] = ""
 			replaceMap[fmt.Sprintf("{WAKTU_%d}", i)] = ""
 			replaceMap[fmt.Sprintf("{PENGALAMAN_%d}", i)] = ""
 			replaceMap[fmt.Sprintf("{KRITERIA_%d}", i)] = ""
+			replaceMap[fmt.Sprintf("{PENILAIAN_%d}", i)] = ""
 			replaceMap[fmt.Sprintf("{BOBOT_%d}", i)] = ""
 		}
 	}
@@ -285,22 +484,32 @@ func getString(data map[string]interface{}, key string) string {
 func (gc *GeneratedRPSController) Create(c *gin.Context) {
 	var input struct {
 		CourseID *uuid.UUID      `json:"course_id"`
-		Result   json.RawMessage `json:"result" binding:"required"`
+		Result   json.RawMessage `json:"result"`
 		Status   string          `json:"status"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
+		log.Printf("ERROR Create RPS - Failed to bind JSON: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
+	log.Printf("Create RPS - CourseID: %v, Status: %s, Result length: %d", input.CourseID, input.Status, len(input.Result))
+
+	// Jika Result kosong, set ke empty JSON object
+	resultData := input.Result
+	if len(resultData) == 0 {
+		resultData = []byte("{}")
+	}
+
 	rps := models.GeneratedRPS{
 		CourseID: input.CourseID,
-		Result:   []byte(input.Result),
+		Result:   []byte(resultData),
 		Status:   input.Status,
 	}
 
 	if err := gc.db.Create(&rps).Error; err != nil {
+		log.Printf("ERROR Create RPS - Failed to create in DB: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create RPS"})
 		return
 	}

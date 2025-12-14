@@ -243,21 +243,12 @@ export default function RPSCreate() {
       } else {
         // Mode create - buat RPS baru dengan status draft
         const createPayload = {
-          template_version_id: null,
           course_id: selectedCourseId,
-          generated_by: null,
-        };
-        
-        const createRes = await generatedRPSAPI.create(createPayload);
-        const newRpsId = createRes.data.data.id;
-        
-        const completePayload = {
-          job_id: newRpsId,
           status: 'draft',
           result: formData,
         };
         
-        await generatedRPSAPI.createDraft(completePayload);
+        await generatedRPSAPI.create(createPayload);
         alert('RPS berhasil disimpan sebagai Draft!');
       }
       
