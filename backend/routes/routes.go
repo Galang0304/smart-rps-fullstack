@@ -123,15 +123,11 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 		generated := v1.Group("/generated")
 		{
 			generated.GET("", generatedRPSController.GetAll)
-			generated.GET("/:id", generatedRPSController.GetById)
+			generated.GET("/:id", generatedRPSController.GetByID)
 			generated.POST("", generatedRPSController.Create)
-			generated.POST("/draft", generatedRPSController.CreateDraft)
 			generated.PUT("/:id", generatedRPSController.Update)
-			generated.PATCH("/:id/status", generatedRPSController.UpdateStatus)
 			generated.DELETE("/:id", generatedRPSController.Delete)
 			generated.GET("/:id/export", generatedRPSController.Export)
-			generated.GET("/:id/export-dynamic", generatedRPSController.ExportDynamic)           // Dynamic with unioffice (requires license)
-			generated.GET("/:id/export-auto", generatedRPSController.ExportWithTableDuplication) // FREE: Auto duplicate tables
 		}
 
 		// AI Helper routes
