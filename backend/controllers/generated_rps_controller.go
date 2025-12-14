@@ -306,6 +306,19 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 		numMinggu := len(topikData)
 		log.Printf("Jumlah minggu pembelajaran yang akan di-export: %d", numMinggu)
 
+		// Get sub-CPMK list untuk distribusi ke minggu
+		var subCpmkList []string
+		if subCpmkData, ok := result["subCPMK"].([]interface{}); ok {
+			for _, sub := range subCpmkData {
+				if subMap, ok := sub.(map[string]interface{}); ok {
+					desc := getString(subMap, "description")
+					if desc != "" {
+						subCpmkList = append(subCpmkList, desc)
+					}
+				}
+			}
+		}
+
 		// Iterasi hanya sebanyak jumlah minggu yang ada
 		for i := 0; i < numMinggu; i++ {
 			if minggu, ok := topikData[i].(map[string]interface{}); ok {
@@ -318,7 +331,7 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 				}
 				replaceMap[fmt.Sprintf("{MINGGU_%d}", weekNum)] = mingguKe
 
-				// Sub-CPMK - ambil dari metadata atau dari subCPMK
+				// Sub-CPMK - distribusi dari list sub-CPMK yang ada
 				subCpmkText := getString(minggu, "sub_cpmk")
 				if subCpmkText == "" {
 					// Coba ambil dari metadata
@@ -335,15 +348,25 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 						}
 					}
 				}
+				// Jika masih kosong, ambil dari list sub-CPMK (distribusi round-robin)
+				if subCpmkText == "" && len(subCpmkList) > 0 {
+					idx := i % len(subCpmkList)
+					subCpmkText = fmt.Sprintf("Sub-CPMK %d", idx+1)
+				}
 				if subCpmkText == "" {
-					subCpmkText = "-"
+					subCpmkText = "Mengacu pada Sub-CPMK mata kuliah"
 				}
 				replaceMap[fmt.Sprintf("{SUB_CPMK_%d}", weekNum)] = subCpmkText
 
-				// Indikator
+				// Indikator - buat berdasarkan topik
 				indikator := getString(minggu, "indikator")
 				if indikator == "" {
-					indikator = "-"
+					topik := getString(minggu, "topic")
+					if topik != "" {
+						indikator = fmt.Sprintf("Mahasiswa mampu memahami dan menjelaskan materi %s", topik)
+					} else {
+						indikator = "Mahasiswa mampu memahami materi pembelajaran"
+					}
 				}
 				replaceMap[fmt.Sprintf("{INDIKATOR_%d}", weekNum)] = indikator
 
@@ -379,15 +402,27 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 				}
 				replaceMap[fmt.Sprintf("{WAKTU_%d}", weekNum)] = waktu
 
-				// Penilaian
+				// Penilaian/Kriteria
 				penilaian := getString(minggu, "penilaian")
 				if penilaian == "" {
 					if meta, ok := minggu["metadata"].(map[string]interface{}); ok {
 						penilaian = getString(meta, "penilaian")
+						if penilaian == "" {
+							penilaian = getString(meta, "kriteria_penilaian")
+						}
 					}
 				}
 				if penilaian == "" {
-					penilaian = "-"
+					// Buat kriteria penilaian default berdasarkan minggu
+					if weekNum <= 4 {
+						penilaian = "Partisipasi dan diskusi kelas"
+					} else if weekNum <= 8 {
+						penilaian = "Quiz dan tugas individu"
+					} else if weekNum <= 12 {
+						penilaian = "Presentasi kelompok"
+					} else {
+						penilaian = "Ujian dan proyek akhir"
+					}
 				}
 				replaceMap[fmt.Sprintf("{PENILAIAN_%d}", weekNum)] = penilaian
 				replaceMap[fmt.Sprintf("{KRITERIA_%d}", weekNum)] = penilaian
