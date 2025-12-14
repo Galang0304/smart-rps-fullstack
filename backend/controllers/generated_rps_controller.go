@@ -525,10 +525,11 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	log.Printf("Replacing %d placeholders in template", len(replaceMap))
 	// Log some sample placeholders
 	if val, ok := replaceMap["{CPL_LIST}"]; ok {
-		log.Printf("Sample placeholder {CPL_LIST} = '%s' (len: %d)", val, len(val))
+		valStr := fmt.Sprintf("%v", val)
+		log.Printf("Sample placeholder {CPL_LIST} = '%s' (len: %d)", valStr, len(valStr))
 	}
 	if val, ok := replaceMap["{SUB_CPMK_1}"]; ok {
-		log.Printf("Sample placeholder {SUB_CPMK_1} = '%s'", val)
+		log.Printf("Sample placeholder {SUB_CPMK_1} = '%v'", val)
 	}
 
 	if err := doc.ReplaceAll(replaceMap); err != nil {
