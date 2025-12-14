@@ -237,10 +237,9 @@ func getString(data map[string]interface{}, key string) string {
 // Create - Create new RPS
 func (gc *GeneratedRPSController) Create(c *gin.Context) {
 	var input struct {
-		CourseID    uuid.UUID `json:"course_id" binding:"required"`
-		Result      []byte    `json:"result" binding:"required"`
-		Subject     string    `json:"subject"`
-		Description string    `json:"description"`
+		CourseID *uuid.UUID `json:"course_id"`
+		Result   []byte     `json:"result" binding:"required"`
+		Status   string     `json:"status"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -249,10 +248,9 @@ func (gc *GeneratedRPSController) Create(c *gin.Context) {
 	}
 
 	rps := models.GeneratedRPS{
-		CourseID:    input.CourseID,
-		Result:      input.Result,
-		Subject:     input.Subject,
-		Description: input.Description,
+		CourseID: input.CourseID,
+		Result:   input.Result,
+		Status:   input.Status,
 	}
 
 	if err := gc.db.Create(&rps).Error; err != nil {
@@ -329,9 +327,8 @@ func (gc *GeneratedRPSController) Update(c *gin.Context) {
 	}
 
 	var input struct {
-		Result      []byte `json:"result"`
-		Subject     string `json:"subject"`
-		Description string `json:"description"`
+		Result []byte `json:"result"`
+		Status string `json:"status"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -342,11 +339,8 @@ func (gc *GeneratedRPSController) Update(c *gin.Context) {
 	if input.Result != nil {
 		rps.Result = input.Result
 	}
-	if input.Subject != "" {
-		rps.Subject = input.Subject
-	}
-	if input.Description != "" {
-		rps.Description = input.Description
+	if input.Status != "" {
+		rps.Status = input.Status
 	}
 
 	if err := gc.db.Save(&rps).Error; err != nil {
