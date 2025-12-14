@@ -4,10 +4,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"smart-rps-backend/models"
 	"smart-rps-backend/services"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -146,8 +147,8 @@ func (pc *ProdiController) Create(c *gin.Context) {
 		ID:          uuid.New(),
 		Username:    req.Username,
 		Password:    string(hashedPassword),
-		Email:       &req.EmailKaprodi,
-		DisplayName: &req.NamaKaprodi,
+		Email:       req.EmailKaprodi,
+		DisplayName: req.NamaKaprodi,
 		Role:        "kaprodi",
 	}
 

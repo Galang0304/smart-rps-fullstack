@@ -3,10 +3,11 @@ package controllers
 import (
 	"net/http"
 
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"smart-rps-backend/models"
 	"smart-rps-backend/services"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -182,14 +183,12 @@ func (dc *DosenController) Create(c *gin.Context) {
 
 		// Create user
 		newUserID := uuid.New()
-		email := req.Email
-		displayName := req.NamaLengkap
 		user := models.User{
 			ID:          newUserID,
 			Username:    req.Username,
 			Password:    string(hashedPassword),
-			Email:       &email,
-			DisplayName: &displayName,
+			Email:       req.Email,
+			DisplayName: req.NamaLengkap,
 			Role:        "dosen",
 		}
 
