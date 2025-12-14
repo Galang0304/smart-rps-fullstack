@@ -80,6 +80,15 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 		return
 	}
 
+	// Helper function to get keys
+	getKeys := func(m map[string]interface{}) []string {
+		keys := make([]string, 0, len(m))
+		for k := range m {
+			keys = append(keys, k)
+		}
+		return keys
+	}
+
 	// Log untuk debugging
 	log.Printf("Export RPS ID: %s, CourseID: %s", rpsUUID, rps.CourseID)
 	log.Printf("Data keys in result: %v", getKeys(result))
@@ -302,6 +311,7 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	}
 
 	// Rencana Pembelajaran - menggunakan data topik
+	log.Printf("DEBUG: Checking for topik data in result. Keys: %v", getKeys(result))
 	if topikData, ok := result["topik"].([]interface{}); ok {
 		numMinggu := len(topikData)
 		log.Printf("Jumlah minggu pembelajaran yang akan di-export: %d", numMinggu)
@@ -357,6 +367,7 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 					subCpmkText = "Mengacu pada Sub-CPMK mata kuliah"
 				}
 				replaceMap[fmt.Sprintf("{SUB_CPMK_%d}", weekNum)] = subCpmkText
+				log.Printf("Week %d: SUB_CPMK = '%s'", weekNum, subCpmkText)
 
 				// Indikator - buat berdasarkan topik
 				indikator := getString(minggu, "indikator")
@@ -369,6 +380,7 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 					}
 				}
 				replaceMap[fmt.Sprintf("{INDIKATOR_%d}", weekNum)] = indikator
+				log.Printf("Week %d: INDIKATOR = '%s'", weekNum, indikator)
 
 				// Topik dan Subtopik
 				topik := getString(minggu, "topic")
@@ -426,6 +438,7 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 				}
 				replaceMap[fmt.Sprintf("{PENILAIAN_%d}", weekNum)] = penilaian
 				replaceMap[fmt.Sprintf("{KRITERIA_%d}", weekNum)] = penilaian
+				log.Printf("Week %d: KRITERIA = '%s'", weekNum, penilaian)
 
 				// Pengalaman belajar
 				pengalamanBelajar := ""
@@ -465,6 +478,7 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 					bobot = "0"
 				}
 				replaceMap[fmt.Sprintf("{BOBOT_%d}", weekNum)] = bobot
+				log.Printf("Week %d: BOBOT = '%s'", weekNum, bobot)
 			}
 		}
 
@@ -500,6 +514,7 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	}
 
 	// Replace placeholders di template
+	log.Printf("Opening template from: %s", templatePath)
 	doc, err := docx.Open(templatePath)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open template: " + err.Error()})
@@ -507,10 +522,21 @@ func (gc *GeneratedRPSController) Export(c *gin.Context) {
 	}
 	defer doc.Close()
 
+	log.Printf("Replacing %d placeholders in template", len(replaceMap))
+	// Log some sample placeholders
+	if val, ok := replaceMap["{CPL_LIST}"]; ok {
+		log.Printf("Sample placeholder {CPL_LIST} = '%s' (len: %d)", val, len(val))
+	}
+	if val, ok := replaceMap["{SUB_CPMK_1}"]; ok {
+		log.Printf("Sample placeholder {SUB_CPMK_1} = '%s'", val)
+	}
+
 	if err := doc.ReplaceAll(replaceMap); err != nil {
+		log.Printf("ERROR: Failed to replace placeholders: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to replace placeholders: " + err.Error()})
 		return
 	}
+	log.Printf("Successfully replaced all placeholders")
 
 	// Write to buffer
 	var buf bytes.Buffer
