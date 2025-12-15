@@ -11,23 +11,40 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
   const [loading, setLoading] = useState(false);
   const userRole = localStorage.getItem('role');
 
-  // Initialize exactly 14 Sub-CPMKs when component mounts
+  // Initialize Sub-CPMKs based on CPMK count (always total 14)
   useEffect(() => {
-    const loadSubCpmk = async () => {
-      if (!course?.id) {
-        // No course yet, just initialize 14 empty Sub-CPMKs
+    const loadAndInitSubCpmk = async () => {
+      if (!course?.id || formData.cpmk.length === 0) {
+        // Initialize based on current CPMK count
+        const totalCpmks = formData.cpmk.length || 3;
+        const totalSubCpmks = 14;
+        const subCpmksPerCpmk = Math.floor(totalSubCpmks / totalCpmks);
+        const remainder = totalSubCpmks % totalCpmks;
+        
         const newSubCpmks = [];
-        for (let i = 1; i <= 14; i++) {
-          newSubCpmks.push({
-            code: `Sub-CPMK-${i}`,
-            description: '',
-            fromDB: false
-          });
-        }
+        formData.cpmk.forEach((cpmk, cpmkIndex) => {
+          const cpmkNumber = cpmkIndex + 1;
+          const cpmkCode = `CPMK-${cpmkNumber}`;
+          // First CPMKs get extra Sub-CPMK if there's remainder
+          const subCount = subCpmksPerCpmk + (cpmkIndex < remainder ? 1 : 0);
+          
+          for (let i = 0; i < subCount; i++) {
+            newSubCpmks.push({
+              code: `Sub-CPMK-${cpmkNumber}.${i + 1}`,
+              description: '',
+              cpmk_id: cpmkCode,
+              cpmkNumber: cpmkNumber,
+              subNumber: i + 1,
+              fromDB: false
+            });
+          }
+        });
+        
         setFormData({ ...formData, subCPMK: newSubCpmks });
         return;
       }
       
+      // Try to load from database
       setLoading(true);
       try {
         const res = await apiClient.get(`/cpmk/course/${course.id}`);
@@ -37,8 +54,11 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
             if (cpmk.sub_cpmks && cpmk.sub_cpmks.length > 0) {
               cpmk.sub_cpmks.forEach(subCpmk => {
                 allSubCpmks.push({
-                  code: `Sub-CPMK-${subCpmk.sub_cpmk_number}`,
+                  code: `Sub-CPMK-${cpmk.cpmk_number}.${subCpmk.sub_cpmk_number}`,
                   description: subCpmk.description,
+                  cpmk_id: `CPMK-${cpmk.cpmk_number}`,
+                  cpmkNumber: cpmk.cpmk_number,
+                  subNumber: subCpmk.sub_cpmk_number,
                   id: subCpmk.id,
                   fromDB: true
                 });
@@ -46,48 +66,48 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
             }
           });
           
-          // Always ensure we have exactly 14 Sub-CPMKs
-          const fixedSubCpmks = [];
-          for (let i = 1; i <= 14; i++) {
-            const existing = allSubCpmks.find(s => s.code === `Sub-CPMK-${i}`);
-            fixedSubCpmks.push(existing || {
-              code: `Sub-CPMK-${i}`,
-              description: '',
-              fromDB: false
+          if (allSubCpmks.length > 0) {
+            setFormData({ ...formData, subCPMK: allSubCpmks });
+          } else {
+            // No Sub-CPMK in DB, initialize empty ones
+            const totalCpmks = formData.cpmk.length;
+            const totalSubCpmks = 14;
+            const subCpmksPerCpmk = Math.floor(totalSubCpmks / totalCpmks);
+            const remainder = totalSubCpmks % totalCpmks;
+            
+            const newSubCpmks = [];
+            formData.cpmk.forEach((cpmk, cpmkIndex) => {
+              const cpmkNumber = cpmkIndex + 1;
+              const cpmkCode = `CPMK-${cpmkNumber}`;
+              const subCount = subCpmksPerCpmk + (cpmkIndex < remainder ? 1 : 0);
+              
+              for (let i = 0; i < subCount; i++) {
+                newSubCpmks.push({
+                  code: `Sub-CPMK-${cpmkNumber}.${i + 1}`,
+                  description: '',
+                  cpmk_id: cpmkCode,
+                  cpmkNumber: cpmkNumber,
+                  subNumber: i + 1,
+                  fromDB: false
+                });
+              }
             });
+            
+            setFormData({ ...formData, subCPMK: newSubCpmks });
           }
-          setFormData({ ...formData, subCPMK: fixedSubCpmks });
-        } else {
-          // No data from database, create 14 empty ones
-          const newSubCpmks = [];
-          for (let i = 1; i <= 14; i++) {
-            newSubCpmks.push({
-              code: `Sub-CPMK-${i}`,
-              description: '',
-              fromDB: false
-            });
-          }
-          setFormData({ ...formData, subCPMK: newSubCpmks });
         }
       } catch (error) {
         console.error('Failed to load Sub-CPMK from DB:', error);
-        // On error, still initialize 14 empty Sub-CPMKs
-        const newSubCpmks = [];
-        for (let i = 1; i <= 14; i++) {
-          newSubCpmks.push({
-            code: `Sub-CPMK-${i}`,
-            description: '',
-            fromDB: false
-          });
-        }
-        setFormData({ ...formData, subCPMK: newSubCpmks });
       } finally {
         setLoading(false);
       }
     };
     
-    loadSubCpmk();
-  }, [course?.id]);
+    // Re-initialize Sub-CPMKs when CPMK count changes
+    if (formData.cpmk.length > 0 && formData.subCPMK.length === 0) {
+      loadAndInitSubCpmk();
+    }
+  }, [course?.id, formData.cpmk.length]);
 
   const handleGenerateAll = async () => {
     // Check if all CPMKs have descriptions
@@ -151,20 +171,31 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
       return;
     }
 
-    // Validate all 14 Sub-CPMKs are filled
+    // Validate all Sub-CPMKs are filled
+    const totalSubs = formData.subCPMK.length;
     const emptySubCpmks = formData.subCPMK.filter(sub => !sub.description || !sub.description.trim());
     if (emptySubCpmks.length > 0) {
-      alert(`❌ Semua 14 Sub-CPMK harus terisi! Masih ada ${emptySubCpmks.length} Sub-CPMK kosong.`);
+      alert(`❌ Semua ${totalSubs} Sub-CPMK harus terisi! Masih ada ${emptySubCpmks.length} Sub-CPMK kosong.`);
       return;
     }
 
-    // Prepare payload - all 14 Sub-CPMKs under first CPMK
-    const cpmks = formData.cpmk.map((cpmk, index) => {
-      // Only first CPMK gets all 14 Sub-CPMKs
-      const subCpmks = index === 0 ? formData.subCPMK.map(sub => ({
+    // Group Sub-CPMKs by CPMK
+    const cpmkGroups = {};
+    formData.subCPMK.forEach(subCpmk => {
+      if (subCpmk.description && subCpmk.description.trim()) {
+        if (!cpmkGroups[subCpmk.cpmk_id]) {
+          cpmkGroups[subCpmk.cpmk_id] = [];
+        }
+        cpmkGroups[subCpmk.cpmk_id].push(subCpmk);
+      }
+    });
+
+    // Build payload with CPMK and their Sub-CPMKs
+    const cpmks = formData.cpmk.map((cpmk) => {
+      const subCpmks = (cpmkGroups[cpmk.code] || []).map(sub => ({
         code: sub.code,
         description: sub.description
-      })) : [];
+      }));
       
       return {
         code: cpmk.code,
@@ -188,7 +219,7 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
           fromDB: true
         }));
         setFormData({ ...formData, subCPMK: updatedSubCpmks });
-        alert(`✅ Berhasil menyimpan 14 Sub-CPMK ke database!`);
+        alert(`✅ Berhasil menyimpan ${totalSubs} Sub-CPMK ke database!`);
       }
     } catch (error) {
       console.error('Failed to save Sub-CPMK to DB:', error);
@@ -199,33 +230,85 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
     }
   };
 
-  const handleGenerateOne = async (index) => {
-    const firstCpmk = formData.cpmk[0];
-    if (!firstCpmk || !firstCpmk.description.trim()) {
-      alert('CPMK pertama harus terisi terlebih dahulu');
+  const handleGenerateForCPMK = async (cpmkIndex) => {
+    if (!formData.cpmk[cpmkIndex] || !formData.cpmk[cpmkIndex].description.trim()) {
+      alert('CPMK harus terisi terlebih dahulu');
       return;
     }
     
     setGenerating(true);
-    setGeneratingSubIndex(index);
+    setGeneratingCpmkIndex(cpmkIndex);
     try {
       const res = await aiHelperAPI.generateSubCPMK({
         course_id: course.id,
         course_code: course.code,
         course_title: course.title,
-        cpmk: firstCpmk.description,
+        cpmk: formData.cpmk[cpmkIndex].description,
+      });
+      
+      const cpmkNumber = cpmkIndex + 1;
+      const cpmkCode = `CPMK-${cpmkNumber}`;
+      const generatedItems = res.data.data.items;
+      
+      // Only fill empty Sub-CPMKs for this CPMK
+      const updatedSubCPMK = formData.subCPMK.map(sub => {
+        if (sub.cpmk_id === cpmkCode && (!sub.description || !sub.description.trim())) {
+          const subCpmksForThisCpmk = formData.subCPMK.filter(s => s.cpmk_id === cpmkCode);
+          const emptySubCpmks = subCpmksForThisCpmk.filter(s => !s.description || !s.description.trim());
+          const emptyIndex = emptySubCpmks.findIndex(e => e.code === sub.code);
+          if (emptyIndex !== -1 && emptyIndex < generatedItems.length) {
+            return {
+              ...sub,
+              description: generatedItems[emptyIndex].description,
+              fromDB: false
+            };
+          }
+        }
+        return sub;
+      });
+      
+      setFormData({ ...formData, subCPMK: updatedSubCPMK });
+    } catch (error) {
+      console.error('Failed to generate Sub-CPMK:', error);
+      alert('Gagal generate Sub-CPMK');
+    } finally {
+      setGenerating(false);
+      setGeneratingCpmkIndex(null);
+    }
+  };
+
+  const handleGenerateOne = async (cpmkIndex, subIndex) => {
+    if (!formData.cpmk[cpmkIndex] || !formData.cpmk[cpmkIndex].description.trim()) {
+      alert('CPMK harus terisi terlebih dahulu');
+      return;
+    }
+    
+    setGenerating(true);
+    setGeneratingSubIndex(`${cpmkIndex}-${subIndex}`);
+    try {
+      const res = await aiHelperAPI.generateSubCPMK({
+        course_id: course.id,
+        course_code: course.code,
+        course_title: course.title,
+        cpmk: formData.cpmk[cpmkIndex].description,
       });
       
       if (res.data.data.items && res.data.data.items.length > 0) {
         const generatedDescription = res.data.data.items[0].description;
         
-        const newSubCPMK = [...formData.subCPMK];
-        newSubCPMK[index] = {
-          ...newSubCPMK[index],
-          description: generatedDescription,
-          fromDB: false
-        };
-        setFormData({ ...formData, subCPMK: newSubCPMK });
+        const cpmkCode = formData.cpmk[cpmkIndex].code;
+        const subCpmksForThisCpmk = formData.subCPMK.filter(sub => sub.cpmk_id === cpmkCode);
+        const targetSub = subCpmksForThisCpmk[subIndex];
+        
+        if (targetSub) {
+          const newSubCPMK = formData.subCPMK.map(sub => {
+            if (sub.code === targetSub.code) {
+              return { ...sub, description: generatedDescription, fromDB: false };
+            }
+            return sub;
+          });
+          setFormData({ ...formData, subCPMK: newSubCPMK });
+        }
       }
     } catch (error) {
       console.error('Failed to generate Sub-CPMK:', error);
@@ -236,25 +319,30 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
     }
   };
 
-  const updateSubCpmkDescription = (index, newDescription) => {
-    const newSubCPMK = [...formData.subCPMK];
-    newSubCPMK[index] = {
-      ...newSubCPMK[index],
-      description: newDescription,
-      fromDB: false
-    };
+  const updateSubCpmkDescription = (subCode, newDescription) => {
+    const newSubCPMK = formData.subCPMK.map(sub => {
+      if (sub.code === subCode) {
+        return { ...sub, description: newDescription, fromDB: false };
+      }
+      return sub;
+    });
     setFormData({ ...formData, subCPMK: newSubCPMK });
   };
+
+  // Calculate Sub-CPMKs per CPMK for display
+  const totalCpmks = formData.cpmk.length;
+  const totalSubs = formData.subCPMK.length;
 
   return (
     <div className="space-y-6">
       {/* Header with Generate All and Save Button */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Sub-CPMK (14 Sub-CPMK Wajib)</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Sub-CPMK (Dikelompokkan per CPMK)</h2>
           <p className="text-sm text-gray-600 mt-1">
-            Total Sub-CPMK terisi: <span className="font-semibold text-blue-600">{formData.subCPMK.filter(s => s.description && s.description.trim()).length}/14</span>
-            <span className="text-red-500 ml-2">* Semua harus terisi</span>
+            Total Sub-CPMK: <span className="font-semibold text-blue-600">{formData.subCPMK.filter(s => s.description && s.description.trim()).length}/{totalSubs}</span>
+            <span className="text-gray-500 ml-2">({totalSubs} Sub-CPMK untuk {totalCpmks} CPMK)</span>
+            <span className="text-red-500 ml-2">* Wajib terisi semua</span>
           </p>
         </div>
         {userRole !== 'dosen' && (
@@ -298,54 +386,101 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
           <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
         </div>
       ) : (
-        <div className="space-y-3">
-          {formData.subCPMK.map((subCpmk, index) => (
-            <div 
-              key={index} 
-              className={`p-3 border rounded-lg ${subCpmk.fromDB ? 'border-green-300 bg-green-50/30' : 'border-gray-200 bg-gray-50'}`}
-            >
-              <div className="flex items-start gap-3">
-                <div className="flex flex-col items-start gap-1 min-w-[100px]">
-                  <span className="font-semibold text-purple-700 text-sm">{subCpmk.code}</span>
-                  {subCpmk.fromDB && (
-                    <span className="text-xs px-2 py-0.5 bg-green-600 text-white rounded-full flex items-center gap-1">
-                      <Database className="w-3 h-3" />
-                      Database
-                    </span>
-                  )}
-                  {!subCpmk.fromDB && subCpmk.description && (
-                    <span className="text-xs px-2 py-0.5 bg-orange-500 text-white rounded-full">
-                      Manual
-                    </span>
+        <div className="space-y-6">
+          {formData.cpmk.map((cpmk, cpmkIndex) => {
+            const cpmkNumber = cpmkIndex + 1;
+            const cpmkCode = `CPMK-${cpmkNumber}`;
+            const subCpmksForThisCpmk = formData.subCPMK.filter(sub => sub.cpmk_id === cpmkCode);
+            
+            return (
+              <div key={cpmkIndex} className="border-2 border-gray-300 rounded-lg p-5 bg-white shadow-sm">
+                {/* CPMK Header */}
+                <div className="flex items-start justify-between mb-4 pb-4 border-b border-gray-200">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="font-bold text-blue-700 text-lg">{cpmk.code}</span>
+                      <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">
+                        {subCpmksForThisCpmk.length} Sub-CPMK
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-700 leading-relaxed">{cpmk.description || 'CPMK belum terisi'}</p>
+                  </div>
+                  {userRole !== 'dosen' && (
+                    <button
+                      onClick={() => handleGenerateForCPMK(cpmkIndex)}
+                      disabled={generating || !cpmk.description.trim()}
+                      className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 ml-4 flex-shrink-0"
+                      title={`Generate Sub-CPMK untuk ${cpmk.code}`}
+                    >
+                      {generating && generatingCpmkIndex === cpmkIndex ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Bot className="w-4 h-4" />
+                      )}
+                      <span className="text-sm">Generate AI</span>
+                    </button>
                   )}
                 </div>
-                
-                <textarea
-                  value={subCpmk.description}
-                  onChange={(e) => updateSubCpmkDescription(index, e.target.value)}
-                  placeholder="Masukkan Sub-CPMK atau klik 'AI' *"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  rows={2}
-                />
-                
-                {userRole !== 'dosen' && (
-                  <button
-                    onClick={() => handleGenerateOne(index)}
-                    disabled={generating || formData.cpmk.length === 0 || !formData.cpmk[0]?.description?.trim()}
-                    className="flex items-center gap-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors flex-shrink-0"
-                    title="Generate 1 Sub-CPMK dengan AI"
-                  >
-                    {generating && generatingSubIndex === index ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Bot className="w-4 h-4" />
-                    )}
-                    <span className="text-sm">AI</span>
-                  </button>
-                )}
+
+                {/* Sub-CPMKs List */}
+                <div className="space-y-3">
+                  {subCpmksForThisCpmk.length === 0 ? (
+                    <div className="text-center py-4 text-gray-500 text-sm">
+                      Belum ada Sub-CPMK. Sistem akan generate otomatis berdasarkan jumlah CPMK.
+                    </div>
+                  ) : (
+                    subCpmksForThisCpmk.map((subCpmk, subIndex) => (
+                      <div 
+                        key={subCpmk.code} 
+                        className={`p-3 border rounded-lg ${subCpmk.fromDB ? 'border-green-300 bg-green-50/30' : 'border-gray-200 bg-gray-50'}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex flex-col items-start gap-1 min-w-[110px]">
+                            <span className="font-semibold text-purple-700 text-sm">{subCpmk.code}</span>
+                            {subCpmk.fromDB && (
+                              <span className="text-xs px-2 py-0.5 bg-green-600 text-white rounded-full flex items-center gap-1">
+                                <Database className="w-3 h-3" />
+                                Database
+                              </span>
+                            )}
+                            {!subCpmk.fromDB && subCpmk.description && (
+                              <span className="text-xs px-2 py-0.5 bg-orange-500 text-white rounded-full">
+                                Manual
+                              </span>
+                            )}
+                          </div>
+                          
+                          <textarea
+                            value={subCpmk.description}
+                            onChange={(e) => updateSubCpmkDescription(subCpmk.code, e.target.value)}
+                            placeholder="Masukkan Sub-CPMK atau klik 'AI' *"
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            rows={2}
+                          />
+                          
+                          {userRole !== 'dosen' && (
+                            <button
+                              onClick={() => handleGenerateOne(cpmkIndex, subIndex)}
+                              disabled={generating || !cpmk.description.trim()}
+                              className="flex items-center gap-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors flex-shrink-0"
+                              title="Generate 1 Sub-CPMK dengan AI"
+                            >
+                              {generating && generatingSubIndex === `${cpmkIndex}-${subIndex}` ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Bot className="w-4 h-4" />
+                              )}
+                              <span className="text-sm">AI</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -354,7 +489,7 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-4">
             <span className="text-gray-700">
-              <span className="font-semibold">Terisi:</span> {formData.subCPMK.filter(s => s.description && s.description.trim()).length}/14
+              <span className="font-semibold">Terisi:</span> {formData.subCPMK.filter(s => s.description && s.description.trim()).length}/{totalSubs}
             </span>
             <span className="text-gray-700">
               <span className="font-semibold">Dari Database:</span> {formData.subCPMK.filter(s => s.fromDB).length}
@@ -363,8 +498,8 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
               <span className="font-semibold">Manual/Baru:</span> {formData.subCPMK.filter(s => !s.fromDB && s.description).length}
             </span>
           </div>
-          <span className={`font-medium ${formData.subCPMK.filter(s => s.description && s.description.trim()).length === 14 ? 'text-green-700' : 'text-red-700'}`}>
-            {formData.subCPMK.filter(s => s.description && s.description.trim()).length === 14 ? '✓ Semua terisi!' : '⚠ Harus terisi semua'}
+          <span className={`font-medium ${formData.subCPMK.filter(s => s.description && s.description.trim()).length === totalSubs ? 'text-green-700' : 'text-red-700'}`}>
+            {formData.subCPMK.filter(s => s.description && s.description.trim()).length === totalSubs ? '✓ Semua terisi!' : '⚠ Harus terisi semua'}
           </span>
         </div>
       </div>
