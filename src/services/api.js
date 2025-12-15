@@ -122,6 +122,7 @@ export const generatedRPSAPI = {
 export const aiHelperAPI = {
   healthCheck: () => apiClient.get('/ai/health'),
   getTypes: () => apiClient.get('/ai/types'),
+  generateCourseDescription: (data) => apiClient.post('/ai/generate/description', data),
   generateCPMK: (data) => apiClient.post('/ai/generate/cpmk', data),
   generateSubCPMK: (data) => apiClient.post('/ai/generate/sub-cpmk', data),
   generateTopik: (data) => apiClient.post('/ai/generate/topik', data),

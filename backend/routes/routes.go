@@ -135,6 +135,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 		{
 			ai.GET("/health", aiController.HealthCheck)
 			ai.GET("/types", aiController.GetTypes)
+			ai.POST("/generate/description", aiController.GenerateDescription)
 			ai.POST("/generate/cpmk", aiController.GenerateCPMK)
 			ai.POST("/generate/sub-cpmk", aiController.GenerateSubCPMK)
 			ai.POST("/generate/topik", aiController.GenerateTopik)

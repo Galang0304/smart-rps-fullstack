@@ -9,9 +9,10 @@ import (
 	"os"
 	"strings"
 
+	"smart-rps-backend/models"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"smart-rps-backend/models"
 	"gorm.io/gorm"
 )
 
@@ -38,6 +39,63 @@ func (ac *AIController) HealthCheck(c *gin.Context) {
 		"status":  "available",
 		"message": "AI service is ready",
 		"model":   "gpt-4o-mini",
+	})
+}
+
+// GenerateDescription - Generate course description using AI
+func (ac *AIController) GenerateDescription(c *gin.Context) {
+	var req struct {
+		CourseTitle string `json:"course_title" binding:"required"`
+		CourseCode  string `json:"course_code" binding:"required"`
+		Credits     int    `json:"credits"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	fmt.Printf("[AI] Generating description for: %s (%s) - %d SKS\n", req.CourseTitle, req.CourseCode, req.Credits)
+
+	prompt := fmt.Sprintf(`Buatkan deskripsi mata kuliah yang formal dan akademis untuk:
+Nama: %s
+Kode: %s
+SKS: %d
+
+Format output dalam JSON object dengan struktur:
+{
+  "description": "deskripsi mata kuliah dalam 1 paragraf yang menjelaskan tujuan, materi, dan manfaat mata kuliah"
+}
+
+Deskripsi harus formal, akademis, dan tidak lebih dari 150 kata.
+HANYA kembalikan JSON object, tanpa penjelasan tambahan.`, req.CourseTitle, req.CourseCode, req.Credits)
+
+	result, err := ac.callOpenAI(prompt)
+	if err != nil {
+		fmt.Printf("[AI] OpenAI error: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate description: " + err.Error()})
+		return
+	}
+
+	// Parse JSON response
+	var descData map[string]interface{}
+	cleanResult := strings.TrimSpace(result)
+	cleanResult = strings.TrimPrefix(cleanResult, "```json")
+	cleanResult = strings.TrimPrefix(cleanResult, "```")
+	cleanResult = strings.TrimSuffix(cleanResult, "```")
+	cleanResult = strings.TrimSpace(cleanResult)
+
+	if err := json.Unmarshal([]byte(cleanResult), &descData); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":        "Failed to parse AI response: " + err.Error(),
+			"raw_response": result,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    descData,
 	})
 }
 
