@@ -90,14 +90,31 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
 
     setGenerating(true);
     try {
+      let currentSubCpmks = [...formData.subCPMK];
+      
+      // Count filled Sub-CPMKs (those with description)
+      const filledSubCpmks = currentSubCpmks.filter(sub => sub.description && sub.description.trim());
+      const targetTotal = 14; // Target total Sub-CPMK
+      
+      // If already have 14 or more, just fill the empty ones
+      if (filledSubCpmks.length >= targetTotal) {
+        alert(`✅ Sudah ada ${filledSubCpmks.length} Sub-CPMK terisi. Target 14 sudah tercapai!`);
+        setGenerating(false);
+        return;
+      }
+      
+      // Calculate how many more Sub-CPMKs we need to generate
+      const needToGenerate = targetTotal - filledSubCpmks.length;
+      let generatedCount = 0;
+      
       // Generate for each CPMK that has description
-      for (let cpmkIndex = 0; cpmkIndex < formData.cpmk.length; cpmkIndex++) {
+      for (let cpmkIndex = 0; cpmkIndex < formData.cpmk.length && generatedCount < needToGenerate; cpmkIndex++) {
         const cpmk = formData.cpmk[cpmkIndex];
         if (!cpmk.description || !cpmk.description.trim()) continue;
 
         const cpmkCode = `CPMK-${cpmkIndex + 1}`;
         // Find empty Sub-CPMKs for this CPMK
-        const subCpmksForThisCpmk = formData.subCPMK.filter(sub => sub.cpmk_id === cpmkCode);
+        const subCpmksForThisCpmk = currentSubCpmks.filter(sub => sub.cpmk_id === cpmkCode);
         const emptySubCpmks = subCpmksForThisCpmk.filter(sub => !sub.description || !sub.description.trim());
         
         if (emptySubCpmks.length === 0) continue; // Skip if all filled
@@ -113,11 +130,12 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
           const generatedItems = res.data.data.items;
           
           // Fill only empty Sub-CPMKs, don't touch filled ones
-          const updatedSubCPMK = formData.subCPMK.map(sub => {
-            if (sub.cpmk_id === cpmkCode && (!sub.description || !sub.description.trim())) {
+          currentSubCpmks = currentSubCpmks.map(sub => {
+            if (sub.cpmk_id === cpmkCode && (!sub.description || !sub.description.trim()) && generatedCount < needToGenerate) {
               // Find the next available generated item
               const emptyIndex = emptySubCpmks.findIndex(e => e.code === sub.code);
               if (emptyIndex !== -1 && emptyIndex < generatedItems.length) {
+                generatedCount++;
                 return {
                   ...sub,
                   description: generatedItems[emptyIndex].description,
@@ -127,14 +145,15 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
             }
             return sub;
           });
-          
-          setFormData({ ...formData, subCPMK: updatedSubCPMK });
         } catch (error) {
           console.error(`Failed to generate Sub-CPMK for ${cpmkCode}:`, error);
         }
       }
       
-      alert('✨ Generate semua Sub-CPMK selesai!');
+      setFormData({ ...formData, subCPMK: currentSubCpmks });
+      
+      const totalFilled = currentSubCpmks.filter(sub => sub.description && sub.description.trim()).length;
+      alert(`✨ Generate selesai! Total Sub-CPMK terisi: ${totalFilled}/${targetTotal}`);
     } catch (error) {
       console.error('Failed to generate all Sub-CPMK:', error);
       alert('Gagal generate Sub-CPMK');
