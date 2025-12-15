@@ -150,7 +150,7 @@ export default function RPSCreate() {
 
   // Load selected course
   useEffect(() => {
-    if (selectedCourseId) {
+    if (selectedCourseId && Array.isArray(courses) && courses.length > 0) {
       const foundCourse = courses.find(c => c.id.toString() === selectedCourseId.toString());
       setCourse(foundCourse || null);
     }
@@ -289,7 +289,7 @@ export default function RPSCreate() {
               className="w-full md:w-96 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="">-- Pilih Mata Kuliah --</option>
-              {courses.map((c) => (
+              {Array.isArray(courses) && courses.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.code} - {c.title}
                 </option>
@@ -537,7 +537,7 @@ function CPMKStep({ formData, setFormData, course }) {
       </div>
 
       <div className="space-y-4">
-        {formData.cpmk.map((item, index) => (
+        {Array.isArray(formData.cpmk) && formData.cpmk.map((item, index) => (
           <div key={index} className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-300 transition-colors">
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0">
@@ -601,6 +601,10 @@ function SubCPMKStep({ formData, setFormData, course }) {
     if (!course) return;
     
     const subCpmk = formData.subCpmk[index];
+    if (!Array.isArray(formData.cpmk)) {
+      alert('Data CPMK tidak valid!');
+      return;
+    }
     const relatedCpmk = formData.cpmk.find(c => c.code === subCpmk.relatedCpmk);
     
     if (!relatedCpmk || !relatedCpmk.description) {
@@ -635,6 +639,10 @@ function SubCPMKStep({ formData, setFormData, course }) {
   };
 
   const handleGenerateAll = async () => {
+    if (!Array.isArray(formData.cpmk)) {
+      alert('Data CPMK tidak valid!');
+      return;
+    }
     setGenerating(true);
     try {
       const newSubCpmk = [...formData.subCpmk];
@@ -707,7 +715,7 @@ function SubCPMKStep({ formData, setFormData, course }) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {formData.subCpmk.map((item, index) => (
+        {Array.isArray(formData.subCpmk) && formData.subCpmk.map((item, index) => (
           <div key={index} className="p-4 border-2 border-gray-200 rounded-lg hover:border-purple-300 transition-colors">
             <div className="flex items-start gap-3 mb-2">
               <span className="inline-block px-3 py-1 bg-purple-600 text-white font-semibold rounded-lg text-sm">
@@ -723,7 +731,7 @@ function SubCPMKStep({ formData, setFormData, course }) {
                 className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-purple-500"
               >
                 <option value="">- Pilih CPMK -</option>
-                {formData.cpmk.map(c => (
+                {Array.isArray(formData.cpmk) && formData.cpmk.map(c => (
                   <option key={c.code} value={c.code}>{c.code}</option>
                 ))}
               </select>
@@ -826,7 +834,7 @@ function BahanKajianStep({ formData, setFormData, course }) {
       </div>
 
       <div className="space-y-3">
-        {formData.bahanKajian.map((item, index) => (
+        {Array.isArray(formData.bahanKajian) && formData.bahanKajian.map((item, index) => (
           <div key={index} className="flex items-center gap-3">
             <span className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-semibold">
               {index + 1}
@@ -926,7 +934,7 @@ function RencanaMingguanStep({ formData, setFormData, course }) {
       </div>
 
       <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-        {formData.rencanaMingguan.map((minggu, index) => (
+        {Array.isArray(formData.rencanaMingguan) && formData.rencanaMingguan.map((minggu, index) => (
           <div 
             key={index} 
             className={`p-4 border-2 rounded-lg ${
@@ -955,7 +963,7 @@ function RencanaMingguanStep({ formData, setFormData, course }) {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   >
                     <option value="">- Pilih Sub-CPMK -</option>
-                    {formData.subCpmk.map(s => (
+                    {Array.isArray(formData.subCpmk) && formData.subCpmk.map(s => (
                       <option key={s.code} value={s.code}>{s.code}</option>
                     ))}
                   </select>
@@ -1085,7 +1093,7 @@ function ReferensiStep({ formData, setFormData, course }) {
       </div>
 
       <div className="space-y-3">
-        {formData.referensi.map((item, index) => (
+        {Array.isArray(formData.referensi) && formData.referensi.map((item, index) => (
           <div key={index} className="flex items-start gap-3">
             <span className="flex-shrink-0 w-8 h-8 bg-green-600 text-white rounded-full flex items-center justify-center font-semibold mt-1">
               {index + 1}
