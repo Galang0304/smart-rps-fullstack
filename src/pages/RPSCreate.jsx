@@ -621,11 +621,8 @@ function SubCPMKStep({ formData, setFormData, course }) {
     try {
       const res = await aiHelperAPI.generateSubCPMK({
         course_id: course.id,
-        course_code: course.code,
+        cpmk: `${relatedCpmk.code}: ${relatedCpmk.description}`,
         course_title: course.title,
-        cpmk_code: relatedCpmk.code,
-        cpmk_description: relatedCpmk.description,
-        existing_sub_cpmk: [],
       });
       
       if (res.data.data.items && res.data.data.items.length > 0) {
@@ -643,40 +640,52 @@ function SubCPMKStep({ formData, setFormData, course }) {
   };
 
   const handleGenerateAll = async () => {
-    if (!Array.isArray(formData.cpmk)) {
-      alert('Data CPMK tidak valid!');
+    if (!Array.isArray(formData.cpmk) || formData.cpmk.length === 0) {
+      alert('Harap isi CPMK terlebih dahulu!');
       return;
     }
+
+    // Filter CPMK yang sudah terisi
+    const validCpmk = formData.cpmk.filter(c => c.description && c.description.trim());
+    if (validCpmk.length === 0) {
+      alert('Harap isi deskripsi CPMK terlebih dahulu!');
+      return;
+    }
+
     setGenerating(true);
     try {
       const newSubCpmk = [...formData.subCpmk];
       
-      for (let i = 0; i < newSubCpmk.length; i++) {
-        if (newSubCpmk[i].description.trim()) continue; // Skip yang sudah ada
+      // Auto-assign CPMK ke Sub-CPMK secara merata (14 Sub-CPMK untuk n CPMK)
+      const subCpmkPerCpmk = Math.ceil(14 / validCpmk.length);
+      
+      for (let i = 0; i < 14; i++) {
+        const cpmkIndex = Math.floor(i / subCpmkPerCpmk);
+        const relatedCpmk = validCpmk[Math.min(cpmkIndex, validCpmk.length - 1)];
         
-        const relatedCpmk = formData.cpmk.find(c => c.code === newSubCpmk[i].relatedCpmk);
-        if (!relatedCpmk || !relatedCpmk.description) continue;
+        // Auto-assign CPMK
+        newSubCpmk[i].relatedCpmk = relatedCpmk.code;
 
-        try {
-          const res = await aiHelperAPI.generateSubCPMK({
-            course_id: course.id,
-            course_code: course.code,
-            course_title: course.title,
-            cpmk_code: relatedCpmk.code,
-            cpmk_description: relatedCpmk.description,
-            existing_sub_cpmk: [],
-          });
-          
-          if (res.data.data.items && res.data.data.items.length > 0) {
-            newSubCpmk[i].description = res.data.data.items[0].description;
+        // Generate deskripsi jika belum ada
+        if (!newSubCpmk[i].description.trim()) {
+          try {
+            const res = await aiHelperAPI.generateSubCPMK({
+              course_id: course.id,
+              cpmk: `${relatedCpmk.code}: ${relatedCpmk.description}`,
+              course_title: course.title,
+            });
+            
+            if (res.data.data.items && res.data.data.items.length > 0) {
+              newSubCpmk[i].description = res.data.data.items[0].description;
+            }
+          } catch (error) {
+            console.error(`Failed to generate Sub-CPMK ${i + 1}:`, error);
           }
-        } catch (error) {
-          console.error(`Failed to generate Sub-CPMK ${i + 1}:`, error);
         }
       }
       
       setFormData({ ...formData, subCpmk: newSubCpmk });
-      alert('✅ Generate selesai!');
+      alert('✅ Generate selesai! CPMK telah dipilih dan Sub-CPMK terisi otomatis.');
     } catch (error) {
       console.error('Failed to generate all:', error);
       alert('Gagal generate Sub-CPMK');
