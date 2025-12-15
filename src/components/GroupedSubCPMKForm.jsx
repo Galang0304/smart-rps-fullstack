@@ -49,6 +49,100 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
     loadSubCpmk();
   }, [course?.id]);
 
+  // Initialize empty Sub-CPMKs if none exist (14 total divided by CPMK count)
+  useEffect(() => {
+    if (formData.subCPMK.length === 0 && formData.cpmk.length > 0) {
+      const totalCpmks = formData.cpmk.length;
+      const totalSubCpmks = 14; // Fixed 14 Sub-CPMKs (not including UTS/UAS)
+      const subCpmksPerCpmk = Math.floor(totalSubCpmks / totalCpmks);
+      const remainder = totalSubCpmks % totalCpmks;
+      
+      const newSubCpmks = [];
+      formData.cpmk.forEach((cpmk, cpmkIndex) => {
+        const cpmkNumber = cpmkIndex + 1;
+        const cpmkCode = `CPMK-${cpmkNumber}`;
+        // First CPMKs get extra Sub-CPMK if there's remainder
+        const subCount = subCpmksPerCpmk + (cpmkIndex < remainder ? 1 : 0);
+        
+        for (let i = 0; i < subCount; i++) {
+          newSubCpmks.push({
+            code: `Sub-CPMK-${cpmkNumber}.${i + 1}`,
+            description: '',
+            cpmk_id: cpmkCode,
+            cpmkNumber: cpmkNumber,
+            subNumber: i + 1,
+            fromDB: false
+          });
+        }
+      });
+      
+      setFormData({ ...formData, subCPMK: newSubCpmks });
+    }
+  }, [formData.cpmk.length]);
+
+  const handleGenerateAll = async () => {
+    // Count how many CPMKs have descriptions
+    const filledCpmks = formData.cpmk.filter(c => c.description && c.description.trim());
+    if (filledCpmks.length === 0) {
+      alert('Minimal 1 CPMK harus terisi terlebih dahulu');
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      // Generate for each CPMK that has description
+      for (let cpmkIndex = 0; cpmkIndex < formData.cpmk.length; cpmkIndex++) {
+        const cpmk = formData.cpmk[cpmkIndex];
+        if (!cpmk.description || !cpmk.description.trim()) continue;
+
+        const cpmkCode = `CPMK-${cpmkIndex + 1}`;
+        // Find empty Sub-CPMKs for this CPMK
+        const subCpmksForThisCpmk = formData.subCPMK.filter(sub => sub.cpmk_id === cpmkCode);
+        const emptySubCpmks = subCpmksForThisCpmk.filter(sub => !sub.description || !sub.description.trim());
+        
+        if (emptySubCpmks.length === 0) continue; // Skip if all filled
+
+        try {
+          const res = await aiHelperAPI.generateSubCPMK({
+            course_id: course.id,
+            course_code: course.code,
+            course_title: course.title,
+            cpmk: cpmk.description,
+          });
+
+          const generatedItems = res.data.data.items;
+          
+          // Fill only empty Sub-CPMKs, don't touch filled ones
+          const updatedSubCPMK = formData.subCPMK.map(sub => {
+            if (sub.cpmk_id === cpmkCode && (!sub.description || !sub.description.trim())) {
+              // Find the next available generated item
+              const emptyIndex = emptySubCpmks.findIndex(e => e.code === sub.code);
+              if (emptyIndex !== -1 && emptyIndex < generatedItems.length) {
+                return {
+                  ...sub,
+                  description: generatedItems[emptyIndex].description,
+                  fromDB: false
+                };
+              }
+            }
+            return sub;
+          });
+          
+          setFormData({ ...formData, subCPMK: updatedSubCPMK });
+        } catch (error) {
+          console.error(`Failed to generate Sub-CPMK for ${cpmkCode}:`, error);
+        }
+      }
+      
+      alert('✨ Generate semua Sub-CPMK selesai!');
+    } catch (error) {
+      console.error('Failed to generate all Sub-CPMK:', error);
+      alert('Gagal generate Sub-CPMK');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const handleSaveToDB = async () => {
     if (!course?.id) {
       alert('Course ID tidak ditemukan');
@@ -136,22 +230,25 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
       const cpmkNumber = cpmkIndex + 1;
       const cpmkCode = `CPMK-${cpmkNumber}`;
       
-      // Generate Sub-CPMKs
-      const generatedItems = res.data.data.items.slice(0, subCpmksPerCpmk);
-      const newSubCpmks = generatedItems.map((item, idx) => ({
-        code: `Sub-CPMK-${cpmkNumber}.${idx + 1}`,
-        description: item.description,
-        cpmk_id: cpmkCode,
-        cpmkNumber: cpmkNumber,
-        subNumber: idx + 1,
-        fromDB: source === 'database'
-      }));
+      // Get existing Sub-CPMKs for this CPMK
+      const subCpmksForThisCpmk = formData.subCPMK.filter(sub => sub.cpmk_id === cpmkCode);
+      const generatedItems = res.data.data.items;
       
-      // Remove existing Sub-CPMKs for this CPMK and add new ones
-      const otherSubCpmks = formData.subCPMK.filter(sub => sub.cpmk_id !== cpmkCode);
-      const updatedSubCPMK = [...otherSubCpmks, ...newSubCpmks].sort((a, b) => {
-        if (a.cpmkNumber !== b.cpmkNumber) return a.cpmkNumber - b.cpmkNumber;
-        return a.subNumber - b.subNumber;
+      // Only fill empty Sub-CPMKs, keep ones with data (especially from DB)
+      const updatedSubCPMK = formData.subCPMK.map(sub => {
+        if (sub.cpmk_id === cpmkCode && (!sub.description || !sub.description.trim())) {
+          // This is an empty Sub-CPMK for this CPMK, fill it
+          const emptySubCpmks = subCpmksForThisCpmk.filter(s => !s.description || !s.description.trim());
+          const emptyIndex = emptySubCpmks.findIndex(e => e.code === sub.code);
+          if (emptyIndex !== -1 && emptyIndex < generatedItems.length) {
+            return {
+              ...sub,
+              description: generatedItems[emptyIndex].description,
+              fromDB: source === 'database'
+            };
+          }
+        }
+        return sub; // Keep existing data
       });
       
       setFormData({ ...formData, subCPMK: updatedSubCPMK });
@@ -258,33 +355,48 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
 
   return (
     <div className="space-y-6">
-      {/* Header with Save Button */}
+      {/* Header with Generate All and Save Button */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Sub-CPMK (Dikelompokkan per CPMK)</h2>
           <p className="text-sm text-gray-600 mt-1">
-            Jumlah Sub-CPMK per CPMK: <span className="font-semibold text-blue-600">~{subCpmksPerCpmk}</span> 
-            <span className="text-gray-500"> (14 Sub-CPMK dibagi {totalCpmks} CPMK)</span>
+            Total Sub-CPMK: <span className="font-semibold text-blue-600">{formData.subCPMK.length}</span>
+            <span className="text-gray-500"> (Target: 14 Sub-CPMK dibagi {totalCpmks} CPMK)</span>
           </p>
         </div>
         {userRole !== 'dosen' && (
-          <button
-            onClick={handleSaveToDB}
-            disabled={saving || formData.subCPMK.every(s => s.fromDB) || loading}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-          >
-            {saving ? (
-              <>
+          <div className="flex gap-2">
+            <button
+              onClick={handleGenerateAll}
+              disabled={generating || formData.cpmk.every(c => !c.description || !c.description.trim()) || loading}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+              title="Generate semua Sub-CPMK kosong dengan AI"
+            >
+              {generating ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Menyimpan...</span>
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                <span>Simpan ke DB</span>
-              </>
-            )}
-          </button>
+              ) : (
+                <Bot className="w-4 h-4" />
+              )}
+              <span>Generate All AI</span>
+            </button>
+            <button
+              onClick={handleSaveToDB}
+              disabled={saving || formData.subCPMK.every(s => s.fromDB) || loading}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Menyimpan...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Simpan ke DB</span>
+                </>
+              )}
+            </button>
+          </div>
         )}
       </div>
 
