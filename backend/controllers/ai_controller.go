@@ -305,6 +305,146 @@ HANYA kembalikan JSON array, tanpa penjelasan tambahan.`, req.CPMK, req.CourseTi
 	})
 }
 
+// GenerateBahanKajian - Generate bahan kajian (study materials)
+func (ac *AIController) GenerateBahanKajian(c *gin.Context) {
+	var req struct {
+		CourseCode  string                   `json:"course_code"`
+		CourseTitle string                   `json:"course_title" binding:"required"`
+		CPMKList    []map[string]interface{} `json:"cpmk_list"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Build CPMK context
+	cpmkContext := ""
+	for i, cpmk := range req.CPMKList {
+		if desc, ok := cpmk["description"].(string); ok {
+			cpmkContext += fmt.Sprintf("%d. %s\n", i+1, desc)
+		}
+	}
+
+	prompt := fmt.Sprintf(`Buatkan 5-8 bahan kajian (topik utama) untuk mata kuliah "%s" (%s).
+
+CPMK yang harus dicapai:
+%s
+
+Format output dalam JSON object dengan struktur:
+{
+  "items": ["Topik 1: Deskripsi bahan kajian", "Topik 2: Deskripsi bahan kajian", ...]
+}
+
+Bahan kajian harus mencakup semua aspek CPMK dan tersusun secara logis.
+HANYA kembalikan JSON object, tanpa penjelasan tambahan.`, req.CourseTitle, req.CourseCode, cpmkContext)
+
+	result, err := ac.callOpenAI(prompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate Bahan Kajian: " + err.Error()})
+		return
+	}
+
+	// Parse JSON response
+	var responseData map[string]interface{}
+	cleanResult := strings.TrimSpace(result)
+	cleanResult = strings.TrimPrefix(cleanResult, "```json")
+	cleanResult = strings.TrimPrefix(cleanResult, "```")
+	cleanResult = strings.TrimSuffix(cleanResult, "```")
+	cleanResult = strings.TrimSpace(cleanResult)
+
+	if err := json.Unmarshal([]byte(cleanResult), &responseData); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse AI response: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    responseData,
+	})
+}
+
+// GenerateRencanaMingguan - Generate 16-week learning plan
+func (ac *AIController) GenerateRencanaMingguan(c *gin.Context) {
+	var req struct {
+		CourseCode  string                   `json:"course_code"`
+		CourseTitle string                   `json:"course_title" binding:"required"`
+		CPMKList    []map[string]interface{} `json:"cpmk_list"`
+		SubCPMKList []map[string]interface{} `json:"sub_cpmk_list"`
+		BahanKajian []string                 `json:"bahan_kajian"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Build context
+	cpmkContext := ""
+	for i, cpmk := range req.CPMKList {
+		if desc, ok := cpmk["description"].(string); ok {
+			cpmkContext += fmt.Sprintf("%d. %s\n", i+1, desc)
+		}
+	}
+
+	subCpmkContext := ""
+	for i, subCpmk := range req.SubCPMKList {
+		if desc, ok := subCpmk["description"].(string); ok && i < 14 {
+			subCpmkContext += fmt.Sprintf("%d. %s\n", i+1, desc)
+		}
+	}
+
+	bahanContext := strings.Join(req.BahanKajian, "\n")
+
+	prompt := fmt.Sprintf(`Buatkan rencana pembelajaran 16 minggu untuk mata kuliah "%s" (%s).
+
+CPMK:
+%s
+
+Sub-CPMK (14 minggu pembelajaran, minggu 8 UTS, minggu 16 UAS):
+%s
+
+Bahan Kajian:
+%s
+
+Format output dalam JSON object dengan struktur:
+{
+  "weeks": [
+    {"minggu": 1, "subCpmk": "Sub-CPMK-1", "materi": "materi minggu 1", "metode": "Ceramah, Diskusi", "penilaian": "Quiz"},
+    {"minggu": 2, "subCpmk": "Sub-CPMK-2", "materi": "materi minggu 2", "metode": "Praktikum", "penilaian": "Tugas"},
+    ...
+  ]
+}
+
+Buatkan untuk 14 minggu (skip minggu 8 dan 16 karena UTS/UAS).
+Urutkan materi dari dasar ke kompleks, cocokkan dengan urutan Sub-CPMK.
+HANYA kembalikan JSON object, tanpa penjelasan tambahan.`, req.CourseTitle, req.CourseCode, cpmkContext, subCpmkContext, bahanContext)
+
+	result, err := ac.callOpenAI(prompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate Rencana Mingguan: " + err.Error()})
+		return
+	}
+
+	// Parse JSON response
+	var responseData map[string]interface{}
+	cleanResult := strings.TrimSpace(result)
+	cleanResult = strings.TrimPrefix(cleanResult, "```json")
+	cleanResult = strings.TrimPrefix(cleanResult, "```")
+	cleanResult = strings.TrimSuffix(cleanResult, "```")
+	cleanResult = strings.TrimSpace(cleanResult)
+
+	if err := json.Unmarshal([]byte(cleanResult), &responseData); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse AI response: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    responseData,
+	})
+}
+
 // GenerateTopik - Generate learning topics using Gemini
 func (ac *AIController) GenerateTopik(c *gin.Context) {
 	var req struct {

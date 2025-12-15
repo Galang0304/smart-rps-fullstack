@@ -138,6 +138,8 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 			ai.POST("/generate/description", aiController.GenerateDescription)
 			ai.POST("/generate/cpmk", aiController.GenerateCPMK)
 			ai.POST("/generate/sub-cpmk", aiController.GenerateSubCPMK)
+			ai.POST("/generate/bahan-kajian", aiController.GenerateBahanKajian)
+			ai.POST("/generate/rencana-mingguan", aiController.GenerateRencanaMingguan)
 			ai.POST("/generate/topik", aiController.GenerateTopik)
 			ai.POST("/generate/tugas", aiController.GenerateTugas)
 			ai.POST("/generate/referensi", aiController.GenerateReferensi)
