@@ -13,38 +13,43 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
 
   // Initialize Sub-CPMKs based on CPMK count (always total 14)
   useEffect(() => {
-    const loadAndInitSubCpmk = async () => {
-      if (!course?.id || formData.cpmk.length === 0) {
-        // Initialize based on current CPMK count
-        const totalCpmks = formData.cpmk.length || 3;
-        const totalSubCpmks = 14;
-        const subCpmksPerCpmk = Math.floor(totalSubCpmks / totalCpmks);
-        const remainder = totalSubCpmks % totalCpmks;
+    if (formData.cpmk.length === 0) return;
+    
+    const initializeSubCpmks = () => {
+      const totalCpmks = formData.cpmk.length;
+      const totalSubCpmks = 14;
+      const subCpmksPerCpmk = Math.floor(totalSubCpmks / totalCpmks);
+      const remainder = totalSubCpmks % totalCpmks;
+      
+      const newSubCpmks = [];
+      formData.cpmk.forEach((cpmk, cpmkIndex) => {
+        const cpmkNumber = cpmkIndex + 1;
+        const cpmkCode = `CPMK-${cpmkNumber}`;
+        // First CPMKs get extra Sub-CPMK if there's remainder
+        const subCount = subCpmksPerCpmk + (cpmkIndex < remainder ? 1 : 0);
         
-        const newSubCpmks = [];
-        formData.cpmk.forEach((cpmk, cpmkIndex) => {
-          const cpmkNumber = cpmkIndex + 1;
-          const cpmkCode = `CPMK-${cpmkNumber}`;
-          // First CPMKs get extra Sub-CPMK if there's remainder
-          const subCount = subCpmksPerCpmk + (cpmkIndex < remainder ? 1 : 0);
-          
-          for (let i = 0; i < subCount; i++) {
-            newSubCpmks.push({
-              code: `Sub-CPMK-${cpmkNumber}.${i + 1}`,
-              description: '',
-              cpmk_id: cpmkCode,
-              cpmkNumber: cpmkNumber,
-              subNumber: i + 1,
-              fromDB: false
-            });
-          }
-        });
-        
-        setFormData({ ...formData, subCPMK: newSubCpmks });
+        for (let i = 0; i < subCount; i++) {
+          newSubCpmks.push({
+            code: `Sub-CPMK-${cpmkNumber}.${i + 1}`,
+            description: '',
+            cpmk_id: cpmkCode,
+            cpmkNumber: cpmkNumber,
+            subNumber: i + 1,
+            fromDB: false
+          });
+        }
+      });
+      
+      setFormData({ ...formData, subCPMK: newSubCpmks });
+    };
+    
+    // Try to load from database first
+    const loadFromDB = async () => {
+      if (!course?.id) {
+        initializeSubCpmks();
         return;
       }
       
-      // Try to load from database
       setLoading(true);
       try {
         const res = await apiClient.get(`/cpmk/course/${course.id}`);
@@ -66,48 +71,30 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
             }
           });
           
-          if (allSubCpmks.length > 0) {
+          if (allSubCpmks.length >= 14) {
+            // Use database data if we have enough
             setFormData({ ...formData, subCPMK: allSubCpmks });
           } else {
-            // No Sub-CPMK in DB, initialize empty ones
-            const totalCpmks = formData.cpmk.length;
-            const totalSubCpmks = 14;
-            const subCpmksPerCpmk = Math.floor(totalSubCpmks / totalCpmks);
-            const remainder = totalSubCpmks % totalCpmks;
-            
-            const newSubCpmks = [];
-            formData.cpmk.forEach((cpmk, cpmkIndex) => {
-              const cpmkNumber = cpmkIndex + 1;
-              const cpmkCode = `CPMK-${cpmkNumber}`;
-              const subCount = subCpmksPerCpmk + (cpmkIndex < remainder ? 1 : 0);
-              
-              for (let i = 0; i < subCount; i++) {
-                newSubCpmks.push({
-                  code: `Sub-CPMK-${cpmkNumber}.${i + 1}`,
-                  description: '',
-                  cpmk_id: cpmkCode,
-                  cpmkNumber: cpmkNumber,
-                  subNumber: i + 1,
-                  fromDB: false
-                });
-              }
-            });
-            
-            setFormData({ ...formData, subCPMK: newSubCpmks });
+            // Initialize empty ones if DB data is incomplete
+            initializeSubCpmks();
           }
+        } else {
+          // No data in DB, initialize empty
+          initializeSubCpmks();
         }
       } catch (error) {
         console.error('Failed to load Sub-CPMK from DB:', error);
+        initializeSubCpmks();
       } finally {
         setLoading(false);
       }
     };
     
-    // Re-initialize Sub-CPMKs when CPMK count changes
-    if (formData.cpmk.length > 0 && formData.subCPMK.length === 0) {
-      loadAndInitSubCpmk();
+    // Always re-initialize when CPMK count changes
+    if (formData.subCPMK.length === 0) {
+      loadFromDB();
     }
-  }, [course?.id, formData.cpmk.length]);
+  }, [formData.cpmk.length]);
 
   const handleGenerateAll = async () => {
     // Check if all CPMKs have descriptions
