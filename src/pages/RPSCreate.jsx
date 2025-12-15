@@ -1,3 +1,57 @@
+/**
+ * ==========================================
+ * SMART RPS - Sistem Pembuatan RPS Otomatis
+ * ==========================================
+ * 
+ * STRUKTUR RPS (6 TAHAPAN):
+ * 
+ * 1. DESKRIPSI MATA KULIAH
+ *    - 1 paragraf formal akademik
+ *    - Generate AI atau input manual
+ * 
+ * 2. CAPAIAN PEMBELAJARAN MATA KULIAH (CPMK)
+ *    - 3–5 CPMK (bisa lebih)
+ *    - Diturunkan dari CPL Prodi
+ *    - Kata kerja operasional (Taksonomi Bloom)
+ *    - Generate AI per item atau manual
+ * 
+ * 3. SUB-CPMK
+ *    - Fixed 14 Sub-CPMK
+ *    - 1 Sub-CPMK per pertemuan (14 pertemuan materi)
+ *    - Urut dari dasar ke lanjut
+ *    - Setiap Sub-CPMK terhubung ke CPMK tertentu
+ *    - Generate AI individual atau batch
+ * 
+ * 4. BAHAN KAJIAN / MATERI
+ *    - Daftar topik/materi inti
+ *    - Selaras dengan Sub-CPMK
+ *    - Generate AI atau manual
+ * 
+ * 5. RENCANA PEMBELAJARAN MINGGUAN (16 Minggu)
+ *    - Minggu 1–7   : Materi + Sub-CPMK
+ *    - Minggu 8     : UJIAN TENGAH SEMESTER (UTS)
+ *    - Minggu 9–15  : Materi + Sub-CPMK
+ *    - Minggu 16    : UJIAN AKHIR SEMESTER (UAS)
+ *    
+ *    Per minggu materi berisi:
+ *    - Minggu ke-
+ *    - Sub-CPMK yang dipelajari
+ *    - Materi Pembelajaran
+ *    - Metode Pembelajaran (Ceramah, Diskusi, Praktikum, dll)
+ *    - Bentuk Penilaian (Tugas, Kuis, Presentasi, dll)
+ * 
+ * 6. REFERENSI
+ *    - Minimal 3 buku
+ *    - Minimal 2 jurnal
+ *    - Relevan dengan mata kuliah
+ *    - Format sitasi lengkap
+ * 
+ * OUTPUT:
+ * - JSON structure untuk database
+ * - Export ke Word (template RPS resmi)
+ * ==========================================
+ */
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Bot, Save, Loader2, X, Plus, BookOpen, Eye, EyeOff, Database, PenLine, FileText, List, Calendar, Book } from 'lucide-react';
@@ -473,8 +527,13 @@ function CPMKStep({ formData, setFormData, course }) {
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">🎯 Capaian Pembelajaran Mata Kuliah (CPMK)</h2>
         <p className="text-gray-600">
-          Definisikan CPMK untuk mata kuliah ini. Minimal 3 CPMK, bisa lebih.
+          Definisikan 3-5 CPMK untuk mata kuliah ini (bisa lebih). Gunakan kata kerja operasional (Taksonomi Bloom).
         </p>
+        <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+          <p className="text-xs text-blue-700">
+            <strong>Contoh kata kerja:</strong> Menjelaskan, Menganalisis, Merancang, Menerapkan, Mengevaluasi, Mengimplementasikan
+          </p>
+        </div>
       </div>
 
       <div className="space-y-4">
@@ -622,6 +681,11 @@ function SubCPMKStep({ formData, setFormData, course }) {
           <p className="text-gray-600">
             Total 14 Sub-CPMK untuk 14 minggu pembelajaran (minggu 8 UTS, minggu 16 UAS).
           </p>
+          <div className="mt-2 p-3 bg-purple-50 rounded-lg border border-purple-200">
+            <p className="text-xs text-purple-700">
+              <strong>Catatan:</strong> Urutkan Sub-CPMK dari dasar ke lanjut. Setiap Sub-CPMK harus terkait dengan salah satu CPMK di atas.
+            </p>
+          </div>
         </div>
         <button
           onClick={handleGenerateAll}
@@ -734,8 +798,13 @@ function BahanKajianStep({ formData, setFormData, course }) {
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">📚 Bahan Kajian</h2>
           <p className="text-gray-600">
-            Daftar topik/bahan kajian yang akan dipelajari dalam mata kuliah ini.
+            Daftar topik/bahan kajian yang akan dipelajari dalam mata kuliah ini. Selaras dengan Sub-CPMK.
           </p>
+          <div className="mt-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
+            <p className="text-xs text-amber-700">
+              <strong>Tips:</strong> Susun materi dari konsep dasar hingga aplikasi tingkat lanjut
+            </p>
+          </div>
         </div>
         <button
           onClick={handleGenerate}
@@ -987,6 +1056,14 @@ function ReferensiStep({ formData, setFormData, course }) {
           <p className="text-gray-600">
             Daftar buku, jurnal, dan sumber pembelajaran lainnya.
           </p>
+          <div className="mt-2 p-3 bg-green-50 rounded-lg border border-green-200">
+            <p className="text-xs text-green-700">
+              <strong>Minimal:</strong> 3 buku + 2 jurnal ilmiah yang relevan dengan mata kuliah
+            </p>
+            <p className="text-xs text-green-600 mt-1">
+              Format: Penulis. (Tahun). Judul. Penerbit/Jurnal.
+            </p>
+          </div>
         </div>
         <button
           onClick={handleGenerate}
