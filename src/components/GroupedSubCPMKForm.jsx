@@ -224,7 +224,7 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
       
       // Calculate how many Sub-CPMKs this CPMK should have
       const totalCpmks = formData.cpmk.length;
-      const subCpmksPerCpmk = Math.ceil(14 / totalCpmks);
+      const subCpmksPerCpmk = Math.floor(14 / totalCpmks);
       
       // Get CPMK number
       const cpmkNumber = cpmkIndex + 1;
@@ -244,7 +244,7 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
             return {
               ...sub,
               description: generatedItems[emptyIndex].description,
-              fromDB: source === 'database'
+              fromDB: false // Always mark as new for individual CPMK generation
             };
           }
         }
@@ -287,6 +287,7 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
         if (targetSub) {
           const newSubCPMK = formData.subCPMK.map(sub => {
             if (sub.code === targetSub.code) {
+              // Always mark as new (not from DB) for individual generation
               return { ...sub, description: generatedDescription, fromDB: false };
             }
             return sub;
@@ -304,12 +305,16 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
   };
 
   const addSubCpmk = (cpmkIndex) => {
-    const cpmkNumber = cpmkIndex + 1;
-    const cpmkCode = `CPMK-${cpmkNumber}`;
+    const cpmk = formData.cpmk[cpmkIndex];
+    const cpmkCode = cpmk.code;
+    // Extract actual CPMK number from code (e.g., "CPMK-4" -> 4)
+    const cpmkMatch = cpmkCode.match(/CPMK-(\d+)/);
+    const cpmkNumber = cpmkMatch ? parseInt(cpmkMatch[1]) : cpmkIndex + 1;
     
-    // Find existing Sub-CPMKs for this CPMK
+    // Find existing Sub-CPMKs for this CPMK and get highest sub number
     const existingSubCpmks = formData.subCPMK.filter(sub => sub.cpmk_id === cpmkCode);
-    const nextSubNumber = existingSubCpmks.length + 1;
+    const subNumbers = existingSubCpmks.map(sub => sub.subNumber || 0);
+    const nextSubNumber = Math.max(...subNumbers, 0) + 1;
     
     const newSubCpmk = {
       code: `Sub-CPMK-${cpmkNumber}.${nextSubNumber}`,
@@ -349,9 +354,9 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
     setFormData({ ...formData, subCPMK: newSubCPMK });
   };
 
-  // Calculate Sub-CPMKs per CPMK
+  // Calculate Sub-CPMKs per CPMK for display
   const totalCpmks = formData.cpmk.length;
-  const subCpmksPerCpmk = Math.ceil(14 / totalCpmks);
+  const subCpmksPerCpmk = totalCpmks > 0 ? Math.floor(14 / totalCpmks) : 14;
 
   return (
     <div className="space-y-6">

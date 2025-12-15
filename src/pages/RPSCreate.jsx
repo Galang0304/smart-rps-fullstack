@@ -546,26 +546,34 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
     setGenerating(true);
     setGeneratingIndex(index);
     try {
+      // Always force AI generation for individual CPMK (don't use database)
       const res = await aiHelperAPI.generateCPMK({
         course_id: course.id,
         course_code: course.code,
         course_title: course.title,
         credits: course.credits,
         existing_cpl: [],
-        force_ai: true,
       });
+      
+      // Check if response came from database
+      const source = res.data.source || 'ai';
       
       if (res.data.data.items && res.data.data.items.length > 0) {
         // Get the generated description
         const generatedDescription = res.data.data.items[0].description;
         
-        // Update only the specific CPMK
+        // Update only the specific CPMK - mark as new (not from DB)
         const newCPMK = [...formData.cpmk];
         newCPMK[index].description = generatedDescription;
-        newCPMK[index].fromDB = false;
+        newCPMK[index].fromDB = false; // Always false for individual generation
         setFormData({ ...formData, cpmk: newCPMK });
         
         if (!inputMode) setInputMode('manual');
+        
+        // Inform user if data unexpectedly came from database
+        if (source === 'database') {
+          console.log('⚠️ Note: Data came from database instead of AI generation');
+        }
       }
     } catch (error) {
       console.error('Failed to generate CPMK:', error);
@@ -777,7 +785,13 @@ function CPMKStep({ course, formData, setFormData, hasDBCpmk, setHasDBCpmk }) {
         ))}
         <button
           onClick={() => {
-            const newCPMK = [...formData.cpmk, { code: `CPMK-${formData.cpmk.length + 1}`, description: '', fromDB: false }];
+            // Find highest CPMK number and add 1
+            const cpmkNumbers = formData.cpmk.map(c => {
+              const match = c.code.match(/CPMK-(\d+)/);
+              return match ? parseInt(match[1]) : 0;
+            });
+            const nextNumber = Math.max(...cpmkNumbers, 0) + 1;
+            const newCPMK = [...formData.cpmk, { code: `CPMK-${nextNumber}`, description: '', fromDB: false }];
             setFormData({ ...formData, cpmk: newCPMK });
             if (!inputMode) setInputMode('manual');
           }}
