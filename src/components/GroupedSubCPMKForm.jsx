@@ -11,10 +11,23 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
   const [loading, setLoading] = useState(false);
   const userRole = localStorage.getItem('role');
 
-  // Initialize exactly 14 Sub-CPMKs when component mounts or CPMK changes
+  // Initialize exactly 14 Sub-CPMKs when component mounts
   useEffect(() => {
     const loadSubCpmk = async () => {
-      if (!course?.id) return;
+      if (!course?.id) {
+        // No course yet, just initialize 14 empty Sub-CPMKs
+        const newSubCpmks = [];
+        for (let i = 1; i <= 14; i++) {
+          newSubCpmks.push({
+            code: `Sub-CPMK-${i}`,
+            description: '',
+            fromDB: false
+          });
+        }
+        setFormData({ ...formData, subCPMK: newSubCpmks });
+        return;
+      }
+      
       setLoading(true);
       try {
         const res = await apiClient.get(`/cpmk/course/${course.id}`);
@@ -33,33 +46,32 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
             }
           });
           
-          // If database has data, use it but ensure we have exactly 14
-          if (allSubCpmks.length > 0) {
-            const fixedSubCpmks = [];
-            for (let i = 1; i <= 14; i++) {
-              const existing = allSubCpmks.find(s => s.code === `Sub-CPMK-${i}`);
-              fixedSubCpmks.push(existing || {
-                code: `Sub-CPMK-${i}`,
-                description: '',
-                fromDB: false
-              });
-            }
-            setFormData({ ...formData, subCPMK: fixedSubCpmks });
+          // Always ensure we have exactly 14 Sub-CPMKs
+          const fixedSubCpmks = [];
+          for (let i = 1; i <= 14; i++) {
+            const existing = allSubCpmks.find(s => s.code === `Sub-CPMK-${i}`);
+            fixedSubCpmks.push(existing || {
+              code: `Sub-CPMK-${i}`,
+              description: '',
+              fromDB: false
+            });
           }
+          setFormData({ ...formData, subCPMK: fixedSubCpmks });
+        } else {
+          // No data from database, create 14 empty ones
+          const newSubCpmks = [];
+          for (let i = 1; i <= 14; i++) {
+            newSubCpmks.push({
+              code: `Sub-CPMK-${i}`,
+              description: '',
+              fromDB: false
+            });
+          }
+          setFormData({ ...formData, subCPMK: newSubCpmks });
         }
       } catch (error) {
         console.error('Failed to load Sub-CPMK from DB:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    // If no Sub-CPMK exists, create exactly 14 empty ones
-    if (formData.subCPMK.length === 0) {
-      if (course?.id) {
-        loadSubCpmk();
-      } else {
-        // Initialize 14 empty Sub-CPMKs
+        // On error, still initialize 14 empty Sub-CPMKs
         const newSubCpmks = [];
         for (let i = 1; i <= 14; i++) {
           newSubCpmks.push({
@@ -69,8 +81,12 @@ export default function GroupedSubCPMKForm({ course, formData, setFormData }) {
           });
         }
         setFormData({ ...formData, subCPMK: newSubCpmks });
+      } finally {
+        setLoading(false);
       }
-    }
+    };
+    
+    loadSubCpmk();
   }, [course?.id]);
 
   const handleGenerateAll = async () => {
