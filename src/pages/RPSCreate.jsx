@@ -138,9 +138,13 @@ export default function RPSCreate() {
       setLoading(true);
       try {
         const res = await courseAPI.getAll();
-        setCourses(res.data.data || []);
+        // Handle nested response: res.data.data.data for pagination or res.data.data for direct array
+        const coursesData = res.data?.data?.data || res.data?.data || [];
+        console.log('Courses loaded:', coursesData);
+        setCourses(Array.isArray(coursesData) ? coursesData : []);
       } catch (error) {
         console.error('Failed to load courses:', error);
+        setCourses([]);
       } finally {
         setLoading(false);
       }
