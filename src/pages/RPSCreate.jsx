@@ -5,7 +5,7 @@ import { courseAPI, aiHelperAPI, generatedRPSAPI, API_BASE_URL } from '../servic
 import apiClient from '../services/api';
 import WordPreview from '../components/WordPreview';
 import InputModeSelector from '../components/InputModeSelector';
-import GroupedSubCPMKForm from '../components/GroupedSubCPMKForm';
+import CPMKAndSubCPMKStep from '../components/CPMKAndSubCPMKStep';
 
 export default function RPSCreate() {
   const { courseId } = useParams();
@@ -289,10 +289,9 @@ export default function RPSCreate() {
   }
 
   const steps = [
-    { id: 1, title: 'CPMK', component: CPMKStep },
-    { id: 2, title: 'Sub-CPMK', component: GroupedSubCPMKForm },
-    { id: 3, title: 'Topik Pembelajaran', component: TopikStep },
-    { id: 4, title: 'Rencana Tugas', component: TugasStep },
+    { id: 1, title: 'CPMK & Sub-CPMK', component: CPMKAndSubCPMKStep },
+    { id: 2, title: 'Topik Pembelajaran', component: TopikStep },
+    { id: 3, title: 'Rencana Tugas', component: TugasStep },
   ];
 
   const CurrentStepComponent = steps[currentStep - 1].component;
