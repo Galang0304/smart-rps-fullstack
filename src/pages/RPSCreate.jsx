@@ -600,6 +600,8 @@ function CPMKStep({ formData, setFormData, course }) {
 function SubCPMKStep({ formData, setFormData, course }) {
   const [generating, setGenerating] = useState(false);
   const [generatingIndex, setGeneratingIndex] = useState(null);
+  const [progress, setProgress] = useState(0);
+  const [progressText, setProgressText] = useState('');
 
   const handleGenerateOne = async (index) => {
     if (!course) return;
@@ -653,6 +655,9 @@ function SubCPMKStep({ formData, setFormData, course }) {
     }
 
     setGenerating(true);
+    setProgress(0);
+    setProgressText('Memulai generate...');
+    
     try {
       const newSubCpmk = [...formData.subCpmk];
       
@@ -665,6 +670,11 @@ function SubCPMKStep({ formData, setFormData, course }) {
         
         // Auto-assign CPMK
         newSubCpmk[i].relatedCpmk = relatedCpmk.code;
+
+        // Update progress
+        const currentProgress = Math.round(((i + 1) / 14) * 100);
+        setProgress(currentProgress);
+        setProgressText(`Generating Sub-CPMK ${i + 1} dari 14...`);
 
         // Generate deskripsi jika belum ada
         if (!newSubCpmk[i].description.trim()) {
@@ -682,20 +692,68 @@ function SubCPMKStep({ formData, setFormData, course }) {
             console.error(`Failed to generate Sub-CPMK ${i + 1}:`, error);
           }
         }
+        
+        // Update formData setiap iterasi agar user bisa lihat progress
+        setFormData({ ...formData, subCpmk: newSubCpmk });
       }
       
-      setFormData({ ...formData, subCpmk: newSubCpmk });
-      alert('✅ Generate selesai! CPMK telah dipilih dan Sub-CPMK terisi otomatis.');
+      setProgress(100);
+      setProgressText('Selesai!');
+      setTimeout(() => {
+        alert('✅ Generate selesai! CPMK telah dipilih dan Sub-CPMK terisi otomatis.');
+      }, 500);
     } catch (error) {
       console.error('Failed to generate all:', error);
       alert('Gagal generate Sub-CPMK');
     } finally {
-      setGenerating(false);
+      setTimeout(() => {
+        setGenerating(false);
+        setProgress(0);
+        setProgressText('');
+      }, 1000);
     }
   };
 
   return (
     <div>
+      {/* Progress Modal Overlay */}
+      {generating && generatingIndex === null && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full mx-4">
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-purple-100 rounded-full mb-4">
+                <Bot className="w-8 h-8 text-purple-600 animate-pulse" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Generating Sub-CPMK</h3>
+              <p className="text-sm text-gray-600">{progressText}</p>
+            </div>
+            
+            {/* Progress Bar */}
+            <div className="mb-4">
+              <div className="flex justify-between text-sm text-gray-600 mb-2">
+                <span>Progress</span>
+                <span className="font-bold text-purple-600">{progress}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                <div 
+                  className="bg-gradient-to-r from-purple-500 to-purple-600 h-4 rounded-full transition-all duration-300 ease-out flex items-center justify-end px-2"
+                  style={{ width: `${progress}%` }}
+                >
+                  {progress > 10 && (
+                    <span className="text-xs text-white font-bold">{progress}%</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="text-center text-xs text-gray-500">
+              <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+              Mohon tunggu, AI sedang bekerja...
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-start justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">📝 Sub-Capaian Pembelajaran (Sub-CPMK)</h2>
