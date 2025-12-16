@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"smart-rps-backend/config"
-	"smart-rps-backend/models"
 	"smart-rps-backend/routes"
 
 	"github.com/gin-gonic/gin"
@@ -21,23 +20,11 @@ func main() {
 		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
 	}
 
-	// Auto migrate all models (skip User - table exists)
-	err = db.AutoMigrate(
-		&models.Prodi{},
-		&models.Program{},
-		&models.Dosen{},
-		&models.Course{},
-		&models.Template{},
-		&models.TemplateVersion{},
-		&models.GeneratedRPS{},
-		&models.DosenRPSAccess{},
-	)
-	if err != nil {
+	// Run database migrations using raw SQL approach
+	// This avoids GORM's UUID scanning issues with PostgreSQL
+	if err := config.RunMigrations(db); err != nil {
 		log.Printf("Warning: Migration error: %v", err)
-		// Don't fail - continue if tables exist
 	}
-
-	log.Println("✓ Database migration completed successfully")
 
 	// Setup Gin router
 	r := gin.Default()

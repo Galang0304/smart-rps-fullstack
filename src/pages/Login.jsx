@@ -29,7 +29,7 @@ export default function Login() {
         navigate('/admin/dashboard', { replace: true });
         break;
       case 'kaprodi':
-        navigate('/prodi/dashboard', { replace: true });
+        navigate('/kaprodi/dashboard', { replace: true });
         break;
       case 'dosen':
         navigate('/dosen/dashboard', { replace: true });

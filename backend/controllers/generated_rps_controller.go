@@ -571,9 +571,9 @@ func getString(data map[string]interface{}, key string) string {
 // Create - Create new RPS
 func (gc *GeneratedRPSController) Create(c *gin.Context) {
 	var input struct {
-		CourseID *uuid.UUID      `json:"course_id"`
-		Result   json.RawMessage `json:"result"`
-		Status   string          `json:"status"`
+		CourseID *uuid.UUID  `json:"course_id"`
+		Result   interface{} `json:"result"`
+		Status   string      `json:"status"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -582,18 +582,29 @@ func (gc *GeneratedRPSController) Create(c *gin.Context) {
 		return
 	}
 
-	log.Printf("Create RPS - CourseID: %v, Status: %s, Result length: %d", input.CourseID, input.Status, len(input.Result))
+	// Convert result to JSON bytes
+	resultBytes, err := json.Marshal(input.Result)
+	if err != nil {
+		log.Printf("ERROR Create RPS - Failed to marshal result: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid result format"})
+		return
+	}
+
+	log.Printf("Create RPS - CourseID: %v, Status: %s, Result: %s", input.CourseID, input.Status, string(resultBytes))
 
 	// Jika Result kosong, set ke empty JSON object
-	resultData := input.Result
-	if len(resultData) == 0 {
-		resultData = []byte("{}")
+	if len(resultBytes) == 0 || string(resultBytes) == "null" {
+		resultBytes = []byte("{}")
 	}
 
 	rps := models.GeneratedRPS{
 		CourseID: input.CourseID,
-		Result:   []byte(resultData),
+		Result:   resultBytes,
 		Status:   input.Status,
+	}
+
+	if rps.Status == "" {
+		rps.Status = "draft"
 	}
 
 	if err := gc.db.Create(&rps).Error; err != nil {
@@ -602,7 +613,7 @@ func (gc *GeneratedRPSController) Create(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": rps})
+	c.JSON(http.StatusCreated, gin.H{"success": true, "data": rps})
 }
 
 // GetByID - Get RPS by ID
@@ -671,8 +682,8 @@ func (gc *GeneratedRPSController) Update(c *gin.Context) {
 	}
 
 	var input struct {
-		Result json.RawMessage `json:"result"`
-		Status string          `json:"status"`
+		Result interface{} `json:"result"`
+		Status string      `json:"status"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -681,7 +692,13 @@ func (gc *GeneratedRPSController) Update(c *gin.Context) {
 	}
 
 	if input.Result != nil {
-		rps.Result = []byte(input.Result)
+		resultBytes, err := json.Marshal(input.Result)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid result format"})
+			return
+		}
+		rps.Result = resultBytes
+		log.Printf("Update RPS - Result: %s", string(resultBytes))
 	}
 	if input.Status != "" {
 		rps.Status = input.Status
@@ -692,7 +709,7 @@ func (gc *GeneratedRPSController) Update(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": rps})
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": rps})
 }
 
 // Delete - Delete RPS

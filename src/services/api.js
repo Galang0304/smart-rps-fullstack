@@ -64,6 +64,17 @@ export const prodiAPI = {
   delete: (id) => apiClient.delete(`/prodis/${id}`),
 };
 
+// === CPL APIs ===
+export const cplAPI = {
+  getAll: (params) => apiClient.get('/cpl', { params }),
+  getById: (id) => apiClient.get(`/cpl/${id}`),
+  getByProdiId: (prodiId) => apiClient.get(`/cpl/prodi/${prodiId}`),
+  create: (data) => apiClient.post('/cpl', data),
+  batchCreate: (data) => apiClient.post('/cpl/batch', data),
+  update: (id, data) => apiClient.put(`/cpl/${id}`, data),
+  delete: (id) => apiClient.delete(`/cpl/${id}`),
+};
+
 // === COURSE APIs ===
 export const courseAPI = {
   getAll: (params) => apiClient.get('/courses', { params }),

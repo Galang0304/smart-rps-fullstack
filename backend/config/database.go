@@ -22,3 +22,11 @@ func NewPostgresConnection() (*gorm.DB, error) {
 	log.Println("✓ Connected to PostgreSQL database")
 	return db, nil
 }
+
+// GetSilentDB returns a DB instance with silent logger for operations
+// This helps avoid verbose logs during schema introspection
+func GetSilentDB(db *gorm.DB) *gorm.DB {
+	return db.Session(&gorm.Session{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+}

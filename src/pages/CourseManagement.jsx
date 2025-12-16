@@ -907,7 +907,7 @@ export default function CourseManagement() {
                             {!isAdminRoute && (
                               <Link
                                 to={(userRole === 'prodi' || userRole === 'kaprodi') 
-                                  ? `/prodi/rps/create/${course.id}?edit=${rpsId}`
+                                  ? `/kaprodi/rps/create/${course.id}?edit=${rpsId}`
                                   : `/rps/create/${course.id}?edit=${rpsId}`
                                 }
                                 className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors whitespace-nowrap"
@@ -921,7 +921,7 @@ export default function CourseManagement() {
                         ) : (
                           !isAdminRoute && (
                             <Link
-                              to={(userRole === 'prodi' || userRole === 'kaprodi') ? `/prodi/rps/create?courseId=${course.id}` : `/rps/create/${course.id}`}
+                              to={(userRole === 'prodi' || userRole === 'kaprodi') ? `/kaprodi/rps/create?courseId=${course.id}` : `/rps/create/${course.id}`}
                               className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors whitespace-nowrap"
                               title="Buat RPS"
                             >
@@ -1011,7 +1011,7 @@ export default function CourseManagement() {
                       </span>
                       <Link
                         to={(userRole === 'prodi' || userRole === 'kaprodi') 
-                          ? `/prodi/rps/create/${course.id}?edit=${rpsId}`
+                          ? `/kaprodi/rps/create/${course.id}?edit=${rpsId}`
                           : `/rps/create/${course.id}?edit=${rpsId}`
                         }
                         className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-600 bg-blue-50 rounded"
@@ -1022,7 +1022,7 @@ export default function CourseManagement() {
                     </>
                   ) : (
                     <Link
-                      to={(userRole === 'prodi' || userRole === 'kaprodi') ? `/prodi/rps/create?courseId=${course.id}` : `/rps/create/${course.id}`}
+                      to={(userRole === 'prodi' || userRole === 'kaprodi') ? `/kaprodi/rps/create?courseId=${course.id}` : `/rps/create/${course.id}`}
                       className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-600 bg-blue-50 rounded"
                     >
                       <FileText className="w-3 h-3" />

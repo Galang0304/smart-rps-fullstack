@@ -18,6 +18,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 	courseController := controllers.NewCourseController(db)
 	generatedRPSController := controllers.NewGeneratedRPSController(db)
 	cpmkController := controllers.NewCPMKController(db)
+	cplController := controllers.NewCPLController(db)
 	aiController := controllers.NewAIController(db)
 
 	// Health check
@@ -109,6 +110,18 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 			cpmk.POST("/import/excel", cpmkController.ImportExcel)
 			cpmk.POST("/import/csv", cpmkController.ImportCSV)
 			cpmk.GET("/export/excel", cpmkController.ExportExcel)
+		}
+
+		// CPL routes
+		cpl := v1.Group("/cpl")
+		{
+			cpl.GET("", cplController.GetAll)
+			cpl.GET("/:id", cplController.GetByID)
+			cpl.GET("/prodi/:prodi_id", cplController.GetByProdiID)
+			cpl.POST("", cplController.Create)
+			cpl.POST("/batch", cplController.BatchCreate)
+			cpl.PUT("/:id", cplController.Update)
+			cpl.DELETE("/:id", cplController.Delete)
 		}
 
 		// Templates routes

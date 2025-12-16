@@ -108,14 +108,14 @@ export default function Dashboard() {
       value: stats.totalCourses,
       icon: BookOpen,
       color: 'bg-blue-500',
-      link: userRole === 'prodi' ? '/prodi/courses' : '/courses',
+      link: (userRole === 'prodi' || userRole === 'kaprodi') ? '/kaprodi/courses' : '/courses',
     },
     {
       title: 'Total RPS',
       value: stats.totalRPS,
       icon: FileText,
       color: 'bg-purple-500',
-      link: userRole === 'prodi' ? '/prodi/rps' : '/rps/list',
+      link: (userRole === 'prodi' || userRole === 'kaprodi') ? '/kaprodi/rps' : '/rps/list',
     },
     {
       title: 'RPS Selesai',
@@ -177,7 +177,7 @@ export default function Dashboard() {
         <h2 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4">Quick Actions</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           <Link
-            to={userRole === 'prodi' || userRole === 'kaprodi' ? '/prodi/courses' : '/courses'}
+            to={(userRole === 'prodi' || userRole === 'kaprodi') ? '/kaprodi/courses' : '/courses'}
             className="flex items-center gap-3 p-3 md:p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
           >
             <div className="bg-blue-100 p-2 rounded-lg flex-shrink-0">
@@ -190,7 +190,7 @@ export default function Dashboard() {
           </Link>
 
           <Link
-            to={(userRole === 'prodi' || userRole === 'kaprodi') ? '/prodi/rps/create' : '/rps/create'}
+            to={(userRole === 'prodi' || userRole === 'kaprodi') ? '/kaprodi/rps/create' : '/rps/create'}
             className="flex items-center gap-3 p-3 md:p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
           >
             <div className="bg-green-100 p-2 rounded-lg flex-shrink-0">
@@ -203,7 +203,7 @@ export default function Dashboard() {
           </Link>
 
           <Link
-            to={(userRole === 'prodi' || userRole === 'kaprodi') ? '/prodi/rps' : '/rps/list'}
+            to={(userRole === 'prodi' || userRole === 'kaprodi') ? '/kaprodi/rps' : '/rps/list'}
             className="flex items-center gap-3 p-3 md:p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
           >
             <div className="bg-purple-100 p-2 rounded-lg flex-shrink-0">
@@ -217,7 +217,7 @@ export default function Dashboard() {
 
           {(userRole === 'prodi' || userRole === 'kaprodi') && (
             <Link
-              to="/prodi/dosens"
+              to="/kaprodi/dosen"
               className="flex items-center gap-3 p-3 md:p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
             >
               <div className="bg-orange-100 p-2 rounded-lg flex-shrink-0">

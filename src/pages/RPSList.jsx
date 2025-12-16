@@ -126,7 +126,7 @@ export default function RPSList() {
           <p className="text-gray-600 mt-1">Kelola dan export RPS yang telah dibuat</p>
         </div>
         <Link
-          to={(userRole === 'prodi' || userRole === 'kaprodi') ? '/prodi/rps/create' : '/rps/create'}
+          to={(userRole === 'prodi' || userRole === 'kaprodi') ? '/kaprodi/rps/create' : '/rps/create'}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
           <FileText className="w-5 h-5" />
@@ -209,7 +209,7 @@ export default function RPSList() {
                 <div className="flex gap-2 mb-2">
                   <Link
                     to={(userRole === 'prodi' || userRole === 'kaprodi') 
-                      ? `/prodi/rps/create/${rps.course_id}?edit=${rps.id}`
+                      ? `/kaprodi/rps/create/${rps.course_id}?edit=${rps.id}`
                       : `/rps/create/${rps.course_id}?edit=${rps.id}`
                     }
                     className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"

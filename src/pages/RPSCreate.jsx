@@ -218,7 +218,8 @@ export default function RPSCreate() {
 
       const payload = {
         course_id: course.id,
-        content: JSON.stringify(rpsContent)
+        result: rpsContent,
+        status: 'draft'
       };
 
       let res;
@@ -228,10 +229,19 @@ export default function RPSCreate() {
         res = await generatedRPSAPI.create(payload);
       }
 
-      if (res.data.success) {
+      // Check if response has data (success)
+      if (res.data && res.data.data) {
         setSavedRpsId(res.data.data.id);
         alert('✅ RPS berhasil disimpan!');
-        navigate('/rps');
+        // Navigate based on role
+        const userRole = localStorage.getItem('role');
+        if (userRole === 'kaprodi') {
+          navigate('/kaprodi/rps');
+        } else if (userRole === 'dosen') {
+          navigate('/dosen/rps');
+        } else {
+          navigate('/rps');
+        }
       }
     } catch (error) {
       console.error('Failed to save RPS:', error);
@@ -852,7 +862,18 @@ function BahanKajianStep({ formData, setFormData, course }) {
       });
       
       if (res.data.data && res.data.data.items) {
-        setFormData({ ...formData, bahanKajian: res.data.data.items });
+        // Ensure items are strings
+        const items = res.data.data.items.map(item => {
+          if (typeof item === 'string') {
+            return item;
+          }
+          // If it's an object, try to extract meaningful string
+          if (typeof item === 'object' && item !== null) {
+            return item.title || item.description || item.name || JSON.stringify(item);
+          }
+          return String(item);
+        });
+        setFormData({ ...formData, bahanKajian: items });
       }
     } catch (error) {
       console.error('Failed to generate bahan kajian:', error);
@@ -1108,7 +1129,20 @@ function ReferensiStep({ formData, setFormData, course }) {
       });
       
       if (res.data.data && res.data.data.items) {
-        setFormData({ ...formData, referensi: res.data.data.items });
+        // Convert object format to string format
+        const items = res.data.data.items.map(item => {
+          if (typeof item === 'string') {
+            return item;
+          }
+          // Format: Author. (Year). Title. Publisher.
+          const author = item.author || 'Unknown Author';
+          const year = item.year || 'n.d.';
+          const title = item.title || 'Untitled';
+          const publisher = item.publisher || '';
+          const type = item.type === 'journal' ? '[Jurnal]' : '[Buku]';
+          return `${author}. (${year}). ${title}. ${publisher} ${type}`.trim();
+        });
+        setFormData({ ...formData, referensi: items });
       }
     } catch (error) {
       console.error('Failed to generate referensi:', error);
