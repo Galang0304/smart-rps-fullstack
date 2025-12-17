@@ -73,6 +73,15 @@ export const cplAPI = {
   batchCreate: (data) => apiClient.post('/cpl/batch', data),
   update: (id, data) => apiClient.put(`/cpl/${id}`, data),
   delete: (id) => apiClient.delete(`/cpl/${id}`),
+  downloadTemplate: () => apiClient.get('/cpl/template/excel', { responseType: 'blob' }),
+  importExcel: (prodiId, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('prodi_id', prodiId);
+    return apiClient.post('/cpl/import/excel', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };
 
 // === COURSE APIs ===
@@ -91,6 +100,47 @@ export const courseAPI = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
+  downloadTemplate: () => apiClient.get('/courses/template/excel', { responseType: 'blob' }),
+  importExcel: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiClient.post('/courses/import/excel', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  exportExcel: (programId) => apiClient.get(`/courses/export/excel?program_id=${programId}`, { responseType: 'blob' }),
+};
+
+// === CPMK APIs ===
+export const cpmkAPI = {
+  getByCourseId: (courseId) => apiClient.get(`/cpmk/course/${courseId}`),
+  create: (data) => apiClient.post('/cpmk', data),
+  batchCreateOrUpdate: (data) => apiClient.post('/cpmk/batch', data),
+  update: (id, data) => apiClient.put(`/cpmk/${id}`, data),
+  delete: (id) => apiClient.delete(`/cpmk/${id}`),
+  addSubCPMK: (cpmkId, data) => apiClient.post(`/cpmk/${cpmkId}/sub-cpmk`, data),
+  deleteSubCPMK: (cpmkId, subCpmkId) => apiClient.delete(`/cpmk/${cpmkId}/sub-cpmk/${subCpmkId}`),
+  downloadTemplate: () => apiClient.get('/cpmk/template/excel', { responseType: 'blob' }),
+  importExcel: (courseId, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('course_id', courseId);
+    return apiClient.post('/cpmk/import/excel', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  importCSV: (courseId, cpmkFile, subCpmkFile) => {
+    const formData = new FormData();
+    formData.append('cpmk_file', cpmkFile);
+    if (subCpmkFile) {
+      formData.append('sub_cpmk_file', subCpmkFile);
+    }
+    formData.append('course_id', courseId);
+    return apiClient.post('/cpmk/import/csv', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  exportExcel: (courseId) => apiClient.get(`/cpmk/export/excel?course_id=${courseId}`, { responseType: 'blob' }),
 };
 
 // === TEMPLATE APIs ===
@@ -141,6 +191,7 @@ export const aiHelperAPI = {
   generateTopik: (data) => apiClient.post('/ai/generate/topik', data),
   generateReferensi: (data) => apiClient.post('/ai/generate/referensi', data),
   regenerate: (data) => apiClient.post('/ai/regenerate', data),
+  matchCPMKWithCPL: (data) => apiClient.post('/ai/match/cpmk-cpl', data), // NEW: AI matching CPMK-CPL
 };
 
 // === EXPORT APIs ===

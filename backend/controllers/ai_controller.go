@@ -115,12 +115,15 @@ func (ac *AIController) GetTypes(c *gin.Context) {
 }
 
 // GenerateCPMK - Generate CPMK using database first, fallback to AI
+// VERSION 1: Generate new CPMK if none exist
+// VERSION 2: Match existing CPMK to CPL if CPMK already exist
 func (ac *AIController) GenerateCPMK(c *gin.Context) {
 	var req struct {
 		CourseTitle string `json:"course_title" binding:"required"`
 		CourseCode  string `json:"course_code" binding:"required"`
 		Credits     int    `json:"credits"`
 		CourseID    string `json:"course_id"` // Optional: untuk lookup database
+		ProdiID     string `json:"prodi_id"`  // Required untuk get CPL
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -131,37 +134,130 @@ func (ac *AIController) GenerateCPMK(c *gin.Context) {
 
 	fmt.Printf("[AI] Generating CPMK for: %s (%s) - %d SKS\n", req.CourseTitle, req.CourseCode, req.Credits)
 
-	// 1. TRY DATABASE FIRST - Check if course_id provided and CPMK exists in database
+	// 1. CHECK IF CPMK EXISTS IN DATABASE
+	hasCPMK := false
+	var existingCPMKs []models.CPMK
 	if req.CourseID != "" {
 		courseUUID, err := uuid.Parse(req.CourseID)
 		if err == nil {
-			var cpmks []models.CPMK
-			if err := ac.db.Where("course_id = ?", courseUUID).Order("cpmk_number ASC").Find(&cpmks).Error; err == nil && len(cpmks) > 0 {
-				fmt.Printf("[AI] Found %d CPMK in database for course %s\n", len(cpmks), req.CourseID)
-
-				// Format database CPMK to match AI response format
-				items := make([]map[string]interface{}, len(cpmks))
-				for i, cpmk := range cpmks {
-					items[i] = map[string]interface{}{
-						"code":        fmt.Sprintf("CPMK-%d", cpmk.CPMKNumber),
-						"description": cpmk.Description,
-					}
-				}
-
-				c.JSON(http.StatusOK, gin.H{
-					"success": true,
-					"source":  "database",
-					"data": gin.H{
-						"items": items,
-					},
-				})
-				return
+			if err := ac.db.Where("course_id = ?", courseUUID).Order("cpmk_number ASC").Find(&existingCPMKs).Error; err == nil && len(existingCPMKs) > 0 {
+				hasCPMK = true
+				fmt.Printf("[AI] Found %d existing CPMK in database\n", len(existingCPMKs))
 			}
 		}
 	}
 
-	// 2. FALLBACK TO AI - If no database CPMK found, generate with AI
-	fmt.Printf("[AI] No database CPMK found, generating with AI\n")
+	// 2. GET CPL LIST FROM PRODI
+	var cplList []models.CPL
+	if req.ProdiID != "" {
+		prodiUUID, err := uuid.Parse(req.ProdiID)
+		if err == nil {
+			if err := ac.db.Preload("Indikators", func(db *gorm.DB) *gorm.DB {
+				return db.Order("urutan ASC")
+			}).Where("prodi_id = ?", prodiUUID).Order("kode_cpl ASC").Find(&cplList).Error; err != nil {
+				fmt.Printf("[AI] Warning: Failed to load CPL: %v\n", err)
+			} else {
+				fmt.Printf("[AI] Loaded %d CPL for prodi\n", len(cplList))
+			}
+		}
+	}
+
+	// VERSION 2: CPMK exists → Match to CPL
+	if hasCPMK && len(cplList) > 0 {
+		fmt.Printf("[AI] VERSION 2: Matching existing CPMK to CPL using AI\n")
+
+		// Format CPL dengan indikators
+		cplData := make([]map[string]interface{}, len(cplList))
+		for i, cpl := range cplList {
+			indikators := make([]string, len(cpl.Indikators))
+			for j, ind := range cpl.Indikators {
+				indikators[j] = ind.IndikatorKerja
+			}
+			cplData[i] = map[string]interface{}{
+				"kode":       cpl.KodeCPL,
+				"komponen":   cpl.Komponen,
+				"cpl":        cpl.CPL,
+				"indikators": indikators,
+			}
+		}
+
+		// Format existing CPMK
+		cpmkData := make([]map[string]interface{}, len(existingCPMKs))
+		for i, cpmk := range existingCPMKs {
+			cpmkData[i] = map[string]interface{}{
+				"code":        fmt.Sprintf("CPMK-%d", cpmk.CPMKNumber),
+				"description": cpmk.Description,
+			}
+		}
+
+		cplJSON, _ := json.Marshal(cplData)
+		cpmkJSON, _ := json.Marshal(cpmkData)
+
+		prompt := fmt.Sprintf(`Tugasmu adalah mencocokkan CPMK (Capaian Pembelajaran Mata Kuliah) yang sudah ada dengan CPL (Capaian Pembelajaran Lulusan) yang paling sesuai.
+
+Mata Kuliah: %s (%s)
+
+CPMK yang sudah ada:
+%s
+
+CPL Prodi yang tersedia:
+%s
+
+Analisis setiap CPMK dan tentukan CPL mana yang paling sesuai berdasarkan:
+1. Kesesuaian konten dan tema
+2. Level taksonomi Bloom
+3. Komponen kompetensi (Pengetahuan/Keterampilan Umum/Keterampilan Khusus/Sikap)
+4. Indikator kinerja dari CPL
+
+Format output dalam JSON array:
+[
+  {
+    "code": "CPMK-1",
+    "description": "deskripsi CPMK yang sudah ada",
+    "matched_cpl": "CPL-03",
+    "reason": "penjelasan singkat kenapa cocok dengan CPL ini"
+  }
+]
+
+HANYA kembalikan JSON array, tanpa penjelasan tambahan.`, req.CourseTitle, req.CourseCode, string(cpmkJSON), string(cplJSON))
+
+		result, err := ac.callOpenAI(prompt)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to match CPMK to CPL: " + err.Error()})
+			return
+		}
+
+		var matchedItems []map[string]interface{}
+		cleanResult := strings.TrimSpace(result)
+		cleanResult = strings.TrimPrefix(cleanResult, "```json")
+		cleanResult = strings.TrimPrefix(cleanResult, "```")
+		cleanResult = strings.TrimSuffix(cleanResult, "```")
+		cleanResult = strings.TrimSpace(cleanResult)
+
+		if err := json.Unmarshal([]byte(cleanResult), &matchedItems); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":        "Failed to parse AI matching result",
+				"raw_response": result,
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"version": "matched", // VERSION 2
+			"source":  "database_with_cpl_matching",
+			"data": gin.H{
+				"items": matchedItems,
+			},
+		})
+		return
+	}
+
+	// VERSION 1: No CPMK exists → Generate new CPMK
+	fmt.Printf("[AI] VERSION 1: Generating new CPMK with AI\n")
+
+	// VERSION 1: No CPMK exists → Generate new CPMK
+	fmt.Printf("[AI] VERSION 1: Generating new CPMK with AI\n")
 
 	prompt := fmt.Sprintf(`Buatkan 3-5 CPMK (Capaian Pembelajaran Mata Kuliah) untuk mata kuliah:
 Nama: %s
@@ -170,8 +266,7 @@ SKS: %d
 
 Format output dalam JSON array dengan struktur:
 [
-  {"code": "CPMK-1", "description": "deskripsi capaian pembelajaran"},
-  {"code": "CPMK-2", "description": "deskripsi capaian pembelajaran"}
+  {"code": "CPMK-1", "description": "deskripsi capaian pembelajaran", "matched_cpl": null}
 ]
 
 Pastikan CPMK menggunakan Taksonomi Bloom yang sesuai dengan level mata kuliah.
@@ -206,6 +301,7 @@ HANYA kembalikan JSON array, tanpa penjelasan tambahan.`, req.CourseTitle, req.C
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
+		"version": "generated", // VERSION 1
 		"source":  "ai",
 		"data": gin.H{
 			"items": items,
@@ -707,4 +803,135 @@ func (ac *AIController) callOpenAI(prompt string) (string, error) {
 	}
 
 	return openaiResp.Choices[0].Message.Content, nil
+}
+
+// MatchCPMKWithCPL - AI matching CPMK dengan CPL yang relevan
+func (ac *AIController) MatchCPMKWithCPL(c *gin.Context) {
+	var req struct {
+		ProdiID         string `json:"prodi_id" binding:"required"`
+		CPMKDescription string `json:"cpmk_description" binding:"required"`
+		CPMKCode        string `json:"cpmk_code"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Load all CPL for this prodi with indikators
+	var cpls []models.CPL
+	if err := ac.db.Where("prodi_id = ?", req.ProdiID).
+		Preload("Indikators", func(db *gorm.DB) *gorm.DB {
+			return db.Order("urutan ASC")
+		}).
+		Order("kode_cpl ASC").
+		Find(&cpls).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load CPL"})
+		return
+	}
+
+	if len(cpls) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":   "No CPL found for this prodi",
+			"matches": []interface{}{},
+		})
+		return
+	}
+
+	// Build prompt for AI
+	cplListStr := ""
+	for _, cpl := range cpls {
+		indikatorStr := ""
+		for i, ind := range cpl.Indikators {
+			indikatorStr += fmt.Sprintf("\n   %d. %s", i+1, ind.IndikatorKerja)
+		}
+		cplListStr += fmt.Sprintf("\n\n%s (%s):\n%s\nIndikator Kerja:%s",
+			cpl.KodeCPL, cpl.Komponen, cpl.CPL, indikatorStr)
+	}
+
+	prompt := fmt.Sprintf(`Anda adalah expert dalam kurikulum perguruan tinggi. Analisis keselarasan antara CPMK dengan CPL berikut.
+
+CPMK yang akan dianalisis:
+%s: %s
+
+Daftar CPL yang tersedia:%s
+
+Tugas Anda:
+1. Analisis deskripsi CPMK dan bandingkan dengan setiap CPL dan indikator kerjanya
+2. Tentukan CPL mana yang paling relevan/selaras dengan CPMK ini (bisa lebih dari 1)
+3. Berikan skor kesesuaian 0-100 untuk setiap CPL
+4. Berikan alasan singkat mengapa CPL tersebut selaras
+
+Output dalam format JSON:
+{
+  "matches": [
+    {
+      "kode_cpl": "CPL-01",
+      "score": 95,
+      "reason": "CPMK ini sangat selaras karena..."
+    }
+  ],
+  "recommendation": "Penjelasan singkat tentang keselarasan CPMK dengan CPL"
+}
+
+Urutkan matches berdasarkan score tertinggi. Hanya tampilkan CPL dengan score >= 60.`, req.CPMKCode, req.CPMKDescription, cplListStr)
+
+	// Call OpenAI
+	response, err := ac.callOpenAI(prompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("AI service error: %v", err)})
+		return
+	}
+
+	// Parse AI response
+	var aiResult struct {
+		Matches []struct {
+			KodeCPL string `json:"kode_cpl"`
+			Score   int    `json:"score"`
+			Reason  string `json:"reason"`
+		} `json:"matches"`
+		Recommendation string `json:"recommendation"`
+	}
+
+	// Clean response (remove markdown code blocks if present)
+	cleanedResponse := strings.TrimSpace(response)
+	cleanedResponse = strings.TrimPrefix(cleanedResponse, "```json")
+	cleanedResponse = strings.TrimPrefix(cleanedResponse, "```")
+	cleanedResponse = strings.TrimSuffix(cleanedResponse, "```")
+	cleanedResponse = strings.TrimSpace(cleanedResponse)
+
+	if err := json.Unmarshal([]byte(cleanedResponse), &aiResult); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":        "Failed to parse AI response",
+			"raw_response": response,
+		})
+		return
+	}
+
+	// Enrich matches with full CPL data
+	enrichedMatches := []map[string]interface{}{}
+	for _, match := range aiResult.Matches {
+		for _, cpl := range cpls {
+			if cpl.KodeCPL == match.KodeCPL {
+				enrichedMatches = append(enrichedMatches, map[string]interface{}{
+					"kode_cpl":    cpl.KodeCPL,
+					"komponen":    cpl.Komponen,
+					"cpl":         cpl.CPL,
+					"score":       match.Score,
+					"reason":      match.Reason,
+					"indikators":  cpl.Indikators,
+					"recommended": match.Score >= 80, // Auto-recommend if score >= 80
+				})
+				break
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":        true,
+		"matches":        enrichedMatches,
+		"recommendation": aiResult.Recommendation,
+		"total_cpl":      len(cpls),
+		"matched_cpl":    len(enrichedMatches),
+	})
 }

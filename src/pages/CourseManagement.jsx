@@ -361,16 +361,8 @@ export default function CourseManagement() {
 
   const handleDownloadTemplate = async () => {
     try {
-      const response = await fetch('http://103.151.145.182:8080/api/v1/courses/template/excel', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      
-      if (!response.ok) throw new Error('Failed to download template');
-      
-      const blob = await response.blob();
+      const response = await courseAPI.downloadTemplate();
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -392,16 +384,8 @@ export default function CourseManagement() {
     }
 
     try {
-      const response = await fetch(`http://103.151.145.182:8080/api/v1/courses/export/excel?program_id=${selectedProgram}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      
-      if (!response.ok) throw new Error('Failed to export');
-      
-      const blob = await response.blob();
+      const response = await courseAPI.exportExcel(selectedProgram);
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -434,24 +418,12 @@ export default function CourseManagement() {
       formData.append('file', excelFile);
       formData.append('program_id', selectedProgram);
 
-      const response = await fetch('http://103.151.145.182:8080/api/v1/courses/import/excel', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: formData,
-      });
-
-      const data = await response.json();
+      const response = await courseAPI.importExcel(excelFile);
       
-      if (!response.ok) {
-        throw new Error(data.error || 'Import failed');
-      }
-
       setUploadStatus({
         success: true,
-        message: data.message || `Berhasil import ${data.imported_count} mata kuliah`,
-        details: data.failed_count > 0 ? `${data.failed_count} gagal, ${data.errors?.slice(0, 3).join(', ')}` : null,
+        message: response.data.message || `Berhasil import ${response.data.imported_count} mata kuliah`,
+        details: response.data.failed_count > 0 ? `${response.data.failed_count} gagal, ${response.data.errors?.slice(0, 3).join(', ')}` : null,
       });
       
       setExcelFile(null);
@@ -463,7 +435,7 @@ export default function CourseManagement() {
       setUploadStatus({
         success: false,
         message: 'Import gagal',
-        details: error.message,
+        details: error.response?.data?.error || error.message,
       });
     } finally {
       setLoading(false);

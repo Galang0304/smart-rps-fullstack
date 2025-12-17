@@ -173,7 +173,7 @@ function Layout({ children }) {
   const menuItems = getMenuItems();
 
   return (
-    <div className="min-h-screen bg-gray-100 flex">
+    <div className="min-h-screen bg-gray-100 lg:flex">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div 
@@ -182,23 +182,28 @@ function Layout({ children }) {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar - Always Fixed */}
       <aside className={`
-        fixed lg:static inset-y-0 left-0 z-50
+        fixed inset-y-0 left-0 z-50 lg:z-30
         w-64 bg-slate-900 text-white
         transform transition-transform duration-200 ease-in-out
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-        <div className="flex flex-col h-full">
-          {/* Logo */}
-          <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="bg-blue-600 p-2 rounded-lg">
-                <BookOpen size={24} />
+        <div className="flex flex-col h-full overflow-hidden">
+          {/* Logo - Fixed at Top */}
+          <div className="flex-shrink-0 p-4 border-b border-slate-800 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white rounded-full p-1.5 flex items-center justify-center shadow-md">
+                <img 
+                  src="/logo-umm.png" 
+                  alt="Logo Unismuh Makassar" 
+                  className="w-full h-full object-contain"
+                />
               </div>
               <div>
-                <h1 className="text-lg font-bold">SMART RPS</h1>
-                <p className="text-xs text-slate-400 capitalize">{role}</p>
+                <h1 className="text-base font-bold leading-tight">SMART RPS</h1>
+                <p className="text-xs text-slate-400">Unismuh Makassar</p>
+                <p className="text-xs text-blue-400 capitalize font-medium">{role}</p>
               </div>
             </div>
             <button 
@@ -209,9 +214,9 @@ function Layout({ children }) {
             </button>
           </div>
 
-          {/* Menu Items */}
-          <nav className="flex-1 p-4 overflow-y-auto">
-            <ul className="space-y-1">
+          {/* Menu Items - Scrollable Area */}
+          <nav className="flex-1 p-4 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-800">
+            <ul className="space-y-1 pb-4">
               {menuItems.map((item, index) => (
                 <li key={index}>
                   <Link
@@ -232,25 +237,25 @@ function Layout({ children }) {
             </ul>
           </nav>
 
-          {/* User Info & Logout */}
-          <div className="p-4 border-t border-slate-800">
-            <div className="bg-slate-800 rounded-lg p-3 mb-3">
-              <p className="text-sm font-medium truncate">{user.display_name || user.username || 'User'}</p>
-              <p className="text-xs text-slate-400 truncate">{user.email || ''}</p>
+          {/* User Info & Logout - Fixed at Bottom */}
+          <div className="flex-shrink-0 p-3 md:p-4 border-t border-slate-800 bg-slate-900">
+            <div className="bg-slate-800 rounded-lg p-2.5 md:p-3 mb-2 md:mb-3">
+              <p className="text-xs md:text-sm font-medium truncate">{user.display_name || user.username || 'User'}</p>
+              <p className="text-[10px] md:text-xs text-slate-400 truncate">{user.email || ''}</p>
             </div>
             <button
               onClick={handleLogout}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+              className="w-full flex items-center justify-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 md:py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-lg transition-colors text-sm md:text-base font-medium"
             >
-              <LogOut size={18} />
+              <LogOut size={16} className="md:w-[18px] md:h-[18px]" />
               <span>Logout</span>
             </button>
           </div>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-h-screen">
+      {/* Main Content - Add margin to accommodate fixed sidebar on desktop */}
+      <div className="flex-1 flex flex-col min-h-screen lg:ml-64">
         {/* Top Header */}
         <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 flex items-center justify-between lg:justify-end">
           <button 
@@ -272,9 +277,37 @@ function Layout({ children }) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-4 md:p-6 overflow-auto">
+        <main className="flex-1 p-4 md:p-6 overflow-auto pb-20 lg:pb-6">
           {children}
         </main>
+
+        {/* Bottom Navigation - Mobile Only */}
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40">
+          <div className="flex items-center justify-around px-2 py-2">
+            {menuItems.slice(0, 4).map((item, index) => (
+              <Link
+                key={index}
+                to={item.path}
+                className={`
+                  flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-all flex-1
+                  ${isActive(item.path) 
+                    ? 'text-blue-600 bg-blue-50' 
+                    : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'}
+                `}
+              >
+                <item.icon size={20} strokeWidth={isActive(item.path) ? 2.5 : 2} />
+                <span className="text-xs font-medium truncate max-w-full">{item.label}</span>
+              </Link>
+            ))}
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="flex flex-col items-center gap-1 px-3 py-2 rounded-lg text-gray-600 hover:text-blue-600 hover:bg-gray-50 transition-all flex-1"
+            >
+              <Menu size={20} />
+              <span className="text-xs font-medium">Menu</span>
+            </button>
+          </div>
+        </nav>
       </div>
     </div>
   );

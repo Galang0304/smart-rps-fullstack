@@ -136,11 +136,21 @@ func RunMigrations(db *gorm.DB) error {
 			prodi_id uuid NOT NULL REFERENCES prodis(id),
 			kode_cpl text NOT NULL,
 			komponen text NOT NULL,
-			deskripsi text NOT NULL,
-			created_at timestamp DEFAULT CURRENT_TIMESTAMP,
-			updated_at timestamp DEFAULT CURRENT_TIMESTAMP,
-			deleted_at timestamp
-		)`,
+		cpl text NOT NULL,
+		created_at timestamp DEFAULT CURRENT_TIMESTAMP,
+		updated_at timestamp DEFAULT CURRENT_TIMESTAMP,
+		deleted_at timestamp
+	)`,
+
+		`CREATE TABLE IF NOT EXISTS cpl_indikator (
+		id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+		cpl_id uuid NOT NULL REFERENCES cpl(id) ON DELETE CASCADE,
+		indikator_kerja text NOT NULL,
+		urutan int NOT NULL,
+		created_at timestamp DEFAULT CURRENT_TIMESTAMP,
+		updated_at timestamp DEFAULT CURRENT_TIMESTAMP,
+		deleted_at timestamp
+	)`,
 	}
 
 	for i, sql := range tables {
@@ -162,6 +172,7 @@ func RunMigrations(db *gorm.DB) error {
 		"CREATE INDEX IF NOT EXISTS idx_dosen_rps_access_dosen_id ON dosen_rps_access(dosen_id)",
 		"CREATE INDEX IF NOT EXISTS idx_cpl_prodi_id ON cpl(prodi_id)",
 		"CREATE INDEX IF NOT EXISTS idx_cpl_kode_cpl ON cpl(kode_cpl)",
+		"CREATE INDEX IF NOT EXISTS idx_cpl_indikator_cpl_id ON cpl_indikator(cpl_id)",
 	}
 
 	for _, sql := range indexes {

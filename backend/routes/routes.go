@@ -122,6 +122,8 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 			cpl.POST("/batch", cplController.BatchCreate)
 			cpl.PUT("/:id", cplController.Update)
 			cpl.DELETE("/:id", cplController.Delete)
+			cpl.GET("/template/excel", cplController.DownloadTemplate)
+			cpl.POST("/import/excel", cplController.ImportExcel)
 		}
 
 		// Templates routes
@@ -156,6 +158,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 			ai.POST("/generate/topik", aiController.GenerateTopik)
 			ai.POST("/generate/tugas", aiController.GenerateTugas)
 			ai.POST("/generate/referensi", aiController.GenerateReferensi)
+			ai.POST("/match/cpmk-cpl", aiController.MatchCPMKWithCPL) // NEW: AI matching CPMK dengan CPL
 		}
 	}
 }

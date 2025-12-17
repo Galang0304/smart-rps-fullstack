@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Upload, Download, FileText, Plus, Trash2, Edit, Loader2, AlertCircle, CheckCircle, BookOpen, Search, Filter, X } from 'lucide-react';
-import { courseAPI } from '../../services/api';
+import { courseAPI, cpmkAPI } from '../../services/api';
 
 export default function CPMKManagement() {
   const location = useLocation();
@@ -64,13 +64,10 @@ export default function CPMKManagement() {
       const coursesWithCpmk = await Promise.all(
         courseList.map(async (course) => {
           try {
-            const response = await fetch(`http://103.151.145.182:8080/api/v1/cpmk/course/${course.id}`, {
-              headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-            });
-            const data = await response.json();
+            const response = await cpmkAPI.getByCourseId(course.id);
             return {
               ...course,
-              cpmkCount: data.success ? (data.data || []).length : 0,
+              cpmkCount: response.data.success ? (response.data.data || []).length : 0,
             };
           } catch {
             return { ...course, cpmkCount: 0 };
@@ -88,16 +85,10 @@ export default function CPMKManagement() {
 
   const loadCPMKForCourse = async (courseId) => {
     try {
-      const response = await fetch(`http://103.151.145.182:8080/api/v1/cpmk/course/${courseId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      
-      const data = await response.json();
-      if (data.success) {
-        setCpmkData(data.data || []);
-        return data.data || [];
+      const response = await cpmkAPI.getByCourseId(courseId);
+      if (response.data.success) {
+        setCpmkData(response.data.data || []);
+        return response.data.data || [];
       }
       return [];
     } catch (error) {
@@ -117,16 +108,8 @@ export default function CPMKManagement() {
 
   const handleDownloadTemplate = async () => {
     try {
-      const response = await fetch('http://103.151.145.182:8080/api/v1/cpmk/template/excel', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      
-      if (!response.ok) throw new Error('Failed to download template');
-      
-      const blob = await response.blob();
+      const response = await cpmkAPI.downloadTemplate();
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -152,24 +135,12 @@ export default function CPMKManagement() {
       const formData = new FormData();
       formData.append('file', excelFile);
 
-      const response = await fetch('http://103.151.145.182:8080/api/v1/cpmk/import/excel', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: formData,
-      });
-
-      const data = await response.json();
+      const response = await cpmkAPI.importExcel(selectedCourse, excelFile);
       
-      if (!response.ok) {
-        throw new Error(data.error || 'Import failed');
-      }
-
       setUploadStatus({
         success: true,
-        message: data.message || `Berhasil import ${data.imported_count} CPMK`,
-        details: data.failed_count > 0 ? `${data.failed_count} gagal: ${data.errors?.slice(0, 3).join(', ')}` : null,
+        message: response.data.message || `Berhasil import ${response.data.imported_count} CPMK`,
+        details: response.data.failed_count > 0 ? `${response.data.failed_count} gagal: ${response.data.errors?.slice(0, 3).join(', ')}` : null,
       });
       
       setExcelFile(null);
@@ -181,7 +152,7 @@ export default function CPMKManagement() {
       setUploadStatus({
         success: false,
         message: 'Import gagal',
-        details: error.message,
+        details: error.response?.data?.error || error.message,
       });
     } finally {
       setLoading(false);
@@ -196,28 +167,12 @@ export default function CPMKManagement() {
 
     try {
       setLoading(true);
-      const formData = new FormData();
-      formData.append('cpmk_file', cpmkCsvFile);
-      formData.append('sub_cpmk_file', subCpmkCsvFile);
-
-      const response = await fetch('http://103.151.145.182:8080/api/v1/cpmk/import/csv', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: formData,
-      });
-
-      const data = await response.json();
+      const response = await cpmkAPI.importCSV(selectedCourse, cpmkCsvFile, subCpmkCsvFile);
       
-      if (!response.ok) {
-        throw new Error(data.error || 'Import failed');
-      }
-
       setUploadStatus({
         success: true,
-        message: data.message || `Berhasil import ${data.imported_count} CPMK`,
-        details: data.failed_count > 0 ? `${data.failed_count} gagal: ${data.errors?.slice(0, 3).join(', ')}` : null,
+        message: response.data.message || `Berhasil import ${response.data.imported_count} CPMK`,
+        details: response.data.failed_count > 0 ? `${response.data.failed_count} gagal: ${response.data.errors?.slice(0, 3).join(', ')}` : null,
       });
       
       setCpmkCsvFile(null);
@@ -230,7 +185,7 @@ export default function CPMKManagement() {
       setUploadStatus({
         success: false,
         message: 'Import gagal',
-        details: error.message,
+        details: error.response?.data?.error || error.message,
       });
     } finally {
       setLoading(false);
@@ -239,16 +194,8 @@ export default function CPMKManagement() {
 
   const handleExportExcel = async () => {
     try {
-      const response = await fetch(`http://103.151.145.182:8080/api/v1/cpmk/export/excel?course_id=${selectedCourse}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      
-      if (!response.ok) throw new Error('Failed to export');
-      
-      const blob = await response.blob();
+      const response = await cpmkAPI.exportExcel(selectedCourse);
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -282,12 +229,7 @@ export default function CPMKManagement() {
       
       // Delete setiap CPMK (akan cascade delete Sub-CPMK)
       for (const cpmk of cpmks) {
-        await fetch(`http://103.151.145.182:8080/api/v1/cpmk/${cpmk.id}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          },
-        });
+        await cpmkAPI.delete(cpmk.id);
       }
 
       setUploadStatus({
@@ -315,16 +257,9 @@ export default function CPMKManagement() {
     }
 
     try {
-      const response = await fetch(`http://103.151.145.182:8080/api/v1/cpmk/${cpmkId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      const data = await response.json();
+      const response = await cpmkAPI.delete(cpmkId);
       
-      if (data.success) {
+      if (response.data.success) {
         setUploadStatus({
           success: true,
           message: 'CPMK berhasil dihapus!',
@@ -347,16 +282,9 @@ export default function CPMKManagement() {
     }
 
     try {
-      const response = await fetch(`http://103.151.145.182:8080/api/v1/cpmk/${cpmkId}/sub-cpmk/${subCpmkId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      const data = await response.json();
+      const response = await cpmkAPI.deleteSubCPMK(cpmkId, subCpmkId);
       
-      if (data.success) {
+      if (response.data.success) {
         setUploadStatus({
           success: true,
           message: 'Sub-CPMK berhasil dihapus!',
@@ -389,20 +317,11 @@ export default function CPMKManagement() {
 
     try {
       setLoading(true);
-      const response = await fetch(`http://103.151.145.182:8080/api/v1/cpmk/${editingCpmk.id}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          description: editingCpmk.description,
-        }),
+      const response = await cpmkAPI.update(editingCpmk.id, {
+        description: editingCpmk.description,
       });
-
-      const data = await response.json();
       
-      if (data.success) {
+      if (response.data.success) {
         setUploadStatus({
           success: true,
           message: 'CPMK berhasil diupdate!',
@@ -413,7 +332,7 @@ export default function CPMKManagement() {
         setCpmkData(newData);
         setTimeout(() => setUploadStatus(null), 3000);
       } else {
-        throw new Error(data.error || 'Gagal mengupdate CPMK');
+        throw new Error(response.data.error || 'Gagal mengupdate CPMK');
       }
     } catch (error) {
       console.error('Failed to update CPMK:', error);
@@ -431,22 +350,13 @@ export default function CPMKManagement() {
 
     try {
       setLoading(true);
-      const response = await fetch('http://103.151.145.182:8080/api/v1/cpmk', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          course_id: selectedCourse.id,
-          cpmk_number: parseInt(newCpmk.cpmk_number),
-          description: newCpmk.description,
-        }),
+      const response = await cpmkAPI.create({
+        course_id: selectedCourse.id,
+        cpmk_number: parseInt(newCpmk.cpmk_number),
+        description: newCpmk.description,
       });
 
-      const data = await response.json();
-      
-      if (data.success) {
+      if (response.data.success) {
         setUploadStatus({
           success: true,
           message: 'CPMK berhasil ditambahkan!',
@@ -476,21 +386,12 @@ export default function CPMKManagement() {
 
     try {
       setLoading(true);
-      const response = await fetch(`http://103.151.145.182:8080/api/v1/cpmk/${selectedCpmkForSub.id}/sub-cpmk`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sub_cpmk_number: parseInt(newSubCpmk.sub_cpmk_number),
-          description: newSubCpmk.description,
-        }),
+      const response = await cpmkAPI.addSubCPMK(selectedCpmkForSub.id, {
+        sub_cpmk_number: parseInt(newSubCpmk.sub_cpmk_number),
+        description: newSubCpmk.description,
       });
-
-      const data = await response.json();
       
-      if (data.success) {
+      if (response.data.success) {
         setUploadStatus({
           success: true,
           message: 'Sub-CPMK berhasil ditambahkan!',

@@ -495,31 +495,90 @@ function DeskripsiStep({ formData, setFormData, course }) {
 function CPMKStep({ formData, setFormData, course }) {
   const [generating, setGenerating] = useState(false);
   const [generatingIndex, setGeneratingIndex] = useState(null);
+  const [cpmkVersion, setCpmkVersion] = useState(null); // 'generated' or 'matched'
+  const [showCPLMapping, setShowCPLMapping] = useState(false);
 
   const handleGenerateOne = async (index) => {
     if (!course) return;
     setGenerating(true);
     setGeneratingIndex(index);
     try {
+      const prodiId = localStorage.getItem('prodi_id');
       const res = await aiHelperAPI.generateCPMK({
         course_id: course.id,
         course_code: course.code,
         course_title: course.title,
         credits: course.credits,
-        existing_cpl: [],
+        prodi_id: prodiId,
       });
       
       if (res.data.data.items && res.data.data.items.length > 0) {
-        const newCpmk = [...formData.cpmk];
-        newCpmk[index].description = res.data.data.items[0].description;
+        const version = res.data.version || 'generated';
+        setCpmkVersion(version);
+        
+        // Update CPMK dengan data dari response
+        const newCpmk = res.data.data.items.map((item, idx) => ({
+          code: item.code || `CPMK-${idx + 1}`,
+          description: item.description,
+          matched_cpl: item.matched_cpl || null,
+          reason: item.reason || null,
+        }));
+        
         setFormData({ ...formData, cpmk: newCpmk });
+        
+        // Show CPL mapping info if version is matched
+        if (version === 'matched') {
+          setShowCPLMapping(true);
+          alert('✅ CPMK berhasil dicocokkan dengan CPL!\n\nCek detail mapping di bawah setiap CPMK.');
+        }
       }
     } catch (error) {
       console.error('Failed to generate CPMK:', error);
-      alert('Gagal generate CPMK');
+      alert('Gagal generate CPMK: ' + (error.response?.data?.error || error.message));
     } finally {
       setGenerating(false);
       setGeneratingIndex(null);
+    }
+  };
+
+  const handleGenerateAll = async () => {
+    if (!course) return;
+    setGenerating(true);
+    try {
+      const prodiId = localStorage.getItem('prodi_id');
+      const res = await aiHelperAPI.generateCPMK({
+        course_id: course.id,
+        course_code: course.code,
+        course_title: course.title,
+        credits: course.credits,
+        prodi_id: prodiId,
+      });
+      
+      if (res.data.data.items && res.data.data.items.length > 0) {
+        const version = res.data.version || 'generated';
+        setCpmkVersion(version);
+        
+        // Update CPMK dengan data dari response
+        const newCpmk = res.data.data.items.map((item, idx) => ({
+          code: item.code || `CPMK-${idx + 1}`,
+          description: item.description,
+          matched_cpl: item.matched_cpl || null,
+          reason: item.reason || null,
+        }));
+        
+        setFormData({ ...formData, cpmk: newCpmk });
+        
+        // Show CPL mapping info if version is matched
+        if (version === 'matched') {
+          setShowCPLMapping(true);
+          alert('✅ CPMK berhasil dicocokkan dengan CPL!\n\nCek detail mapping di bawah setiap CPMK.');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to generate CPMK:', error);
+      alert('Gagal generate CPMK: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -548,6 +607,44 @@ function CPMKStep({ formData, setFormData, course }) {
             <strong>Contoh kata kerja:</strong> Menjelaskan, Menganalisis, Merancang, Menerapkan, Mengevaluasi, Mengimplementasikan
           </p>
         </div>
+        
+        {/* Version indicator */}
+        {cpmkVersion && (
+          <div className={`mt-3 p-3 rounded-lg border ${
+            cpmkVersion === 'matched' 
+              ? 'bg-green-50 border-green-200' 
+              : 'bg-purple-50 border-purple-200'
+          }`}>
+            <p className={`text-sm font-semibold ${
+              cpmkVersion === 'matched' ? 'text-green-700' : 'text-purple-700'
+            }`}>
+              {cpmkVersion === 'matched' 
+                ? '✅ VERSI 2: CPMK dari database sudah dicocokkan dengan CPL Prodi' 
+                : '🤖 VERSI 1: CPMK baru dibuat oleh AI'}
+            </p>
+          </div>
+        )}
+
+        {/* Generate All Button */}
+        <div className="mt-4">
+          <button
+            onClick={handleGenerateAll}
+            disabled={generating || !course}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 font-semibold"
+          >
+            {generating ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Generating...</span>
+              </>
+            ) : (
+              <>
+                <Bot className="w-5 h-5" />
+                <span>Generate Semua CPMK dengan AI</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       <div className="space-y-4">
@@ -571,11 +668,26 @@ function CPMKStep({ formData, setFormData, course }) {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   rows={3}
                 />
+                
+                {/* CPL Mapping Info */}
+                {item.matched_cpl && (
+                  <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs font-semibold text-green-700 bg-green-200 px-2 py-0.5 rounded">
+                        {item.matched_cpl}
+                      </span>
+                      <p className="text-xs text-green-700 flex-1">
+                        {item.reason || 'Cocok dengan CPL ini'}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => handleGenerateOne(index)}
                 disabled={generating && generatingIndex === index}
                 className="flex-shrink-0 flex items-center gap-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                title="Generate individual CPMK"
               >
                 {generating && generatingIndex === index ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
