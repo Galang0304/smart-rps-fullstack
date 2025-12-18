@@ -52,11 +52,12 @@
  * ==========================================
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Bot, Save, Loader2, X, Plus, BookOpen, Eye, EyeOff, Database, PenLine, FileText, List, Calendar, Book } from 'lucide-react';
-import { courseAPI, aiHelperAPI, generatedRPSAPI } from '../services/api';
+import { courseAPI, aiHelperAPI, generatedRPSAPI, cpmkAPI } from '../services/api';
 import apiClient from '../services/api';
+import CPMKWithCPLMapping from '../components/CPMKWithCPLMapping';
 
 export default function RPSCreate() {
   const { courseId } = useParams();
@@ -64,6 +65,7 @@ export default function RPSCreate() {
   const [searchParams] = useSearchParams();
   const editRpsId = searchParams.get('edit');
   const courseIdFromQuery = searchParams.get('courseId');
+  const viewMode = searchParams.get('view') === 'true'; // Read-only mode
   
   const userRole = localStorage.getItem('role');
   const [courses, setCourses] = useState([]);
@@ -73,6 +75,7 @@ export default function RPSCreate() {
   const [saving, setSaving] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [savedRpsId, setSavedRpsId] = useState(editRpsId || null);
+  const isLoadingRPS = useRef(false); // Gunakan useRef untuk track loading tanpa trigger re-render
 
   // Form Data State - Struktur Baru yang Lebih Kompleks
   const [formData, setFormData] = useState({
@@ -81,9 +84,9 @@ export default function RPSCreate() {
     
     // Step 2: CPMK
     cpmk: [
-      { code: 'CPMK-1', description: '' },
-      { code: 'CPMK-2', description: '' },
-      { code: 'CPMK-3', description: '' },
+      { code: 'CPMK-1', description: '', selected_cpls: [] },
+      { code: 'CPMK-2', description: '', selected_cpls: [] },
+      { code: 'CPMK-3', description: '', selected_cpls: [] },
     ],
     
     // Step 3: Sub-CPMK (14 items)
@@ -96,41 +99,38 @@ export default function RPSCreate() {
     // Step 4: Bahan Kajian
     bahanKajian: ['', '', ''],
     
-    // Step 5: Rencana Pembelajaran (16 minggu)
-    rencanaMingguan: Array.from({ length: 16 }, (_, i) => {
-      const minggu = i + 1;
-      if (minggu === 8) {
-        return {
-          minggu: 8,
-          isUTS: true,
-          subCpmk: '',
-          materi: 'Ujian Tengah Semester',
-          metode: '',
-          penilaian: 'UTS'
-        };
-      } else if (minggu === 16) {
-        return {
-          minggu: 16,
-          isUAS: true,
-          subCpmk: '',
-          materi: 'Ujian Akhir Semester',
-          metode: '',
-          penilaian: 'UAS'
-        };
-      } else {
-        return {
-          minggu,
-          subCpmk: '',
-          materi: '',
-          metode: '',
-          penilaian: ''
-        };
-      }
-    }),
+    // Step 5: Rencana Pembelajaran (14 minggu pembelajaran)
+    rencanaMingguan: Array.from({ length: 14 }, (_, i) => ({
+      minggu: i + 1,
+      subCpmk: '',
+      materi: '',
+      metode: '',
+      penilaian: ''
+    })),
     
-    // Step 6: Referensi
+    // Step 6: Rencana Tugas (14 tugas, 1 per minggu materi)
+    rencanaTugas: Array.from({ length: 14 }, (_, i) => ({
+      tugasKe: i + 1,
+      subCpmk: '',
+      indikator: '',
+      judulTugas: '',
+      batasWaktu: '',
+      petunjukPengerjaan: '',
+      luaranTugas: '',
+      kriteriaPenilaian: '',
+      teknikPenilaian: '',
+      bobotPersen: ''
+    })),
+    
+    // Step 7: Referensi
     referensi: ['', '', '']
   });
+
+  // Reset loading flag saat component mount
+  useEffect(() => {
+    isLoadingRPS.current = false;
+    console.log('🔄 Component mounted, reset isLoadingRPS flag');
+  }, []); // Run once on mount
 
   // Load courses on mount
   useEffect(() => {
@@ -152,31 +152,307 @@ export default function RPSCreate() {
     fetchCourses();
   }, []);
 
-  // Load selected course
+  // Load selected course - SKIP jika course sudah di-set (dari RPS data di edit mode)
   useEffect(() => {
-    if (selectedCourseId && Array.isArray(courses) && courses.length > 0) {
+    // Hanya load jika bukan edit mode DAN course belum ter-set
+    if (!editRpsId && !course && selectedCourseId && Array.isArray(courses) && courses.length > 0) {
+      console.log('🔍 Finding course in list:', selectedCourseId);
       const foundCourse = courses.find(c => c.id.toString() === selectedCourseId.toString());
-      setCourse(foundCourse || null);
-    }
-  }, [selectedCourseId, courses]);
-
-  // Load existing RPS if editing
-  useEffect(() => {
-    if (editRpsId && course) {
-      loadExistingRPS(editRpsId);
-    }
-  }, [editRpsId, course]);
-
-  const loadExistingRPS = async (rpsId) => {
-    try {
-      const res = await generatedRPSAPI.getById(rpsId);
-      if (res.data.success && res.data.data) {
-        const rpsData = res.data.data;
-        // Parse and load existing data
-        // TODO: Implement parsing logic based on saved format
+      console.log('🔍 Found course:', foundCourse);
+      if (foundCourse) {
+        setCourse(foundCourse);
       }
+    }
+  }, [selectedCourseId, courses, editRpsId, course]);
+
+  // Debug logging untuk track state
+  useEffect(() => {
+    console.log('🔍 State Update:', { 
+      editRpsId, 
+      course, 
+      selectedCourseId, 
+      coursesCount: courses.length,
+      isLoadingRPSRef: isLoadingRPS.current 
+    });
+  }, [editRpsId, course, selectedCourseId, courses]);
+
+  // Load existing RPS if editing - load HANYA SEKALI pakai useRef
+  useEffect(() => {
+    if (editRpsId && courses.length > 0 && !isLoadingRPS.current) {
+      console.log('🚀 STARTING RPS LOAD - editRpsId:', editRpsId);
+      console.log('🚀 Courses available:', courses.length);
+      isLoadingRPS.current = true; // Set flag SEGERA untuk prevent re-entry
+      
+      const loadRPS = async () => {
+        try {
+          console.log('🔄 Loading RPS ID:', editRpsId);
+          const res = await generatedRPSAPI.getById(editRpsId);
+          console.log('📡 Full API Response:', res);
+          console.log('📡 Response data:', res.data);
+          
+          // Handle different response structures
+          let rpsData = null;
+          if (res.data?.data?.data) {
+            // Structure: res.data.data.data
+            rpsData = res.data.data.data;
+          } else if (res.data?.data) {
+            // Structure: res.data.data
+            rpsData = res.data.data;
+          } else if (res.data) {
+            // Structure: res.data
+            rpsData = res.data;
+          }
+          
+          console.log('📦 RPS Data:', rpsData);
+          
+          if (rpsData && rpsData.result) {
+            const result = rpsData.result;
+            console.log('📦 RPS Result:', result);
+            console.log('📦 Available fields in result:', Object.keys(result));
+            console.log('📦 Deskripsi value:', result.deskripsi);
+            console.log('📦 Description value:', result.description);
+            
+            // Auto-select course dari RPS data - langsung dari result tanpa cari di courses array
+            if (result.course) {
+              const courseData = {
+                id: result.course.id,
+                code: result.course.code,
+                title: result.course.title,
+                credits: result.course.credits,
+                semester: result.course.semester
+              };
+              
+              // Set course dan selectedCourseId bersamaan dalam satu batch
+              setCourse(courseData);
+              setSelectedCourseId(result.course.id);
+              console.log('✅ Course set from RPS:', courseData);
+            } else {
+              console.warn('⚠️ No course data in result');
+            }
+            
+            // Load semua data RPS ke form - gunakan initial values, bukan formData
+            const newFormData = {
+              description: result.deskripsi || result.description || '',
+              cpmk: result.cpmk && result.cpmk.length > 0 ? result.cpmk.map(c => ({
+                code: c.code || '',
+                description: c.description || '',
+                selected_cpls: c.selected_cpls || []
+              })) : [
+                { code: 'CPMK-1', description: '', selected_cpls: [] },
+                { code: 'CPMK-2', description: '', selected_cpls: [] },
+                { code: 'CPMK-3', description: '', selected_cpls: [] },
+              ],
+              subCpmk: result.subCpmk && result.subCpmk.length > 0 ? result.subCpmk.map(s => ({
+                code: s.code || '',
+                description: s.description || '',
+                relatedCpmk: s.related_cpmk || ''
+              })) : Array.from({ length: 14 }, (_, i) => ({
+                code: `Sub-CPMK-${i + 1}`,
+                description: '',
+                relatedCpmk: ''
+              })),
+              bahanKajian: result.bahanKajian && result.bahanKajian.length > 0 ? result.bahanKajian : ['', '', ''],
+              rencanaMingguan: result.rencanaMingguan && result.rencanaMingguan.length > 0 
+                ? result.rencanaMingguan.map(m => ({
+                    minggu: m.minggu,
+                    subCpmk: m.subCpmk || '',
+                    materi: m.materi || '',
+                    metode: m.metode || '',
+                    penilaian: m.penilaian || ''
+                  }))
+                : Array.from({ length: 16 }, (_, i) => {
+                    if (i === 7) {
+                      return { minggu: 8, subCpmk: 'UTS', materi: 'Ujian Tengah Semester', metode: 'Ujian Tertulis/Online', penilaian: 'Ujian' };
+                    } else if (i === 15) {
+                      return { minggu: 16, subCpmk: 'UAS', materi: 'Ujian Akhir Semester', metode: 'Ujian Tertulis/Online', penilaian: 'Ujian' };
+                    }
+                    return { minggu: i + 1, subCpmk: '', materi: '', metode: '', penilaian: '' };
+                  }),
+              rencanaTugas: result.rencanaTugas && result.rencanaTugas.length > 0
+                ? result.rencanaTugas.map(t => {
+                    console.log('📦 Loading tugas:', t);
+                    return {
+                      tugasKe: t.tugasKe || t.tugas_ke,
+                      subCpmk: t.subCpmk || t.sub_cpmk || '',
+                      indikator: t.indikator || '',
+                      judulTugas: t.judulTugas || t.judul_tugas || '',
+                      batasWaktu: t.batasWaktu || t.batas_waktu || '',
+                      petunjukPengerjaan: t.petunjukPengerjaan || t.petunjuk_pengerjaan || '',
+                      luaranTugas: t.luaranTugas || t.luaran_tugas || '',
+                      kriteriaPenilaian: t.kriteriaPenilaian || t.kriteria_penilaian || '',
+                      teknikPenilaian: t.teknikPenilaian || t.teknik_penilaian || '',
+                      bobotPersen: t.bobotPersen || t.bobot_persen || ''
+                    };
+                  })
+                : Array.from({ length: 14 }, (_, i) => ({
+                    tugasKe: i + 1,
+                    subCpmk: '',
+                    indikator: '',
+                    judulTugas: '',
+                    batasWaktu: '',
+                    petunjukPengerjaan: '',
+                    luaranTugas: '',
+                    kriteriaPenilaian: '',
+                    teknikPenilaian: '',
+                    bobotPersen: ''
+                  })),
+              referensi: result.referensi && result.referensi.length > 0 ? result.referensi : ['', '', '']
+            };
+            
+            console.log('📝 Setting formData with:', newFormData);
+            console.log('📝 Description field:', newFormData.description);
+            setFormData(newFormData);
+            
+            setLoading(false);
+            console.log('✅ RPS data loaded successfully');
+          } else {
+            console.error('❌ RPS data or result not found');
+            console.error('❌ rpsData:', rpsData);
+            alert('Data RPS tidak ditemukan atau format tidak valid');
+            setLoading(false);
+          }
+        } catch (error) {
+          console.error('❌ Failed to load existing RPS:', error);
+          console.error('Error details:', error.response?.data);
+          alert('Gagal memuat data RPS: ' + (error.response?.data?.error || error.message));
+          setLoading(false);
+        }
+      };
+      
+      loadRPS();
+    } else if (!editRpsId) {
+      // Jika bukan edit mode, set loading false setelah courses loaded
+      if (courses.length > 0) {
+        setLoading(false);
+      }
+    }
+  }, [editRpsId, courses]);
+
+  // Fungsi untuk sync Sub-CPMK ke tabel database
+  const syncSubCPMKToDatabase = async (courseId, cpmkList, subCpmkList) => {
+    try {
+      console.log('📊 Starting Sub-CPMK sync for course:', courseId);
+      console.log('📊 CPMK List:', cpmkList);
+      console.log('📊 Sub-CPMK List:', subCpmkList);
+      
+      // Step 1: Load existing CPMK from database
+      const existingCpmkRes = await cpmkAPI.getByCourseId(courseId);
+      let existingCpmk = existingCpmkRes.data?.data || [];
+      
+      console.log('📊 Existing CPMK in DB:', existingCpmk);
+      
+      // Step 2: Use existing CPMK if available, otherwise create new ones
+      let savedCpmk = [];
+      
+      if (existingCpmk.length > 0) {
+        // CPMK already exists, use them
+        console.log('✅ Using existing CPMK from database');
+        savedCpmk = existingCpmk;
+      } else {
+        // Create new CPMK using batch endpoint
+        const cpmkPayload = {
+          course_id: courseId,
+          cpmks: cpmkList.map((c, idx) => ({
+            cpmk_number: idx + 1,
+            description: c.description
+          }))
+        };
+        
+        console.log('📤 Creating new CPMK batch:', cpmkPayload);
+        const cpmkRes = await cpmkAPI.batchCreateOrUpdate(cpmkPayload);
+        savedCpmk = cpmkRes.data?.data || [];
+        console.log('✅ CPMK created:', savedCpmk.length);
+      }
+      
+      // Step 3: Build map of CPMK number to CPMK ID
+      const cpmkNumberToId = {};
+      savedCpmk.forEach(cpmk => {
+        cpmkNumberToId[cpmk.cpmk_number] = cpmk.id;
+      });
+      
+      console.log('🗺️ CPMK number to ID map:', cpmkNumberToId);
+      
+      // Step 4: Check existing Sub-CPMK to avoid duplicates
+      const existingSubCpmk = new Set();
+      savedCpmk.forEach(cpmk => {
+        const subs = cpmk.sub_cpmks || cpmk.SubCPMKs || [];
+        subs.forEach(sub => {
+          existingSubCpmk.add(`${cpmk.id}-${sub.sub_cpmk_number}`);
+        });
+      });
+      
+      console.log('🗺️ Existing Sub-CPMK:', existingSubCpmk);
+      
+      // Step 5: Add Sub-CPMK for each CPMK
+      let subCpmkSaved = 0;
+      let subCpmkSkipped = 0;
+      
+      for (const subCpmk of subCpmkList) {
+        // Skip empty descriptions
+        if (!subCpmk.description || subCpmk.description.trim() === '') {
+          console.log('⏭️ Skipping empty Sub-CPMK');
+          continue;
+        }
+        
+        // relatedCpmk could be "CPMK 1" or "CPMK-1" or just "1"
+        const relatedCpmkField = subCpmk.relatedCpmk || subCpmk.related_cpmk || '';
+        const cpmkNumber = parseInt(relatedCpmkField.match(/\d+/)?.[0] || '0');
+        
+        if (cpmkNumber === 0) {
+          console.warn('⚠️ Invalid CPMK number for:', subCpmk);
+          continue;
+        }
+        
+        const cpmkId = cpmkNumberToId[cpmkNumber];
+        if (!cpmkId) {
+          console.warn('⚠️ CPMK ID not found for number:', cpmkNumber);
+          continue;
+        }
+        
+        // Extract sub-cpmk number from code (e.g., "Sub-CPMK-1" -> 1)
+        const subCpmkNumber = parseInt(subCpmk.code.match(/\d+/)?.[0] || (subCpmkSaved + 1));
+        
+        // Check if already exists
+        const subCpmkKey = `${cpmkId}-${subCpmkNumber}`;
+        if (existingSubCpmk.has(subCpmkKey)) {
+          console.log(`⏭️ Sub-CPMK ${subCpmkNumber} already exists for CPMK ${cpmkNumber}, skipping`);
+          subCpmkSkipped++;
+          continue;
+        }
+        
+        try {
+          const payload = {
+            cpmk_id: cpmkId,
+            sub_cpmk_number: subCpmkNumber,
+            description: subCpmk.description
+          };
+          
+          console.log('📤 Creating Sub-CPMK:', payload);
+          await cpmkAPI.createSubCpmk(payload);
+          
+          subCpmkSaved++;
+          console.log(`✅ Sub-CPMK ${subCpmkNumber} saved for CPMK ${cpmkNumber}`);
+        } catch (error) {
+          console.error('❌ Failed to save Sub-CPMK:', error);
+          if (error.response?.status === 409) {
+            subCpmkSkipped++;
+          }
+        }
+      }
+      
+      console.log(`✅ Total Sub-CPMK synced: ${subCpmkSaved}/${subCpmkList.length} (${subCpmkSkipped} skipped)`);
+      
+      if (subCpmkSaved > 0) {
+        showToast(`Berhasil menyimpan ${subCpmkSaved} Sub-CPMK ke database!`, 'success');
+      } else if (subCpmkSkipped > 0) {
+        showToast(`Semua Sub-CPMK (${subCpmkSkipped}) sudah ada di database`, 'info');
+      } else {
+        showToast('Tidak ada Sub-CPMK yang tersimpan', 'warning');
+      }
+      
     } catch (error) {
-      console.error('Failed to load existing RPS:', error);
+      console.error('❌ Failed to sync Sub-CPMK to database:', error);
+      // Don't throw - allow RPS save to succeed even if sync fails
     }
   };
 
@@ -206,14 +482,50 @@ export default function RPSCreate() {
 
     setSaving(true);
     try {
-      // Format data untuk disimpan
+      // Format data untuk disimpan dengan metadata lengkap
       const rpsContent = {
+        course: {
+          id: course.id,
+          code: course.code,
+          title: course.title,
+          credits: course.credits,
+          semester: course.semester
+        },
         deskripsi: formData.description,
-        cpmk: formData.cpmk.filter(c => c.description.trim()),
-        subCpmk: formData.subCpmk.filter(s => s.description.trim()),
-        bahanKajian: formData.bahanKajian.filter(b => b.trim()),
-        rencanaMingguan: formData.rencanaMingguan,
-        referensi: formData.referensi.filter(r => r.trim())
+        cpmk: formData.cpmk.filter(c => c.description && c.description.trim()).map((c, idx) => ({
+          code: c.code,
+          description: c.description,
+          selected_cpls: c.selected_cpls || [],
+          order: idx + 1
+        })),
+        subCpmk: formData.subCpmk.filter(s => s.description && s.description.trim()).map((s, idx) => ({
+          code: s.code,
+          description: s.description,
+          related_cpmk: s.relatedCpmk || '',
+          order: idx + 1
+        })),
+        bahanKajian: formData.bahanKajian.filter(b => b && b.trim()),
+        rencanaMingguan: formData.rencanaMingguan.filter(m => m.materi && m.materi.trim()).map(m => ({
+          minggu: m.minggu,
+          subCpmk: m.subCpmk,
+          materi: m.materi,
+          metode: m.metode,
+          penilaian: m.penilaian
+        })),
+        rencanaTugas: formData.rencanaTugas.filter(t => t.judulTugas && t.judulTugas.trim()).map((t, idx) => ({
+          tugasKe: t.tugasKe,
+          subCpmk: t.subCpmk,
+          indikator: t.indikator,
+          judulTugas: t.judulTugas,
+          batasWaktu: t.batasWaktu,
+          petunjukPengerjaan: t.petunjukPengerjaan,
+          luaranTugas: t.luaranTugas,
+          kriteriaPenilaian: t.kriteriaPenilaian,
+          teknikPenilaian: t.teknikPenilaian,
+          bobotPersen: t.bobotPersen,
+          order: idx + 1
+        })),
+        referensi: formData.referensi.filter(r => r && r.trim())
       };
 
       const payload = {
@@ -232,7 +544,18 @@ export default function RPSCreate() {
       // Check if response has data (success)
       if (res.data && res.data.data) {
         setSavedRpsId(res.data.data.id);
-        alert('✅ RPS berhasil disimpan!');
+        
+        // 🔄 SYNC SUB-CPMK KE DATABASE
+        console.log('🔄 Syncing Sub-CPMK to database after RPS save...');
+        try {
+          await syncSubCPMKToDatabase(course.id, rpsContent.cpmk, rpsContent.subCpmk);
+          console.log('✅ Sub-CPMK sync completed successfully');
+        } catch (syncError) {
+          console.error('⚠️ Sub-CPMK sync failed (non-critical):', syncError);
+          // Don't block RPS save if Sub-CPMK sync fails
+        }
+        
+        alert('✅ RPS dan Sub-CPMK berhasil disimpan!');
         // Navigate based on role
         const userRole = localStorage.getItem('role');
         if (userRole === 'kaprodi') {
@@ -259,7 +582,8 @@ export default function RPSCreate() {
     );
   }
 
-  if (courses.length === 0 && !loading) {
+  // Skip validasi courses saat edit mode (course sudah di-set dari RPS data)
+  if (courses.length === 0 && !loading && !editRpsId) {
     return (
       <div className="text-center py-12">
         <p className="text-gray-500 mb-4">Belum ada mata kuliah.</p>
@@ -278,29 +602,46 @@ export default function RPSCreate() {
     { id: 2, title: 'CPMK', icon: List },
     { id: 3, title: 'Sub-CPMK', icon: List },
     { id: 4, title: 'Bahan Kajian', icon: Book },
-    { id: 5, title: 'Rencana 16 Minggu', icon: Calendar },
-    { id: 6, title: 'Referensi', icon: BookOpen },
+    { id: 5, title: 'Rencana 14 Minggu', icon: Calendar },
+    { id: 6, title: 'Rencana Tugas', icon: PenLine },
+    { id: 7, title: 'Referensi', icon: BookOpen },
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-4">
+    <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Buat RPS Lengkap</h1>
-        <p className="text-gray-600 mt-2">
-          Sistem pembuatan RPS komprehensif dengan 6 tahapan lengkap
+      <div className="mb-4 sm:mb-6">
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
+          {viewMode ? 'Lihat RPS' : (editRpsId ? 'Edit RPS' : 'Buat RPS Lengkap')}
+        </h1>
+        <p className="text-sm sm:text-base text-gray-600 mt-1 sm:mt-2">
+          {viewMode 
+            ? 'Tampilan RPS yang telah dibuat (Read-only)' 
+            : 'Sistem pembuatan RPS komprehensif dengan 6 tahapan lengkap'
+          }
         </p>
 
         {/* Course Selector */}
-        {!courseId && !courseIdFromQuery && (
+        {!viewMode && (
           <div className="mt-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Pilih Mata Kuliah <span className="text-red-500">*</span>
             </label>
             <select
               value={selectedCourseId}
-              onChange={(e) => setSelectedCourseId(e.target.value)}
+              onChange={(e) => {
+                const newCourseId = e.target.value;
+                setSelectedCourseId(newCourseId);
+                
+                // Update course object
+                const foundCourse = courses.find(c => c.id === newCourseId);
+                if (foundCourse) {
+                  setCourse(foundCourse);
+                  console.log('✅ Course changed to:', foundCourse);
+                }
+              }}
               className="w-full md:w-96 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              disabled={viewMode}
             >
               <option value="">-- Pilih Mata Kuliah --</option>
               {Array.isArray(courses) && courses.map((c) => (
@@ -309,10 +650,19 @@ export default function RPSCreate() {
                 </option>
               ))}
             </select>
+            
+            {course && (
+              <div className="mt-3 p-3 sm:p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-xs sm:text-sm font-semibold text-blue-900 break-words">{course.code} - {course.title}</p>
+                <p className="text-xs text-blue-600 mt-1">{course.credits} SKS • Semester {course.semester}</p>
+              </div>
+            )}
           </div>
         )}
-        {course && (
-          <div className="mt-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+        
+        {/* View mode - show course info only */}
+        {viewMode && course && (
+          <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
             <p className="text-sm font-semibold text-blue-900">{course.code} - {course.title}</p>
             <p className="text-xs text-blue-600 mt-1">{course.credits} SKS • Semester {course.semester}</p>
           </div>
@@ -320,28 +670,31 @@ export default function RPSCreate() {
       </div>
 
       {/* Progress Steps */}
-      <div className="mb-8 bg-white rounded-lg shadow-sm p-6">
-        <div className="flex items-center justify-between">
+      <div className="mb-4 sm:mb-6 lg:mb-8 bg-white rounded-lg shadow-sm p-3 sm:p-4 lg:p-6 overflow-x-auto">
+        <div className="flex items-center justify-between min-w-max sm:min-w-0">
           {steps.map((step, index) => {
             const StepIcon = step.icon;
             return (
               <React.Fragment key={step.id}>
-                <div className="flex flex-col items-center">
+                <div className="flex flex-col items-center px-1 sm:px-0">
                   <div
-                    className={`w-12 h-12 rounded-full flex items-center justify-center font-semibold transition-all ${
+                    className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-semibold transition-all ${
                       currentStep >= step.id
                         ? 'bg-blue-600 text-white shadow-lg'
                         : 'bg-gray-200 text-gray-500'
                     }`}
                   >
-                    <StepIcon className="w-6 h-6" />
+                    <StepIcon className="w-5 h-5 sm:w-6 sm:h-6" />
                   </div>
-                  <span className={`text-xs mt-2 font-medium ${currentStep >= step.id ? 'text-blue-600' : 'text-gray-500'}`}>
+                  <span className={`hidden sm:block text-xs mt-2 font-medium text-center ${currentStep >= step.id ? 'text-blue-600' : 'text-gray-500'}`}>
                     {step.title}
+                  </span>
+                  <span className={`sm:hidden text-[10px] mt-1 font-medium ${currentStep >= step.id ? 'text-blue-600' : 'text-gray-500'}`}>
+                    {step.id}
                   </span>
                 </div>
                 {index < steps.length - 1 && (
-                  <div className={`flex-1 h-1 mx-2 transition-all ${
+                  <div className={`flex-1 h-1 mx-1 sm:mx-2 transition-all ${
                     currentStep > step.id ? 'bg-blue-600' : 'bg-gray-200'
                   }`} />
                 )}
@@ -352,7 +705,7 @@ export default function RPSCreate() {
       </div>
 
       {/* Main Content */}
-      {!selectedCourseId && !courseId && !courseIdFromQuery ? (
+      {!course && !editRpsId ? (
         <div className="bg-gray-50 rounded-lg shadow p-12 mb-6 text-center">
           <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-700 mb-2">Pilih Mata Kuliah Terlebih Dahulu</h3>
@@ -360,29 +713,35 @@ export default function RPSCreate() {
             Silakan pilih mata kuliah dari dropdown di atas untuk mulai membuat RPS
           </p>
         </div>
+      ) : loading && editRpsId ? (
+        <div className="bg-white rounded-lg shadow p-12 mb-6 text-center">
+          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Memuat data RPS...</p>
+        </div>
       ) : (
         <>
-          <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
-            {currentStep === 1 && <DeskripsiStep formData={formData} setFormData={setFormData} course={course} />}
-            {currentStep === 2 && <CPMKStep formData={formData} setFormData={setFormData} course={course} />}
-            {currentStep === 3 && <SubCPMKStep formData={formData} setFormData={setFormData} course={course} />}
-            {currentStep === 4 && <BahanKajianStep formData={formData} setFormData={setFormData} course={course} />}
-            {currentStep === 5 && <RencanaMingguanStep formData={formData} setFormData={setFormData} course={course} />}
-            {currentStep === 6 && <ReferensiStep formData={formData} setFormData={setFormData} course={course} />}
+          <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 lg:p-8 mb-4 sm:mb-6">
+            {currentStep === 1 && <DeskripsiStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
+            {currentStep === 2 && <CPMKStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
+            {currentStep === 3 && <SubCPMKStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
+            {currentStep === 4 && <BahanKajianStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
+            {currentStep === 5 && <RencanaMingguanStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
+            {currentStep === 6 && <RencanaTugasStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
+            {currentStep === 7 && <ReferensiStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
           </div>
 
           {/* Navigation Buttons */}
-          <div className="flex justify-between items-center mb-8">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-0 mb-6 sm:mb-8">
             <button
               onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
               disabled={currentStep === 1}
-              className="px-6 py-3 text-gray-700 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all"
+              className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base text-gray-700 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all"
             >
               ← Kembali
             </button>
             
-            <div className="text-center">
-              <p className="text-sm text-gray-500">
+            <div className="text-center order-first sm:order-none">
+              <p className="text-xs sm:text-sm text-gray-500">
                 Langkah {currentStep} dari {steps.length}
               </p>
             </div>
@@ -391,24 +750,31 @@ export default function RPSCreate() {
               <button
                 onClick={() => setCurrentStep(currentStep + 1)}
                 disabled={!selectedCourseId}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all"
+                className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all"
               >
                 Lanjut →
+              </button>
+            ) : viewMode ? (
+              <button
+                onClick={() => navigate(-1)}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 sm:px-8 py-2 sm:py-3 text-sm sm:text-base bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium transition-all shadow-lg"
+              >
+                Tutup
               </button>
             ) : (
               <button
                 onClick={handleSave}
                 disabled={saving || !selectedCourseId}
-                className="flex items-center gap-2 px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all shadow-lg"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 sm:px-8 py-2 sm:py-3 text-sm sm:text-base bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all shadow-lg"
               >
                 {saving ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
                     <span>Menyimpan...</span>
                   </>
                 ) : (
                   <>
-                    <Save className="w-5 h-5" />
+                    <Save className="w-4 h-4 sm:w-5 sm:h-5" />
                     <span>Simpan RPS</span>
                   </>
                 )}
@@ -424,11 +790,11 @@ export default function RPSCreate() {
 // ===== STEP COMPONENTS =====
 
 // Step 1: Deskripsi Mata Kuliah
-function DeskripsiStep({ formData, setFormData, course }) {
+function DeskripsiStep({ formData, setFormData, course, viewMode = false }) {
   const [generating, setGenerating] = useState(false);
 
   const handleGenerate = async () => {
-    if (!course) return;
+    if (!course || viewMode) return;
     setGenerating(true);
     try {
       const res = await aiHelperAPI.generateCourseDescription({
@@ -450,41 +816,49 @@ function DeskripsiStep({ formData, setFormData, course }) {
 
   return (
     <div>
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">📋 Deskripsi Mata Kuliah</h2>
-          <p className="text-gray-600">
-            Tuliskan deskripsi lengkap tentang mata kuliah ini, termasuk tujuan dan gambaran umum pembelajaran.
+      <div className="flex flex-col sm:flex-row items-start justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
+        <div className="flex-1">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1 sm:mb-2">📋 Deskripsi Mata Kuliah</h2>
+          <p className="text-sm sm:text-base text-gray-600">
+            {viewMode ? 'Deskripsi mata kuliah' : 'Tuliskan deskripsi lengkap tentang mata kuliah ini, termasuk tujuan dan gambaran umum pembelajaran.'}
           </p>
         </div>
-        <button
-          onClick={handleGenerate}
-          disabled={generating}
-          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {generating ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Generating...</span>
-            </>
-          ) : (
-            <>
-              <Bot className="w-4 h-4" />
-              <span>Generate AI</span>
-            </>
-          )}
-        </button>
+        {!viewMode && (
+          <button
+            onClick={handleGenerate}
+            disabled={generating}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm sm:text-base bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          >
+            {generating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Generating...</span>
+              </>
+            ) : (
+              <>
+                <Bot className="w-4 h-4" />
+                <span>Generate AI</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       <textarea
         value={formData.description}
-        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+        onChange={(e) => !viewMode && setFormData({ ...formData, description: e.target.value })}
         placeholder="Masukkan deskripsi mata kuliah secara lengkap..."
-        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        rows={12}
+        className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base border-2 rounded-lg resize-none ${
+          viewMode 
+            ? 'bg-gray-50 border-gray-200 cursor-not-allowed' 
+            : 'border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+        }`}
+        rows={10}
+        disabled={viewMode}
+        readOnly={viewMode}
       />
       
-      <p className="text-sm text-gray-500 mt-2">
+      <p className="text-xs sm:text-sm text-gray-500 mt-2">
         {formData.description.length} karakter
       </p>
     </div>
@@ -497,9 +871,138 @@ function CPMKStep({ formData, setFormData, course }) {
   const [generatingIndex, setGeneratingIndex] = useState(null);
   const [cpmkVersion, setCpmkVersion] = useState(null); // 'generated' or 'matched'
   const [showCPLMapping, setShowCPLMapping] = useState(false);
+  const [hasCpmkInDB, setHasCpmkInDB] = useState(false);
+  const [loadingFromDB, setLoadingFromDB] = useState(false);
+  const [matchingAllCPL, setMatchingAllCPL] = useState(false);
+  const [matchingProgress, setMatchingProgress] = useState({ current: 0, total: 0 });
+
+  // Check if course has CPMK in database
+  useEffect(() => {
+    if (course?.id) {
+      checkCpmkExists();
+    }
+  }, [course?.id]);
+
+  const checkCpmkExists = async () => {
+    try {
+      const res = await cpmkAPI.getByCourseId(course.id);
+      setHasCpmkInDB(res.data?.data?.length > 0);
+    } catch (error) {
+      setHasCpmkInDB(false);
+    }
+  };
+
+  const handleMatchAllCPL = async () => {
+    // Check if there are any CPMK with descriptions
+    const cpmkWithDesc = formData.cpmk.filter(c => c.description && c.description.trim() !== '');
+    
+    if (cpmkWithDesc.length === 0) {
+      alert('⚠️ Tidak ada CPMK dengan deskripsi yang bisa di-match.\n\nGenerate atau isi CPMK terlebih dahulu!');
+      return;
+    }
+
+    setMatchingAllCPL(true);
+    setMatchingProgress({ current: 0, total: cpmkWithDesc.length });
+
+    try {
+      const prodiId = localStorage.getItem('prodi_id');
+      const updatedCpmk = [...formData.cpmk];
+      let successCount = 0;
+
+      for (let i = 0; i < formData.cpmk.length; i++) {
+        const cpmk = formData.cpmk[i];
+        
+        // Skip empty CPMK
+        if (!cpmk.description || cpmk.description.trim() === '') {
+          continue;
+        }
+
+        setMatchingProgress({ current: successCount + 1, total: cpmkWithDesc.length });
+
+        try {
+          const matchRes = await aiHelperAPI.matchCPMKWithCPL({
+            prodi_id: prodiId,
+            cpmk_code: cpmk.code,
+            cpmk_description: cpmk.description,
+          });
+
+          if (matchRes.data.success && matchRes.data.matches) {
+            // Auto-select CPL dengan recommended = true
+            const autoSelected = matchRes.data.matches
+              .filter(m => m.recommended)
+              .map(m => m.kode_cpl);
+            
+            updatedCpmk[i] = {
+              ...cpmk,
+              selected_cpls: autoSelected,
+              ai_matches: matchRes.data.matches,
+              matched_cpl: matchRes.data.matched_cpl,
+              recommendation: matchRes.data.recommendation,
+            };
+            successCount++;
+          }
+        } catch (matchError) {
+          console.error(`Failed to match CPL for ${cpmk.code}:`, matchError);
+          // Continue with next CPMK even if one fails
+        }
+
+        // Small delay to prevent rate limiting
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+
+      setFormData({ ...formData, cpmk: updatedCpmk });
+      alert(`✅ Berhasil matching ${successCount} dari ${cpmkWithDesc.length} CPMK dengan CPL!\n\nCek detail mapping di bawah setiap CPMK.`);
+    } catch (error) {
+      console.error('Failed to match all CPL:', error);
+      alert('❌ Gagal melakukan batch matching: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setMatchingAllCPL(false);
+      setMatchingProgress({ current: 0, total: 0 });
+    }
+  };
+
+  const handleLoadFromDatabase = async () => {
+    if (!course?.id) return;
+    
+    setLoadingFromDB(true);
+    try {
+      const res = await cpmkAPI.getByCourseId(course.id);
+      const cpmkData = res.data?.data || [];
+      
+      if (cpmkData.length === 0) {
+        alert('⚠️ Tidak ada CPMK di database untuk mata kuliah ini.');
+        return;
+      }
+
+      // Transform database CPMK to form format
+      const loadedCpmk = cpmkData.map((item, idx) => ({
+        code: `CPMK-${item.cpmk_number || idx + 1}`,
+        description: item.description || '',
+        selected_cpls: [],
+        sub_cpmk: item.sub_cpmk || [] // Include sub-CPMK if available
+      }));
+
+      setFormData({ ...formData, cpmk: loadedCpmk });
+      setCpmkVersion('database');
+      alert(`✅ Berhasil memuat ${loadedCpmk.length} CPMK dari database!`);
+    } catch (error) {
+      console.error('Failed to load CPMK from database:', error);
+      alert('❌ Gagal memuat CPMK dari database: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setLoadingFromDB(false);
+    }
+  };
 
   const handleGenerateOne = async (index) => {
     if (!course) return;
+    
+    // Check if this CPMK already has a description - don't overwrite
+    const currentCpmk = formData.cpmk[index];
+    if (currentCpmk && currentCpmk.description && currentCpmk.description.trim() !== '') {
+      alert('⚠️ CPMK ini sudah memiliki deskripsi. Hapus deskripsi terlebih dahulu jika ingin generate ulang.');
+      return;
+    }
+    
     setGenerating(true);
     setGeneratingIndex(index);
     try {
@@ -522,6 +1025,7 @@ function CPMKStep({ formData, setFormData, course }) {
           description: item.description,
           matched_cpl: item.matched_cpl || null,
           reason: item.reason || null,
+          selected_cpls: []
         }));
         
         setFormData({ ...formData, cpmk: newCpmk });
@@ -543,6 +1047,18 @@ function CPMKStep({ formData, setFormData, course }) {
 
   const handleGenerateAll = async () => {
     if (!course) return;
+    
+    // Check if there are any empty CPMKs that need generating
+    const emptyCpmkIndices = formData.cpmk
+      .map((cpmk, idx) => ({ cpmk, idx }))
+      .filter(({ cpmk }) => !cpmk.description || cpmk.description.trim() === '')
+      .map(({ idx }) => idx);
+    
+    if (emptyCpmkIndices.length === 0) {
+      alert('⚠️ Semua CPMK sudah memiliki deskripsi. Tidak ada yang perlu di-generate.\n\nTambahkan CPMK baru yang kosong jika ingin menggunakan AI.');
+      return;
+    }
+    
     setGenerating(true);
     try {
       const prodiId = localStorage.getItem('prodi_id');
@@ -558,20 +1074,73 @@ function CPMKStep({ formData, setFormData, course }) {
         const version = res.data.version || 'generated';
         setCpmkVersion(version);
         
-        // Update CPMK dengan data dari response
-        const newCpmk = res.data.data.items.map((item, idx) => ({
+        // Generate new CPMK data
+        const generatedCpmk = res.data.data.items.map((item, idx) => ({
           code: item.code || `CPMK-${idx + 1}`,
           description: item.description,
           matched_cpl: item.matched_cpl || null,
           reason: item.reason || null,
+          selected_cpls: []
         }));
         
-        setFormData({ ...formData, cpmk: newCpmk });
+        // Merge: only update empty CPMKs, keep existing ones
+        const mergedCpmk = [...formData.cpmk];
+        let generatedIdx = 0;
+        
+        for (let i = 0; i < mergedCpmk.length && generatedIdx < generatedCpmk.length; i++) {
+          // Only replace if empty
+          if (!mergedCpmk[i].description || mergedCpmk[i].description.trim() === '') {
+            mergedCpmk[i] = generatedCpmk[generatedIdx];
+            generatedIdx++;
+          }
+        }
+        
+        // Auto-match CPL only for newly generated CPMKs
+        const cpmkWithCPL = [];
+        for (let i = 0; i < mergedCpmk.length; i++) {
+          const cpmk = mergedCpmk[i];
+          
+          // Skip CPL matching if this CPMK wasn't just generated
+          if (!emptyCpmkIndices.includes(i)) {
+            cpmkWithCPL.push(cpmk);
+            continue;
+          }
+          
+          try {
+            const matchRes = await aiHelperAPI.matchCPMKWithCPL({
+              prodi_id: prodiId,
+              cpmk_code: cpmk.code,
+              cpmk_description: cpmk.description,
+            });
+
+            if (matchRes.data.success && matchRes.data.matches) {
+              // Auto-select CPL dengan recommended = true
+              const autoSelected = matchRes.data.matches
+                .filter(m => m.recommended)
+                .map(m => m.kode_cpl);
+              
+              cpmkWithCPL.push({
+                ...cpmk,
+                selected_cpls: autoSelected,
+                ai_matches: matchRes.data.matches,
+              });
+            } else {
+              cpmkWithCPL.push(cpmk);
+            }
+          } catch (matchError) {
+            console.error(`Failed to match CPL for ${cpmk.code}:`, matchError);
+            cpmkWithCPL.push(cpmk);
+          }
+        }
+        
+        setFormData({ ...formData, cpmk: cpmkWithCPL });
         
         // Show CPL mapping info if version is matched
         if (version === 'matched') {
           setShowCPLMapping(true);
-          alert('✅ CPMK berhasil dicocokkan dengan CPL!\n\nCek detail mapping di bawah setiap CPMK.');
+          alert(`✅ ${emptyCpmkIndices.length} CPMK kosong berhasil di-generate dan dicocokkan dengan CPL!\n\nCek detail mapping di bawah setiap CPMK.`);
+        } else {
+          alert(`✅ ${emptyCpmkIndices.length} CPMK kosong berhasil di-generate dan otomatis dicocokkan dengan CPL!`);
         }
       }
     } catch (error) {
@@ -586,7 +1155,7 @@ function CPMKStep({ formData, setFormData, course }) {
     const newNumber = formData.cpmk.length + 1;
     setFormData({
       ...formData,
-      cpmk: [...formData.cpmk, { code: `CPMK-${newNumber}`, description: '' }]
+      cpmk: [...formData.cpmk, { code: `CPMK-${newNumber}`, description: '', selected_cpls: [] }]
     });
   };
 
@@ -613,34 +1182,85 @@ function CPMKStep({ formData, setFormData, course }) {
           <div className={`mt-3 p-3 rounded-lg border ${
             cpmkVersion === 'matched' 
               ? 'bg-green-50 border-green-200' 
+              : cpmkVersion === 'database'
+              ? 'bg-blue-50 border-blue-200'
               : 'bg-purple-50 border-purple-200'
           }`}>
             <p className={`text-sm font-semibold ${
-              cpmkVersion === 'matched' ? 'text-green-700' : 'text-purple-700'
+              cpmkVersion === 'matched' 
+                ? 'text-green-700' 
+                : cpmkVersion === 'database'
+                ? 'text-blue-700'
+                : 'text-purple-700'
             }`}>
               {cpmkVersion === 'matched' 
                 ? '✅ VERSI 2: CPMK dari database sudah dicocokkan dengan CPL Prodi' 
+                : cpmkVersion === 'database'
+                ? '📚 CPMK dimuat dari database'
                 : '🤖 VERSI 1: CPMK baru dibuat oleh AI'}
             </p>
           </div>
         )}
 
-        {/* Generate All Button */}
-        <div className="mt-4">
+        {/* Action Buttons */}
+        <div className="mt-4 space-y-3">
+          {/* Top row: Load DB and Generate AI */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Load from Database Button */}
+            <button
+              onClick={handleLoadFromDatabase}
+              disabled={loadingFromDB || !course || !hasCpmkInDB}
+              className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+              title={!hasCpmkInDB ? 'Mata kuliah ini belum memiliki CPMK di database' : 'Load CPMK dari database'}
+            >
+              {loadingFromDB ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Loading...</span>
+                </>
+              ) : (
+                <>
+                  <Database className="w-5 h-5" />
+                  <span>Load dari Database</span>
+                </>
+              )}
+            </button>
+
+            {/* Generate All Button */}
+            <button
+              onClick={handleGenerateAll}
+              disabled={generating || !course}
+              className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 font-semibold"
+            >
+              {generating ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Generating...</span>
+                </>
+              ) : (
+                <>
+                  <Bot className="w-5 h-5" />
+                  <span>Generate Semua CPMK dengan AI</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Bottom row: Auto Match All CPL */}
           <button
-            onClick={handleGenerateAll}
-            disabled={generating || !course}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 font-semibold"
+            onClick={handleMatchAllCPL}
+            disabled={matchingAllCPL || !course}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 font-semibold shadow-md"
           >
-            {generating ? (
+            {matchingAllCPL ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Generating...</span>
+                <span>Matching CPL... ({matchingProgress.current}/{matchingProgress.total})</span>
               </>
             ) : (
               <>
                 <Bot className="w-5 h-5" />
-                <span>Generate Semua CPMK dengan AI</span>
+                <span>🎯 Auto Match Semua CPL dengan AI</span>
               </>
             )}
           </button>
@@ -649,39 +1269,16 @@ function CPMKStep({ formData, setFormData, course }) {
 
       <div className="space-y-4">
         {Array.isArray(formData.cpmk) && formData.cpmk.map((item, index) => (
-          <div key={index} className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-300 transition-colors">
-            <div className="flex items-start gap-3">
+          <div key={index} className="border-2 border-gray-200 rounded-lg hover:border-blue-300 transition-colors">
+            {/* Header dengan kode CPMK dan action buttons */}
+            <div className="p-4 bg-gray-50 flex items-center gap-3">
               <div className="flex-shrink-0">
                 <span className="inline-block px-3 py-1 bg-blue-600 text-white font-semibold rounded-lg">
                   {item.code}
                 </span>
               </div>
               <div className="flex-1">
-                <textarea
-                  value={item.description}
-                  onChange={(e) => {
-                    const newCpmk = [...formData.cpmk];
-                    newCpmk[index].description = e.target.value;
-                    setFormData({ ...formData, cpmk: newCpmk });
-                  }}
-                  placeholder="Masukkan deskripsi CPMK..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  rows={3}
-                />
-                
-                {/* CPL Mapping Info */}
-                {item.matched_cpl && (
-                  <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
-                    <div className="flex items-start gap-2">
-                      <span className="text-xs font-semibold text-green-700 bg-green-200 px-2 py-0.5 rounded">
-                        {item.matched_cpl}
-                      </span>
-                      <p className="text-xs text-green-700 flex-1">
-                        {item.reason || 'Cocok dengan CPL ini'}
-                      </p>
-                    </div>
-                  </div>
-                )}
+                <p className="text-sm text-gray-600">Capaian Pembelajaran Mata Kuliah {index + 1}</p>
               </div>
               <button
                 onClick={() => handleGenerateOne(index)}
@@ -704,6 +1301,20 @@ function CPMKStep({ formData, setFormData, course }) {
                 </button>
               )}
             </div>
+            
+            {/* CPL Mapping Component */}
+            <div className="p-4">
+              <CPMKWithCPLMapping
+                cpmk={item}
+                cpmkIndex={index}
+                course={course}
+                onChange={(updatedCpmk) => {
+                  const newCpmk = [...formData.cpmk];
+                  newCpmk[index] = updatedCpmk;
+                  setFormData({ ...formData, cpmk: newCpmk });
+                }}
+              />
+            </div>
           </div>
         ))}
         
@@ -719,11 +1330,122 @@ function CPMKStep({ formData, setFormData, course }) {
 }
 
 // Step 3: Sub-CPMK (14 items)
-function SubCPMKStep({ formData, setFormData, course }) {
+function SubCPMKStep({ formData, setFormData, course, viewMode = false }) {
   const [generating, setGenerating] = useState(false);
   const [generatingIndex, setGeneratingIndex] = useState(null);
   const [progress, setProgress] = useState(0);
   const [progressText, setProgressText] = useState('');
+  const [savingToDb, setSavingToDb] = useState(false);
+
+  // Simple change handler without auto-save (will be saved when RPS is saved)
+  const handleSubCPMKChange = (newSubCpmk) => {
+    setFormData({ ...formData, subCpmk: newSubCpmk });
+  };
+
+  // Fungsi untuk simpan Sub-CPMK ke database
+  const handleSaveToDatabase = async () => {
+    if (!course || !course.id) {
+      alert('❌ Mata kuliah belum dipilih!');
+      return;
+    }
+
+    // Validasi CPMK
+    const validCpmk = formData.cpmk.filter(c => c.description && c.description.trim());
+    if (validCpmk.length === 0) {
+      alert('❌ Harap isi CPMK terlebih dahulu!');
+      return;
+    }
+
+    // Validasi Sub-CPMK
+    const validSubCpmk = formData.subCpmk.filter(s => s.description && s.description.trim());
+    if (validSubCpmk.length === 0) {
+      alert('❌ Harap isi Sub-CPMK terlebih dahulu!');
+      return;
+    }
+
+    setSavingToDb(true);
+    try {
+      console.log('💾 Saving Sub-CPMK to database...');
+      
+      // Step 1: Batch create/update CPMK
+      const cpmkPayload = {
+        course_id: course.id,
+        cpmks: validCpmk.map((c, idx) => ({
+          code: c.code,
+          description: c.description,
+          sub_cpmks: [] // Sub-CPMK akan disimpan terpisah
+        }))
+      };
+      
+      console.log('📤 Saving CPMK batch:', cpmkPayload);
+      const cpmkRes = await cpmkAPI.batchCreateOrUpdate(cpmkPayload);
+      console.log('📥 CPMK batch response:', cpmkRes);
+      console.log('📥 CPMK batch response.data:', cpmkRes.data);
+      
+      // Backend tidak return data CPMK, jadi kita load ulang
+      console.log('📥 Loading CPMK from database...');
+      const loadCpmkRes = await cpmkAPI.getByCourseId(course.id);
+      let savedCpmk = loadCpmkRes.data?.data || [];
+      
+      console.log('✅ CPMK loaded from DB:', savedCpmk.length);
+      console.log('✅ CPMK data:', savedCpmk);
+      
+      // Step 2: Build map of CPMK code to CPMK ID
+      const cpmkCodeToId = {};
+      savedCpmk.forEach(cpmk => {
+        // Support berbagai format: "CPMK-1", "CPMK 1", dll
+        cpmkCodeToId[`CPMK-${cpmk.cpmk_number}`] = cpmk.id;
+        cpmkCodeToId[`CPMK ${cpmk.cpmk_number}`] = cpmk.id;
+        cpmkCodeToId[`CPMK${cpmk.cpmk_number}`] = cpmk.id;
+      });
+      
+      console.log('🗺️ CPMK code to ID map:', cpmkCodeToId);
+      console.log('🗺️ SubCpmk list:', validSubCpmk);
+      
+      // Step 3: Save Sub-CPMK
+      let subCpmkSaved = 0;
+      for (const subCpmk of validSubCpmk) {
+        console.log('🔍 Processing Sub-CPMK:', subCpmk.code, 'Related to:', subCpmk.relatedCpmk);
+        
+        // Try to find CPMK ID
+        const cpmkId = cpmkCodeToId[subCpmk.relatedCpmk];
+        if (!cpmkId) {
+          console.warn('⚠️ CPMK not found for:', subCpmk.relatedCpmk);
+          console.warn('⚠️ Available keys:', Object.keys(cpmkCodeToId));
+          continue;
+        }
+        
+        try {
+          // Extract sub-cpmk number from code (e.g., "Sub-CPMK-1" -> 1)
+          const subCpmkNumber = parseInt(subCpmk.code.match(/\d+/)?.[0] || (subCpmkSaved + 1));
+          
+          await cpmkAPI.addSubCPMK(cpmkId, {
+            sub_cpmk_number: subCpmkNumber,
+            description: subCpmk.description
+          });
+          
+          subCpmkSaved++;
+          console.log(`✅ Sub-CPMK ${subCpmkNumber} saved for ${subCpmk.relatedCpmk}`);
+        } catch (error) {
+          if (error.response?.status === 409) {
+            console.log(`ℹ️ Sub-CPMK already exists, skipping`);
+            subCpmkSaved++;
+          } else {
+            console.error('❌ Failed to save Sub-CPMK:', error);
+          }
+        }
+      }
+      
+      alert(`✅ Berhasil menyimpan ${subCpmkSaved} Sub-CPMK ke database!`);
+      console.log(`✅ Total Sub-CPMK synced: ${subCpmkSaved}/${validSubCpmk.length}`);
+      
+    } catch (error) {
+      console.error('❌ Failed to save Sub-CPMK to database:', error);
+      alert('❌ Gagal menyimpan Sub-CPMK: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setSavingToDb(false);
+    }
+  };
 
   const handleGenerateOne = async (index) => {
     if (!course) return;
@@ -837,28 +1559,28 @@ function SubCPMKStep({ formData, setFormData, course }) {
   };
 
   return (
-    <div>
+    <div className="px-2 sm:px-0">
       {/* Progress Modal Overlay */}
       {generating && generatingIndex === null && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full mx-4">
-            <div className="text-center mb-6">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-purple-100 rounded-full mb-4">
-                <Bot className="w-8 h-8 text-purple-600 animate-pulse" />
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-2xl p-4 sm:p-8 max-w-md w-full">
+            <div className="text-center mb-4 sm:mb-6">
+              <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 bg-purple-100 rounded-full mb-3 sm:mb-4">
+                <Bot className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600 animate-pulse" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Generating Sub-CPMK</h3>
-              <p className="text-sm text-gray-600">{progressText}</p>
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">Generating Sub-CPMK</h3>
+              <p className="text-xs sm:text-sm text-gray-600">{progressText}</p>
             </div>
             
             {/* Progress Bar */}
             <div className="mb-4">
-              <div className="flex justify-between text-sm text-gray-600 mb-2">
+              <div className="flex justify-between text-xs sm:text-sm text-gray-600 mb-2">
                 <span>Progress</span>
                 <span className="font-bold text-purple-600">{progress}%</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+              <div className="w-full bg-gray-200 rounded-full h-3 sm:h-4 overflow-hidden">
                 <div 
-                  className="bg-gradient-to-r from-purple-500 to-purple-600 h-4 rounded-full transition-all duration-300 ease-out flex items-center justify-end px-2"
+                  className="bg-gradient-to-r from-purple-500 to-purple-600 h-3 sm:h-4 rounded-full transition-all duration-300 ease-out flex items-center justify-end px-1 sm:px-2"
                   style={{ width: `${progress}%` }}
                 >
                   {progress > 10 && (
@@ -869,49 +1591,78 @@ function SubCPMKStep({ formData, setFormData, course }) {
             </div>
             
             <div className="text-center text-xs text-gray-500">
-              <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+              <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin inline mr-2" />
               Mohon tunggu, AI sedang bekerja...
             </div>
           </div>
         </div>
       )}
 
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">📝 Sub-Capaian Pembelajaran (Sub-CPMK)</h2>
-          <p className="text-gray-600">
+      {/* Header Section - Responsive */}
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4 sm:mb-6">
+        <div className="flex-1">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">📝 Sub-Capaian Pembelajaran (Sub-CPMK)</h2>
+          <p className="text-sm sm:text-base text-gray-600">
             Total 14 Sub-CPMK untuk 14 minggu pembelajaran (minggu 8 UTS, minggu 16 UAS).
           </p>
-          <div className="mt-2 p-3 bg-purple-50 rounded-lg border border-purple-200">
+          <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-purple-50 rounded-lg border border-purple-200">
             <p className="text-xs text-purple-700">
               <strong>Catatan:</strong> Urutkan Sub-CPMK dari dasar ke lanjut. Setiap Sub-CPMK harus terkait dengan salah satu CPMK di atas.
             </p>
           </div>
         </div>
-        <button
-          onClick={handleGenerateAll}
-          disabled={generating}
-          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
-        >
-          {generating && generatingIndex === null ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Generating All...</span>
-            </>
-          ) : (
-            <>
-              <Bot className="w-4 h-4" />
-              <span>Generate All</span>
-            </>
-          )}
-        </button>
+        
+        {/* Action Buttons - Responsive */}
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-2 lg:flex-shrink-0">
+          <button
+            onClick={handleSaveToDatabase}
+            disabled={savingToDb || viewMode}
+            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-green-600 text-white text-sm sm:text-base rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors w-full sm:w-auto"
+            title="Simpan Sub-CPMK ke database untuk digunakan di halaman CPMK Management"
+          >
+            {savingToDb ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="hidden sm:inline">Menyimpan...</span>
+                <span className="sm:hidden">Menyimpan...</span>
+              </>
+            ) : (
+              <>
+                <Database className="w-4 h-4" />
+                <span className="hidden sm:inline">Simpan ke Database</span>
+                <span className="sm:hidden">Simpan DB</span>
+              </>
+            )}
+          </button>
+          <button
+            onClick={handleGenerateAll}
+            disabled={generating || viewMode}
+            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-purple-600 text-white text-sm sm:text-base rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors w-full sm:w-auto"
+          >
+            {generating && generatingIndex === null ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="hidden sm:inline">Generating All...</span>
+                <span className="sm:hidden">Generating...</span>
+              </>
+            ) : (
+              <>
+                <Bot className="w-4 h-4" />
+                <span className="hidden sm:inline">Generate All</span>
+                <span className="sm:hidden">Generate</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Sub-CPMK Grid - Responsive */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
         {Array.isArray(formData.subCpmk) && formData.subCpmk.map((item, index) => (
-          <div key={index} className="p-4 border-2 border-gray-200 rounded-lg hover:border-purple-300 transition-colors">
-            <div className="flex items-start gap-3 mb-2">
-              <span className="inline-block px-3 py-1 bg-purple-600 text-white font-semibold rounded-lg text-sm">
+          <div key={index} className="p-3 sm:p-4 border-2 border-gray-200 rounded-lg hover:border-purple-300 transition-colors bg-white">
+            {/* Header Row - Responsive */}
+            <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3 mb-2 sm:mb-3">
+              <span className="inline-block px-3 py-1 bg-purple-600 text-white font-semibold rounded-lg text-xs sm:text-sm whitespace-nowrap self-start">
                 {item.code}
               </span>
               <select
@@ -919,37 +1670,49 @@ function SubCPMKStep({ formData, setFormData, course }) {
                 onChange={(e) => {
                   const newSubCpmk = [...formData.subCpmk];
                   newSubCpmk[index].relatedCpmk = e.target.value;
-                  setFormData({ ...formData, subCpmk: newSubCpmk });
+                  handleSubCPMKChange(newSubCpmk);
                 }}
-                className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-purple-500"
+                className="flex-1 px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded text-xs sm:text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent w-full sm:w-auto"
+                disabled={viewMode}
               >
                 <option value="">- Pilih CPMK -</option>
                 {Array.isArray(formData.cpmk) && formData.cpmk.map(c => (
                   <option key={c.code} value={c.code}>{c.code}</option>
                 ))}
               </select>
-              <button
-                onClick={() => handleGenerateOne(index)}
-                disabled={generating && generatingIndex === index}
-                className="flex-shrink-0 px-2 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
-              >
-                {generating && generatingIndex === index ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <Bot className="w-3 h-3" />
-                )}
-              </button>
+              {!viewMode && (
+                <button
+                  onClick={() => handleGenerateOne(index)}
+                  disabled={generating && generatingIndex === index}
+                  className="flex-shrink-0 px-2 sm:px-3 py-1.5 sm:py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 transition-colors self-start sm:self-auto"
+                  title="Generate dengan AI"
+                >
+                  {generating && generatingIndex === index ? (
+                    <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
+                  ) : (
+                    <Bot className="w-3 h-3 sm:w-4 sm:h-4" />
+                  )}
+                </button>
+              )}
             </div>
+            
+            {/* Textarea - Responsive */}
             <textarea
               value={item.description}
               onChange={(e) => {
                 const newSubCpmk = [...formData.subCpmk];
                 newSubCpmk[index].description = e.target.value;
-                setFormData({ ...formData, subCpmk: newSubCpmk });
+                handleSubCPMKChange(newSubCpmk);
               }}
               placeholder="Deskripsi Sub-CPMK..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none text-sm focus:ring-2 focus:ring-purple-500"
+              className={`w-full px-2 sm:px-3 py-2 border rounded-lg resize-none text-xs sm:text-sm ${
+                viewMode 
+                  ? 'bg-gray-50 border-gray-200 cursor-not-allowed' 
+                  : 'border-gray-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent'
+              }`}
               rows={3}
+              disabled={viewMode}
+              readOnly={viewMode}
             />
           </div>
         ))}
@@ -1087,23 +1850,37 @@ function RencanaMingguanStep({ formData, setFormData, course }) {
       const res = await aiHelperAPI.generateRencanaPembelajaran({
         course_code: course.code,
         course_title: course.title,
-        cpmk_list: formData.cpmk.filter(c => c.description.trim()),
-        sub_cpmk_list: formData.subCpmk.filter(s => s.description.trim()),
-        bahan_kajian: formData.bahanKajian.filter(b => b.trim())
+        cpmk_list: formData.cpmk.filter(c => c.description && c.description.trim()),
+        sub_cpmk_list: formData.subCpmk.filter(s => s.description && s.description.trim()),
+        bahan_kajian: formData.bahanKajian.filter(b => b && b.trim())
       });
       
       if (res.data.data && res.data.data.weeks) {
         const newRencana = [...formData.rencanaMingguan];
-        res.data.data.weeks.forEach((week, index) => {
-          if (!newRencana[index].isUTS && !newRencana[index].isUAS) {
-            newRencana[index] = { ...newRencana[index], ...week };
+        
+        // Map berdasarkan nomor minggu dari AI response
+        res.data.data.weeks.forEach((week) => {
+          const mingguNumber = week.minggu;
+          const arrayIndex = mingguNumber - 1; // Convert to 0-based index
+          
+          // Pastikan index valid (0-13 untuk 14 minggu)
+          if (arrayIndex >= 0 && arrayIndex < 14) {
+            newRencana[arrayIndex] = { 
+              minggu: mingguNumber,
+              subCpmk: week.subCpmk || week.sub_cpmk || '',
+              materi: week.materi || '',
+              metode: week.metode || '',
+              penilaian: week.penilaian || ''
+            };
           }
         });
+        
         setFormData({ ...formData, rencanaMingguan: newRencana });
+        alert(`✅ Berhasil generate ${res.data.data.weeks.length} minggu pembelajaran!`);
       }
     } catch (error) {
       console.error('Failed to generate rencana:', error);
-      alert('Gagal generate rencana pembelajaran');
+      alert('Gagal generate rencana pembelajaran: ' + (error.response?.data?.error || error.message));
     } finally {
       setGenerating(false);
     }
@@ -1113,9 +1890,9 @@ function RencanaMingguanStep({ formData, setFormData, course }) {
     <div>
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">📅 Rencana Pembelajaran 16 Minggu</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">📅 Rencana Pembelajaran 14 Minggu</h2>
           <p className="text-gray-600">
-            Rencana detail untuk setiap minggu (Minggu 8: UTS, Minggu 16: UAS).
+            Rencana detail untuk setiap minggu pembelajaran. (UTS dan UAS diatur terpisah dalam sistem penilaian)
           </p>
         </div>
         <button
@@ -1141,84 +1918,76 @@ function RencanaMingguanStep({ formData, setFormData, course }) {
         {Array.isArray(formData.rencanaMingguan) && formData.rencanaMingguan.map((minggu, index) => (
           <div 
             key={index} 
-            className={`p-4 border-2 rounded-lg ${
-              minggu.isUTS || minggu.isUAS 
-                ? 'border-red-300 bg-red-50' 
-                : 'border-gray-200 hover:border-blue-300'
-            } transition-colors`}
+            className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-300 transition-colors"
           >
-            <h3 className={`font-bold text-lg mb-3 ${minggu.isUTS || minggu.isUAS ? 'text-red-700' : 'text-blue-600'}`}>
+            <h3 className="font-bold text-lg mb-3 text-blue-600">
               Minggu {minggu.minggu}
-              {minggu.isUTS && ' - UJIAN TENGAH SEMESTER'}
-              {minggu.isUAS && ' - UJIAN AKHIR SEMESTER'}
             </h3>
             
-            {!minggu.isUTS && !minggu.isUAS && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Sub-CPMK</label>
-                  <select
-                    value={minggu.subCpmk}
-                    onChange={(e) => {
-                      const newRencana = [...formData.rencanaMingguan];
-                      newRencana[index].subCpmk = e.target.value;
-                      setFormData({ ...formData, rencanaMingguan: newRencana });
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  >
-                    <option value="">- Pilih Sub-CPMK -</option>
-                    {Array.isArray(formData.subCpmk) && formData.subCpmk.map(s => (
-                      <option key={s.code} value={s.code}>{s.code}</option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Metode Pembelajaran</label>
-                  <input
-                    type="text"
-                    value={minggu.metode}
-                    onChange={(e) => {
-                      const newRencana = [...formData.rencanaMingguan];
-                      newRencana[index].metode = e.target.value;
-                      setFormData({ ...formData, rencanaMingguan: newRencana });
-                    }}
-                    placeholder="Ceramah, Diskusi, Praktikum..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  />
-                </div>
-                
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Materi Pembelajaran</label>
-                  <textarea
-                    value={minggu.materi}
-                    onChange={(e) => {
-                      const newRencana = [...formData.rencanaMingguan];
-                      newRencana[index].materi = e.target.value;
-                      setFormData({ ...formData, rencanaMingguan: newRencana });
-                    }}
-                    placeholder="Deskripsi materi..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none"
-                    rows={2}
-                  />
-                </div>
-                
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Penilaian</label>
-                  <input
-                    type="text"
-                    value={minggu.penilaian}
-                    onChange={(e) => {
-                      const newRencana = [...formData.rencanaMingguan];
-                      newRencana[index].penilaian = e.target.value;
-                      setFormData({ ...formData, rencanaMingguan: newRencana });
-                    }}
-                    placeholder="Tugas, Kuis, Presentasi..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  />
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Sub-CPMK</label>
+                <select
+                  value={minggu.subCpmk}
+                  onChange={(e) => {
+                    const newRencana = [...formData.rencanaMingguan];
+                    newRencana[index].subCpmk = e.target.value;
+                    setFormData({ ...formData, rencanaMingguan: newRencana });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  <option value="">- Pilih Sub-CPMK -</option>
+                  {Array.isArray(formData.subCpmk) && formData.subCpmk.map(s => (
+                    <option key={s.code} value={s.code}>{s.code}</option>
+                  ))}
+                </select>
               </div>
-            )}
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Metode Pembelajaran</label>
+                <input
+                  type="text"
+                  value={minggu.metode}
+                  onChange={(e) => {
+                    const newRencana = [...formData.rencanaMingguan];
+                    newRencana[index].metode = e.target.value;
+                    setFormData({ ...formData, rencanaMingguan: newRencana });
+                  }}
+                  placeholder="Ceramah, Diskusi, Praktikum..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+              </div>
+              
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Materi Pembelajaran</label>
+                <textarea
+                  value={minggu.materi}
+                  onChange={(e) => {
+                    const newRencana = [...formData.rencanaMingguan];
+                    newRencana[index].materi = e.target.value;
+                    setFormData({ ...formData, rencanaMingguan: newRencana });
+                  }}
+                  placeholder="Deskripsi materi..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none"
+                  rows={2}
+                />
+              </div>
+              
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Penilaian</label>
+                <input
+                  type="text"
+                  value={minggu.penilaian}
+                  onChange={(e) => {
+                    const newRencana = [...formData.rencanaMingguan];
+                    newRencana[index].penilaian = e.target.value;
+                    setFormData({ ...formData, rencanaMingguan: newRencana });
+                  }}
+                  placeholder="Tugas, Kuis, Presentasi..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+              </div>
+            </div>
           </div>
         ))}
       </div>
@@ -1226,7 +1995,424 @@ function RencanaMingguanStep({ formData, setFormData, course }) {
   );
 }
 
-// Step 6: Referensi
+// Step 6: Rencana Tugas
+function RencanaTugasStep({ formData, setFormData, course, viewMode = false }) {
+  const [activeTab, setActiveTab] = useState(0);
+  const [generating, setGenerating] = useState(false);
+  const [generatingIndex, setGeneratingIndex] = useState(null);
+
+  const handleTugasChange = (index, field, value) => {
+    const newTugas = [...formData.rencanaTugas];
+    newTugas[index][field] = value;
+    setFormData({ ...formData, rencanaTugas: newTugas });
+  };
+
+  const availableSubCpmk = formData.subCpmk.filter(s => s.description && s.description.trim());
+
+  // Generate AI untuk satu tugas
+  const handleGenerateOne = async (tugasIndex) => {
+    if (!course || viewMode) return;
+    
+    const tugas = formData.rencanaTugas[tugasIndex];
+    if (!tugas.subCpmk) {
+      alert('Pilih Sub-CPMK terlebih dahulu!');
+      return;
+    }
+
+    const selectedSubCpmk = availableSubCpmk.find(s => s.code === tugas.subCpmk);
+    if (!selectedSubCpmk) {
+      alert('Sub-CPMK tidak ditemukan!');
+      return;
+    }
+
+    setGenerating(true);
+    setGeneratingIndex(tugasIndex);
+    
+    try {
+      // Generate dengan template yang sederhana
+      const newTugas = [...formData.rencanaTugas];
+      
+      // Set default values berdasarkan Sub-CPMK
+      newTugas[tugasIndex] = {
+        ...newTugas[tugasIndex],
+        judulTugas: `Tugas ${tugasIndex + 1}: ${selectedSubCpmk.description.substring(0, 50)}...`,
+        indikator: `Mahasiswa mampu ${selectedSubCpmk.description.toLowerCase()}`,
+        batasWaktu: `Minggu ke-${(tugasIndex + 1) * 4}`,
+        petunjukPengerjaan: `1. Pelajari materi terkait ${selectedSubCpmk.code}\n2. Kerjakan tugas sesuai Sub-CPMK\n3. Dokumentasikan hasil pekerjaan\n4. Submit tepat waktu`,
+        luaranTugas: `Laporan/dokumen terkait ${selectedSubCpmk.code}`,
+        kriteriaPenilaian: `- Kesesuaian dengan ${selectedSubCpmk.code}\n- Kelengkapan isi\n- Kerapihan dan sistematika\n- Ketepatan waktu pengumpulan`,
+        teknikPenilaian: 'Penilaian hasil kerja/laporan',
+        bobotPersen: `${20 + (tugasIndex * 5)}%`
+      };
+      
+      setFormData({ ...formData, rencanaTugas: newTugas });
+      
+      // Optional: Generate description lebih detail dengan AI jika tersedia
+      try {
+        const res = await aiHelperAPI.generateCourseDescription({
+          course_code: course.code,
+          course_title: `Tugas ${tugasIndex + 1} - ${selectedSubCpmk.description}`,
+          credits: 0
+        });
+        
+        if (res.data.data && res.data.data.description) {
+          // Update petunjuk pengerjaan dengan hasil AI
+          newTugas[tugasIndex].petunjukPengerjaan = res.data.data.description.substring(0, 500);
+          setFormData({ ...formData, rencanaTugas: newTugas });
+        }
+      } catch (aiError) {
+        console.log('AI enhancement skipped:', aiError);
+        // Continue dengan data default yang sudah di-set
+      }
+      
+    } catch (error) {
+      console.error('Failed to generate tugas:', error);
+      alert('Gagal generate tugas');
+    } finally {
+      setGenerating(false);
+      setGeneratingIndex(null);
+    }
+  };
+
+  // Generate semua tugas sekaligus dengan auto-assign Sub-CPMK
+  const handleGenerateAll = async () => {
+    if (viewMode) return;
+    
+    // Validasi Sub-CPMK tersedia
+    if (availableSubCpmk.length === 0) {
+      alert('❌ Harap isi Sub-CPMK terlebih dahulu di Step 3!');
+      return;
+    }
+
+    if (availableSubCpmk.length < 14) {
+      alert(`⚠️ Sub-CPMK yang terisi hanya ${availableSubCpmk.length}. Minimal 14 Sub-CPMK diperlukan untuk 14 tugas.`);
+      return;
+    }
+
+    setGenerating(true);
+    
+    try {
+      const newTugas = [...formData.rencanaTugas];
+      
+      // Loop untuk 14 tugas
+      for (let i = 0; i < 14; i++) {
+        setGeneratingIndex(i);
+        
+        // Auto-assign Sub-CPMK (1 tugas = 1 Sub-CPMK)
+        const selectedSubCpmk = availableSubCpmk[i];
+        
+        // Generate tugas berdasarkan Sub-CPMK
+        newTugas[i] = {
+          tugasKe: i + 1,
+          subCpmk: selectedSubCpmk.code,
+          indikator: `Mahasiswa mampu ${selectedSubCpmk.description.toLowerCase()}`,
+          judulTugas: `Tugas ${i + 1}: ${selectedSubCpmk.description.substring(0, 60)}${selectedSubCpmk.description.length > 60 ? '...' : ''}`,
+          batasWaktu: `Minggu ke-${i + 1}`,
+          petunjukPengerjaan: `1. Pelajari materi terkait ${selectedSubCpmk.code}\n2. Kerjakan tugas sesuai dengan capaian pembelajaran: "${selectedSubCpmk.description}"\n3. Dokumentasikan hasil pekerjaan dengan rapi\n4. Submit tepat waktu sebelum deadline`,
+          luaranTugas: `Laporan/dokumen tertulis yang menunjukkan pemahaman terhadap ${selectedSubCpmk.code}`,
+          kriteriaPenilaian: `- Kesesuaian dengan ${selectedSubCpmk.code} (40%)\n- Kelengkapan dan kedalaman isi (30%)\n- Kerapihan dan sistematika penulisan (20%)\n- Ketepatan waktu pengumpulan (10%)`,
+          teknikPenilaian: 'Penilaian hasil kerja/laporan',
+          bobotPersen: `${Math.round(100 / 14)}%`
+        };
+        
+        // Delay untuk UX
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+      
+      setFormData({ ...formData, rencanaTugas: newTugas });
+      
+      setGenerating(false);
+      setGeneratingIndex(null);
+      alert('✅ Semua 14 tugas berhasil di-generate dengan Sub-CPMK otomatis!');
+      
+    } catch (error) {
+      console.error('Failed to generate all tugas:', error);
+      alert('❌ Gagal generate tugas: ' + error.message);
+      setGenerating(false);
+      setGeneratingIndex(null);
+    }
+  };
+
+  return (
+    <div>
+      <div className="mb-4 sm:mb-6">
+        <div className="flex flex-col sm:flex-row items-start justify-between gap-3 mb-4">
+          <div className="flex-1">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1 sm:mb-2">📝 Rencana Tugas</h2>
+            <p className="text-sm sm:text-base text-gray-600">
+              Rencanakan 14 tugas terstruktur untuk mahasiswa (1 tugas per minggu materi)
+            </p>
+          </div>
+          {!viewMode && (
+            <button
+              onClick={handleGenerateAll}
+              disabled={generating}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium whitespace-nowrap"
+            >
+              {generating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Generating...</span>
+                </>
+              ) : (
+                <>
+                  <Bot className="w-4 h-4" />
+                  <span>Generate All AI</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+        <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+          <p className="text-xs sm:text-sm text-orange-700">
+            <strong>Tips:</strong> Setiap tugas harus terkait dengan Sub-CPMK dan memiliki kriteria penilaian yang jelas
+          </p>
+        </div>
+      </div>
+
+      {/* Layout: Sidebar (Desktop) + Dropdown (Mobile) */}
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+        {/* Sidebar Selector untuk Desktop */}
+        <div className="hidden lg:block w-64 flex-shrink-0">
+          <div className="bg-white rounded-lg border-2 border-gray-200 p-2 sticky top-4">
+            <h3 className="text-sm font-semibold text-gray-700 px-3 py-2 mb-2">Pilih Tugas</h3>
+            <div className="space-y-1 max-h-[600px] overflow-y-auto">
+              {formData.rencanaTugas.map((tugas, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setActiveTab(idx)}
+                  className={`w-full text-left px-3 py-2.5 rounded-lg transition-all ${
+                    activeTab === idx
+                      ? 'bg-orange-600 text-white font-semibold shadow-md'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">📋</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium">Tugas {idx + 1}</div>
+                      {tugas.subCpmk && (
+                        <div className={`text-xs mt-0.5 truncate ${
+                          activeTab === idx ? 'text-orange-100' : 'text-gray-500'
+                        }`}>
+                          {tugas.subCpmk}
+                        </div>
+                      )}
+                    </div>
+                    {generating && generatingIndex === idx && (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Dropdown Selector untuk Mobile/Tablet */}
+        <div className="lg:hidden mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Pilih Tugas
+          </label>
+          <select
+            value={activeTab}
+            onChange={(e) => setActiveTab(parseInt(e.target.value))}
+            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+          >
+            {formData.rencanaTugas.map((tugas, idx) => (
+              <option key={idx} value={idx}>
+                Tugas {idx + 1} {tugas.subCpmk ? `- ${tugas.subCpmk}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Content Area */}
+        <div className="flex-1 min-w-0">
+      {/* Form untuk tugas aktif */}
+      <div className="space-y-4 sm:space-y-6">{/* Tombol Generate per Tugas */}
+        {!viewMode && (
+          <div className="flex justify-end">
+            <button
+              onClick={() => handleGenerateOne(activeTab)}
+              disabled={generating || !formData.rencanaTugas[activeTab].subCpmk}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+              title="Generate detail tugas ini dengan AI"
+            >
+              {generating && generatingIndex === activeTab ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Generating...</span>
+                </>
+              ) : (
+                <>
+                  <Bot className="w-4 h-4" />
+                  <span>Generate Tugas {activeTab + 1}</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Sub-CPMK */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Sub-CPMK Terkait <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={formData.rencanaTugas[activeTab].subCpmk}
+              onChange={(e) => handleTugasChange(activeTab, 'subCpmk', e.target.value)}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              disabled={viewMode}
+            >
+              <option value="">-- Pilih Sub-CPMK --</option>
+              {availableSubCpmk.map((sub, idx) => (
+                <option key={idx} value={sub.code}>
+                  {sub.code}: {sub.description.substring(0, 60)}...
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Batas Waktu */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Batas Waktu Pengumpulan
+            </label>
+            <input
+              type="text"
+              value={formData.rencanaTugas[activeTab].batasWaktu}
+              onChange={(e) => handleTugasChange(activeTab, 'batasWaktu', e.target.value)}
+              placeholder="Contoh: Minggu ke-7, Akhir Semester"
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            />
+          </div>
+        </div>
+
+        {/* Indikator */}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Indikator Pencapaian
+          </label>
+          <textarea
+            value={formData.rencanaTugas[activeTab].indikator}
+            onChange={(e) => handleTugasChange(activeTab, 'indikator', e.target.value)}
+            placeholder="Mahasiswa mampu..."
+            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            rows={2}
+          />
+        </div>
+
+        {/* Judul Tugas */}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Judul Tugas <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={formData.rencanaTugas[activeTab].judulTugas}
+            onChange={(e) => handleTugasChange(activeTab, 'judulTugas', e.target.value)}
+            placeholder="Contoh: Analisis Kasus Pemrograman Berbasis Objek"
+            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+          />
+        </div>
+
+        {/* Petunjuk Pengerjaan */}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Petunjuk Pengerjaan Tugas
+          </label>
+          <textarea
+            value={formData.rencanaTugas[activeTab].petunjukPengerjaan}
+            onChange={(e) => handleTugasChange(activeTab, 'petunjukPengerjaan', e.target.value)}
+            placeholder="1. Bentuk kelompok 3-4 orang&#10;2. Pilih studi kasus yang relevan&#10;3. Analisis menggunakan konsep yang telah dipelajari..."
+            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            rows={4}
+          />
+        </div>
+
+        {/* Luaran Tugas */}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Luaran Tugas (Output)
+          </label>
+          <input
+            type="text"
+            value={formData.rencanaTugas[activeTab].luaranTugas}
+            onChange={(e) => handleTugasChange(activeTab, 'luaranTugas', e.target.value)}
+            placeholder="Contoh: Laporan tertulis (PDF), Presentasi PPT, Source Code"
+            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Kriteria Penilaian */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Kriteria Penilaian
+            </label>
+            <textarea
+              value={formData.rencanaTugas[activeTab].kriteriaPenilaian}
+              onChange={(e) => handleTugasChange(activeTab, 'kriteriaPenilaian', e.target.value)}
+              placeholder="- Keakuratan analisis (40%)&#10;- Kelengkapan laporan (30%)&#10;- Presentasi (30%)"
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              rows={4}
+            />
+          </div>
+
+          {/* Teknik Penilaian */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Teknik Penilaian
+            </label>
+            <textarea
+              value={formData.rencanaTugas[activeTab].teknikPenilaian}
+              onChange={(e) => handleTugasChange(activeTab, 'teknikPenilaian', e.target.value)}
+              placeholder="Rubrik penilaian, Peer review, Observasi presentasi"
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              rows={4}
+            />
+          </div>
+        </div>
+
+        {/* Bobot Penilaian */}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Bobot Penilaian (%)
+          </label>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            value={formData.rencanaTugas[activeTab].bobotPersen}
+            onChange={(e) => handleTugasChange(activeTab, 'bobotPersen', e.target.value)}
+            placeholder="Contoh: 20"
+            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Total bobot ketiga tugas sebaiknya seimbang dengan komponen penilaian lain
+          </p>
+        </div>
+
+        {/* Info Summary */}
+        <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <p className="text-sm font-semibold text-gray-700 mb-2">📊 Ringkasan Tugas {activeTab + 1}:</p>
+          <ul className="text-sm text-gray-600 space-y-1">
+            <li>• Judul: <span className="font-medium">{formData.rencanaTugas[activeTab].judulTugas || '-'}</span></li>
+            <li>• Sub-CPMK: <span className="font-medium">{formData.rencanaTugas[activeTab].subCpmk || '-'}</span></li>
+            <li>• Deadline: <span className="font-medium">{formData.rencanaTugas[activeTab].batasWaktu || '-'}</span></li>
+            <li>• Bobot: <span className="font-medium">{formData.rencanaTugas[activeTab].bobotPersen || '0'}%</span></li>
+          </ul>
+        </div>
+      </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Step 7: Referensi
 function ReferensiStep({ formData, setFormData, course }) {
   const [generating, setGenerating] = useState(false);
 
@@ -1234,10 +2420,13 @@ function ReferensiStep({ formData, setFormData, course }) {
     if (!course) return;
     setGenerating(true);
     try {
+      // Kirim context lengkap untuk referensi yang relevan
       const res = await aiHelperAPI.generateReferensi({
         course_code: course.code,
         course_title: course.title,
-        description: formData.description
+        description: formData.description,
+        cpmk_list: formData.cpmk.filter(c => c.description && c.description.trim()).map(c => c.description),
+        bahan_kajian: formData.bahanKajian.filter(b => b && b.trim())
       });
       
       if (res.data.data && res.data.data.items) {
@@ -1255,10 +2444,11 @@ function ReferensiStep({ formData, setFormData, course }) {
           return `${author}. (${year}). ${title}. ${publisher} ${type}`.trim();
         });
         setFormData({ ...formData, referensi: items });
+        alert(`✅ Berhasil generate ${items.length} referensi!`);
       }
     } catch (error) {
       console.error('Failed to generate referensi:', error);
-      alert('Gagal generate referensi');
+      alert('❌ Gagal generate referensi: ' + (error.response?.data?.error || error.message));
     } finally {
       setGenerating(false);
     }

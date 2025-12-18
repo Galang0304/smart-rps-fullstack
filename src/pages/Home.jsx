@@ -85,19 +85,28 @@ export default function Home() {
 
             <div className="relative">
               <div className="absolute -inset-2 rounded-[28px] bg-gradient-to-br from-blue-600/20 via-sky-500/10 to-indigo-500/20 blur-xl" />
-              <div className="relative rounded-[28px] bg-white/70 backdrop-blur border border-blue-100 shadow-xl overflow-hidden">
-                <div className="relative">
-                  <img src="/gedung-unismuh.jpg" alt="Universitas Muhammadiyah Makassar" className="h-72 sm:h-80 lg:h-[420px] w-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-blue-950/40 via-blue-950/10 to-transparent" />
-                </div>
-                <div className="p-5 sm:p-6">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <div className="text-sm font-semibold text-blue-950">Kelola RPS lebih cepat</div>
-                      <div className="text-xs text-blue-800/70">Dengan template + AI assistant</div>
-                    </div>
-                    <div className="rounded-xl bg-blue-600 text-white px-3 py-2 text-xs font-bold shadow-sm">Modern UI</div>
+              <div className="relative rounded-[28px] bg-white/70 backdrop-blur border border-blue-100 shadow-xl p-8">
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="rounded-2xl bg-gradient-to-br from-blue-600 to-sky-500 p-8 text-white text-center">
+                    <div className="text-4xl font-extrabold mb-2">AI</div>
+                    <div className="text-sm opacity-90">Asisten Cerdas</div>
                   </div>
+                  <div className="rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-500 p-8 text-white text-center">
+                    <div className="text-4xl font-extrabold mb-2">RPS</div>
+                    <div className="text-sm opacity-90">Terintegrasi</div>
+                  </div>
+                  <div className="rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-500 p-8 text-white text-center">
+                    <div className="text-4xl font-extrabold mb-2">DOCX</div>
+                    <div className="text-sm opacity-90">Export Cepat</div>
+                  </div>
+                  <div className="rounded-2xl bg-gradient-to-br from-orange-600 to-red-500 p-8 text-white text-center">
+                    <div className="text-4xl font-extrabold mb-2">CPL</div>
+                    <div className="text-sm opacity-90">Management</div>
+                  </div>
+                </div>
+                <div className="mt-6 text-center">
+                  <div className="text-sm font-semibold text-blue-950">Sistem Modern & Efisien</div>
+                  <div className="text-xs text-blue-800/70">Template Professional + AI Assistant</div>
                 </div>
               </div>
             </div>
@@ -113,22 +122,75 @@ export default function Home() {
             <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto">Struktur pimpinan Fakultas Teknik Universitas Muhammadiyah Makassar.</p>
             <div className="w-24 h-1 bg-blue-600 mx-auto rounded-full mt-4"></div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-6">
-            {[2, 3, 4, 5, 6].map((num) => (
-              <div key={num} className="group rounded-2xl border border-blue-100 bg-white shadow-sm hover:shadow-xl transition overflow-hidden">
-                <div className="h-44 sm:h-52 lg:h-56 bg-blue-50">
-                  <img 
-                    src={`/pemimpin/${num}.jpg`} 
-                    alt={`Pimpinan ${num}`}
-                    className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
-                  />
-                </div>
-                <div className="p-3 sm:p-4">
-                  <div className="text-sm font-bold text-blue-950">Pimpinan {num}</div>
-                  <div className="text-xs text-blue-800/70">Fakultas Teknik</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {['Dekan', 'Wakil Dekan I', 'Wakil Dekan II'].map((jabatan, idx) => (
+              <div key={idx} className="group">
+                <div className="relative rounded-2xl bg-white border border-blue-100 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden">
+                  <div className="aspect-[3/4] bg-gradient-to-b from-blue-50 to-white relative overflow-hidden">
+                    <img 
+                      src={`/pemimpin/${idx + 1}.jpg`} 
+                      alt={jabatan}
+                      className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500"%3E%3Crect fill="%23e0f2fe" width="400" height="500"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%230c4a6e" font-family="sans-serif" font-size="24" font-weight="bold"%3E' + jabatan + '%3C/text%3E%3C/svg%3E';
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-blue-950/60 via-blue-950/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  <div className="p-5 text-center bg-white">
+                    <div className="text-base font-bold text-blue-950 mb-1">{jabatan}</div>
+                    <div className="text-sm text-blue-800/70">Fakultas Teknik</div>
+                  </div>
                 </div>
               </div>
-            ))}
+            ))} bg-gradient-to-b from-blue-50/40 to-white">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-8 sm:mb-12">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-blue-950 mb-3">Tim Pengembang</h2>
+            <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto">Tim yang mengembangkan sistem SMART RPS agar mudah digunakan dan siap produksi.</p>
+            <div className="w-24 h-1 bg-blue-600 mx-auto rounded-full mt-4"></div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 max-w-6xl mx-auto">
+            {[
+              { name: 'Developer 1', role: 'Fullstack Developer' },
+              { name: 'Developer 2', role: 'Backend Engineer' },
+              { name: 'Developer 3', role: 'Frontend Engineer' },
+              { name: 'Developer 4', role: 'UI/UX Designer' }
+            ].map((dev, idx) => (
+              <div key={idx} className="group">
+                <div className="relative rounded-2xl bg-white border border-blue-100 shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden">
+                  <div className="aspect-square bg-gradient-to-br from-blue-50 via-sky-50 to-indigo-50 relative overflow-hidden">
+                    <img 
+                      src={`/pengembang/${idx + 1}.jpg`} 
+                      alt={dev.name}
+                      className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"%3E%3Cdefs%3E%3ClinearGradient id="grad" x1="0%25" y1="0%25" x2="100%25" y2="100%25"%3E%3Cstop offset="0%25" style="stop-color:%2393c5fd;stop-opacity:1" /%3E%3Cstop offset="100%25" style="stop-color:%233b82f6;stop-opacity:1" /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill="url(%23grad)" width="400" height="400"/%3E%3Ccircle cx="200" cy="160" r="60" fill="white" opacity="0.3"/%3E%3Ccircle cx="200" cy="320" r="100" fill="white" opacity="0.3"/%3E%3Ctext x="50%25" y="52%25" dominant-baseline="middle" text-anchor="middle" fill="white" font-family="sans-serif" font-size="20" font-weight="bold"%3E' + dev.name + '%3C/text%3E%3C/svg%3E';
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-blue-950/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  <div className="p-4 text-center bg-white">
+                    <div className="text-sm font-bold text-blue-950 mb-1">{dev.name}</div>
+                    <div className="text-xs text-blue-800/70">{dev.role}</div>
+                  m-sky-50 to-white relative overflow-hidden">
+                      <img 
+                        src={`/kaprodi/${idx + 1}.jpg`} 
+                        alt={`Kaprodi ${prodi}`}
+                        className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => {
+                          e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400"%3E%3Crect fill="%23dbeafe" width="300" height="400"/%3E%3Ctext x="50%25" y="45%25" dominant-baseline="middle" text-anchor="middle" fill="%231e40af" font-family="sans-serif" font-size="16" font-weight="600"%3EKaprodi%3C/text%3E%3Ctext x="50%25" y="55%25" dominant-baseline="middle" text-anchor="middle" fill="%233b82f6" font-family="sans-serif" font-size="12"%3E' + prodi.substring(0, 15) + '%3C/text%3E%3C/svg%3E';
+                        }}
+                      />
+                    </div>
+                    <div className="p-3 text-center bg-white">
+                      <div className="text-xs sm:text-sm font-bold text-blue-950 mb-1">{prodi}</div>
+                      <div className="text-[10px] sm:text-xs text-blue-800/70">Ketua Prodi</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>

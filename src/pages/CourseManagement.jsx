@@ -418,7 +418,7 @@ export default function CourseManagement() {
       formData.append('file', excelFile);
       formData.append('program_id', selectedProgram);
 
-      const response = await courseAPI.importExcel(excelFile);
+      const response = await courseAPI.importExcel(formData);
       
       setUploadStatus({
         success: true,
@@ -879,11 +879,11 @@ export default function CourseManagement() {
                             {!isAdminRoute && (
                               <Link
                                 to={(userRole === 'prodi' || userRole === 'kaprodi') 
-                                  ? `/kaprodi/rps/create/${course.id}?edit=${rpsId}`
-                                  : `/rps/create/${course.id}?edit=${rpsId}`
+                                  ? `/kaprodi/rps/create/${course.id}?edit=${rpsId}&view=true`
+                                  : `/rps/create/${course.id}?edit=${rpsId}&view=true`
                                 }
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors whitespace-nowrap"
-                                title="Lihat/Edit RPS"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-green-600 bg-green-50 hover:bg-green-100 rounded transition-colors whitespace-nowrap"
+                                title="Lihat RPS (Read-only)"
                               >
                                 <BookOpen className="w-3.5 h-3.5" />
                                 Lihat
