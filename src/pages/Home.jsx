@@ -195,34 +195,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Tim Pengembang */}
-      <section id="team" className="py-12 sm:py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-8 sm:mb-12">
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-blue-950 mb-3">Tim Pengembang</h2>
-            <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto">Tim yang mengembangkan sistem SMART RPS agar mudah digunakan dan siap produksi.</p>
-            <div className="w-24 h-1 bg-blue-600 mx-auto rounded-full mt-4"></div>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            {[7, 8, 9, 10].map((num) => (
-              <div key={num} className="group rounded-2xl border border-blue-100 bg-white shadow-sm hover:shadow-xl transition overflow-hidden">
-                <div className="h-48 sm:h-56 bg-blue-50">
-                  <img 
-                    src={`/pengembang/${num}.jpg`} 
-                    alt={`Pengembang ${num}`}
-                    className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
-                  />
-                </div>
-                <div className="p-3 sm:p-4">
-                  <div className="text-sm font-bold text-blue-950">Pengembang {num}</div>
-                  <div className="text-xs text-blue-800/70">SMART RPS</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* Features */}
       <section id="features" className="py-12 sm:py-16 bg-gradient-to-b from-blue-50/60 to-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
