@@ -27,6 +27,9 @@ export default function CPLManagement() {
   });
   const [batchData, setBatchData] = useState('');
 
+  const userRole = localStorage.getItem('role');
+  const userProdiId = localStorage.getItem('prodi_id');
+
   useEffect(() => {
     fetchProdis();
   }, []);
@@ -40,11 +43,19 @@ export default function CPLManagement() {
   const fetchProdis = async () => {
     try {
       const response = await api.get('/prodis/active');
-      setProdis(response.data.data || []);
+      let prodiList = response.data.data || [];
+      
+      // Jika kaprodi, filter hanya prodi miliknya
+      if ((userRole === 'prodi' || userRole === 'kaprodi') && userProdiId) {
+        prodiList = prodiList.filter(p => p.id === userProdiId || p.id.toString() === userProdiId.toString());
+      }
+      
+      setProdis(prodiList);
+      
       // Auto-select first prodi if available
-      if (response.data.data && response.data.data.length > 0) {
-        setSelectedProdiId(response.data.data[0].id);
-        setFormData(prev => ({ ...prev, prodi_id: response.data.data[0].id }));
+      if (prodiList.length > 0) {
+        setSelectedProdiId(prodiList[0].id);
+        setFormData(prev => ({ ...prev, prodi_id: prodiList[0].id }));
       }
     } catch (err) {
       console.error('Failed to fetch prodis:', err);
@@ -186,6 +197,42 @@ export default function CPLManagement() {
     }
   };
 
+  const handleExportExcel = async () => {
+    if (!selectedProdiId) {
+      error('Pilih Prodi terlebih dahulu');
+      return;
+    }
+
+    try {
+      const response = await api.get(`/cpl/export/excel?prodi_id=${selectedProdiId}`, {
+        responseType: 'blob',
+      });
+
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = 'CPL_Export.xlsx';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename=(.+)/);
+        if (filenameMatch) {
+          filename = filenameMatch[1].replace(/"/g, '');
+        }
+      }
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      success('Data CPL berhasil diexport!');
+    } catch (err) {
+      error('Gagal export CPL: ' + (err.response?.data?.error || err.message));
+    }
+  };
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -285,6 +332,14 @@ export default function CPLManagement() {
             <span className="hidden sm:inline">Template</span>
           </button>
           <button
+            onClick={handleExportExcel}
+            disabled={!selectedProdiId || cpls.length === 0}
+            className="flex items-center justify-center gap-2 bg-green-600 text-white px-3 md:px-4 py-2 rounded-lg hover:bg-green-700 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download className="w-4 h-4 md:w-5 md:h-5" />
+            <span className="hidden sm:inline">Export Excel</span>
+          </button>
+          <button
             onClick={() => setShowImportModal(true)}
             disabled={!selectedProdiId}
             className="flex items-center justify-center gap-2 bg-purple-600 text-white px-3 md:px-4 py-2 rounded-lg hover:bg-purple-700 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
@@ -311,27 +366,29 @@ export default function CPLManagement() {
         </div>
       </div>
 
-      {/* Prodi Selector */}
-      <div className="mb-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Pilih Program Studi
-        </label>
-        <select
-          value={selectedProdiId}
-          onChange={(e) => {
-            setSelectedProdiId(e.target.value);
-            setFormData(prev => ({ ...prev, prodi_id: e.target.value }));
-          }}
-          className="w-full md:w-1/2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        >
-          <option value="">-- Pilih Prodi --</option>
-          {prodis.map((prodi) => (
-            <option key={prodi.id} value={prodi.id}>
-              {prodi.nama_prodi} ({prodi.kode_prodi})
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* Prodi Selector - Only show for admin or if multiple prodis */}
+      {(userRole === 'admin' || prodis.length > 1) && (
+        <div className="mb-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Pilih Program Studi
+          </label>
+          <select
+            value={selectedProdiId}
+            onChange={(e) => {
+              setSelectedProdiId(e.target.value);
+              setFormData(prev => ({ ...prev, prodi_id: e.target.value }));
+            }}
+            className="w-full md:w-1/2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="">-- Pilih Prodi --</option>
+            {prodis.map((prodi) => (
+              <option key={prodi.id} value={prodi.id}>
+                {prodi.nama_prodi} ({prodi.kode_prodi})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Search */}
       {selectedProdiId && (

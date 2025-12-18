@@ -1,1280 +1,724 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
-import { Upload, Download, FileText, Plus, Trash2, Edit, Loader2, AlertCircle, CheckCircle, BookOpen, Search, Filter, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { 
+  Plus, 
+  Search, 
+  Edit, 
+  Trash2, 
+  ChevronDown, 
+  ChevronUp,
+  BookOpen,
+  ListChecks,
+  Save,
+  X,
+  AlertCircle,
+  CheckCircle,
+  Loader
+} from 'lucide-react';
 import { courseAPI, cpmkAPI } from '../../services/api';
+import Toast from '../../components/Toast';
 
 export default function CPMKManagement() {
+  const navigate = useNavigate();
   const location = useLocation();
-  const isAdminRoute = location.pathname.startsWith('/admin/');
-  
+  const isAdminRoute = location.pathname.includes('/admin/');
+
+  // States
   const [courses, setCourses] = useState([]);
+  const [filteredCourses, setFilteredCourses] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState(null);
-  const [cpmkData, setCpmkData] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showAddCpmkModal, setShowAddCpmkModal] = useState(false);
-  const [showAddSubCpmkModal, setShowAddSubCpmkModal] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState(null);
-  const [newCpmk, setNewCpmk] = useState({ cpmk_number: '', description: '' });
-  const [newSubCpmk, setNewSubCpmk] = useState({ sub_cpmk_number: '', description: '' });
-  const [selectedCpmkForSub, setSelectedCpmkForSub] = useState(null);
-  const [excelFile, setExcelFile] = useState(null);
-  const [importType, setImportType] = useState('excel'); // 'excel' or 'csv'
-  const [cpmkCsvFile, setCpmkCsvFile] = useState(null);
-  const [subCpmkCsvFile, setSubCpmkCsvFile] = useState(null);
+  const [cpmkList, setCpmkList] = useState([]);
+  const [expandedCpmk, setExpandedCpmk] = useState(null);
+  
+  // UI States
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
   const [editingCpmk, setEditingCpmk] = useState(null);
   const [editingSubCpmk, setEditingSubCpmk] = useState(null);
   
-  // Filter states
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'with-cpmk', 'without-cpmk'
-  const [filterSKS, setFilterSKS] = useState('all'); // 'all', '2', '3', '4'
-  const [filterYear, setFilterYear] = useState('all');
+  // Form states
+  const [newCpmkForm, setNewCpmkForm] = useState({ description: '' });
+  const [newSubCpmkForm, setNewSubCpmkForm] = useState({ description: '' });
+  const [showAddCpmk, setShowAddCpmk] = useState(false);
+  const [showAddSubCpmk, setShowAddSubCpmk] = useState(null);
+  
+  // Toast
+  const [toast, setToast] = useState({ show: false, message: '', type: 'info' });
 
-  const userRole = localStorage.getItem('role');
-  const prodiId = localStorage.getItem('prodi_id');
+  const showToast = (message, type = 'info') => {
+    setToast({ show: true, message, type });
+  };
 
   // Load courses
   useEffect(() => {
     loadCourses();
   }, []);
 
+  // Search filter
+  useEffect(() => {
+    if (searchTerm.trim() === '') {
+      setFilteredCourses(courses);
+    } else {
+      const term = searchTerm.toLowerCase();
+      const filtered = courses.filter(course => 
+        course.title?.toLowerCase().includes(term) || 
+        course.code?.toLowerCase().includes(term)
+      );
+      setFilteredCourses(filtered);
+    }
+  }, [searchTerm, courses]);
+
   const loadCourses = async () => {
     try {
       setLoading(true);
-      let res;
-      if (userRole === 'admin') {
-        res = await courseAPI.getAll();
-      } else {
-        res = await courseAPI.getByProgramId(prodiId);
+      const response = await courseAPI.getAll();
+      console.log('📦 Course API Response:', response);
+      
+      if (response.data.success) {
+        // Handle nested data structure (response.data.data.data)
+        let courseList = response.data.data;
+        
+        // Check if data is nested one more level
+        if (courseList && courseList.data && Array.isArray(courseList.data)) {
+          courseList = courseList.data;
+        }
+        
+        // Ensure it's an array
+        if (!Array.isArray(courseList)) {
+          console.error('❌ courseList is not an array:', courseList);
+          courseList = [];
+        }
+        
+        console.log('✅ Course List:', courseList);
+        
+        // Calculate CPMK & Sub-CPMK counts for each course
+        const coursesWithCounts = await Promise.all(
+          courseList.map(async (course) => {
+            try {
+              const cpmkRes = await cpmkAPI.getByCourseId(course.id);
+              const cpmks = cpmkRes.data.success ? cpmkRes.data.data || [] : [];
+              
+              // Count Sub-CPMK across all CPMK
+              const subCpmkCount = cpmks.reduce((total, cpmk) => {
+                const subCpmks = cpmk.sub_cpmks || cpmk.SubCPMKs || cpmk.subCpmks || [];
+                return total + subCpmks.length;
+              }, 0);
+              
+              return {
+                ...course,
+                cpmkCount: cpmks.length,
+                subCpmkCount: subCpmkCount
+              };
+            } catch (error) {
+              return { ...course, cpmkCount: 0, subCpmkCount: 0 };
+            }
+          })
+        );
+        
+        setCourses(coursesWithCounts);
+        setFilteredCourses(coursesWithCounts);
       }
-      
-      let courseList = [];
-      if (res.data?.data?.data && Array.isArray(res.data.data.data)) {
-        courseList = res.data.data.data;
-      } else if (res.data?.data && Array.isArray(res.data.data)) {
-        courseList = res.data.data;
-      } else if (Array.isArray(res.data)) {
-        courseList = res.data;
-      }
-      
-      // Load CPMK count for each course
-      const coursesWithCpmk = await Promise.all(
-        courseList.map(async (course) => {
-          try {
-            const response = await cpmkAPI.getByCourseId(course.id);
-            return {
-              ...course,
-              cpmkCount: response.data.success ? (response.data.data || []).length : 0,
-            };
-          } catch {
-            return { ...course, cpmkCount: 0 };
-          }
-        })
-      );
-      
-      setCourses(coursesWithCpmk);
     } catch (error) {
       console.error('Failed to load courses:', error);
+      showToast('Gagal memuat data mata kuliah', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadCPMKForCourse = async (courseId) => {
+  const loadCpmkForCourse = async (courseId) => {
     try {
       const response = await cpmkAPI.getByCourseId(courseId);
       if (response.data.success) {
-        setCpmkData(response.data.data || []);
-        return response.data.data || [];
+        const cpmks = response.data.data || [];
+        
+        // Normalize Sub-CPMK field names
+        const normalizedCpmks = cpmks.map(cpmk => ({
+          ...cpmk,
+          sub_cpmks: cpmk.sub_cpmks || cpmk.SubCPMKs || cpmk.subCpmks || []
+        }));
+        
+        setCpmkList(normalizedCpmks);
+        return normalizedCpmks;
       }
       return [];
     } catch (error) {
       console.error('Failed to load CPMK:', error);
+      showToast('Gagal memuat CPMK', 'error');
       return [];
     }
   };
 
-  const handleViewCPMK = async (course) => {
+  const handleSelectCourse = async (course) => {
     setSelectedCourse(course);
-    setLoading(true);
-    const data = await loadCPMKForCourse(course.id);
-    setCpmkData(data);
-    setShowDetailModal(true);
-    setLoading(false);
+    setExpandedCpmk(null);
+    setEditingCpmk(null);
+    setEditingSubCpmk(null);
+    setShowAddCpmk(false);
+    setShowAddSubCpmk(null);
+    await loadCpmkForCourse(course.id);
   };
 
-  const handleDownloadTemplate = async () => {
-    try {
-      const response = await cpmkAPI.downloadTemplate();
-      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Template_CPMK_${new Date().toISOString().split('T')[0]}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error('Failed to download template:', error);
-      alert('Gagal download template: ' + error.message);
-    }
-  };
-
-  const handleImportExcel = async () => {
-    if (!excelFile) {
-      alert('Pilih file Excel terlebih dahulu');
+  const handleAddCpmk = async () => {
+    if (!newCpmkForm.description.trim()) {
+      showToast('Deskripsi CPMK tidak boleh kosong', 'error');
       return;
     }
 
     try {
-      setLoading(true);
-      const formData = new FormData();
-      formData.append('file', excelFile);
-
-      const response = await cpmkAPI.importExcel(selectedCourse, excelFile);
-      
-      setUploadStatus({
-        success: true,
-        message: response.data.message || `Berhasil import ${response.data.imported_count} CPMK`,
-        details: response.data.failed_count > 0 ? `${response.data.failed_count} gagal: ${response.data.errors?.slice(0, 3).join(', ')}` : null,
+      const nextNumber = cpmkList.length + 1;
+      const response = await cpmkAPI.create({
+        course_id: selectedCourse.id,
+        cpmk_number: nextNumber,
+        description: newCpmkForm.description
       });
-      
-      setExcelFile(null);
-      setShowImportModal(false);
-      loadCourses(); // Reload untuk update count
-      setTimeout(() => setUploadStatus(null), 5000);
-    } catch (error) {
-      console.error('Failed to import Excel:', error);
-      setUploadStatus({
-        success: false,
-        message: 'Import gagal',
-        details: error.response?.data?.error || error.message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const handleImportCSV = async () => {
-    if (!cpmkCsvFile || !subCpmkCsvFile) {
-      alert('Pilih kedua file CSV (CPMK dan Sub-CPMK)');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const response = await cpmkAPI.importCSV(selectedCourse, cpmkCsvFile, subCpmkCsvFile);
-      
-      setUploadStatus({
-        success: true,
-        message: response.data.message || `Berhasil import ${response.data.imported_count} CPMK`,
-        details: response.data.failed_count > 0 ? `${response.data.failed_count} gagal: ${response.data.errors?.slice(0, 3).join(', ')}` : null,
-      });
-      
-      setCpmkCsvFile(null);
-      setSubCpmkCsvFile(null);
-      setShowImportModal(false);
-      loadCourses(); // Reload untuk update count
-      setTimeout(() => setUploadStatus(null), 5000);
-    } catch (error) {
-      console.error('Failed to import CSV:', error);
-      setUploadStatus({
-        success: false,
-        message: 'Import gagal',
-        details: error.response?.data?.error || error.message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleExportExcel = async () => {
-    try {
-      const response = await cpmkAPI.exportExcel(selectedCourse);
-      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `CPMK_Export_${new Date().toISOString().split('T')[0]}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      
-      setUploadStatus({
-        success: true,
-        message: 'Berhasil export CPMK ke Excel!',
-      });
-      setTimeout(() => setUploadStatus(null), 3000);
-    } catch (error) {
-      console.error('Failed to export:', error);
-      alert('Gagal export: ' + error.message);
-    }
-  };
-
-  const handleDeleteAllCPMK = async (course) => {
-    if (!confirm(`Yakin ingin menghapus SEMUA CPMK & Sub-CPMK untuk mata kuliah "${course.title}"?\n\nData ini tidak dapat dikembalikan.`)) {
-      return;
-    }
-
-    try {
-      setLoading(true);
-      
-      // Load CPMK untuk course ini
-      const cpmks = await loadCPMKForCourse(course.id);
-      
-      // Delete setiap CPMK (akan cascade delete Sub-CPMK)
-      for (const cpmk of cpmks) {
-        await cpmkAPI.delete(cpmk.id);
+      if (response.data.success) {
+        showToast('CPMK berhasil ditambahkan', 'success');
+        await loadCpmkForCourse(selectedCourse.id);
+        await loadCourses();
+        setNewCpmkForm({ description: '' });
+        setShowAddCpmk(false);
       }
-
-      setUploadStatus({
-        success: true,
-        message: `Berhasil menghapus ${cpmks.length} CPMK untuk ${course.title}!`,
-      });
-      
-      loadCourses(); // Reload untuk update count
-      setTimeout(() => setUploadStatus(null), 3000);
     } catch (error) {
-      console.error('Failed to delete CPMK:', error);
-      setUploadStatus({
-        success: false,
-        message: 'Gagal menghapus CPMK',
-        details: error.message,
-      });
-    } finally {
-      setLoading(false);
+      console.error('Failed to add CPMK:', error);
+      showToast('Gagal menambahkan CPMK', 'error');
     }
   };
 
-  const handleDeleteSingleCPMK = async (cpmkId, cpmkDesc) => {
-    if (!confirm(`Yakin ingin menghapus CPMK "${cpmkDesc}"?\n\nSemua Sub-CPMK terkait juga akan dihapus.`)) {
+  const handleUpdateCpmk = async (cpmkId) => {
+    if (!editingCpmk?.description?.trim()) {
+      showToast('Deskripsi CPMK tidak boleh kosong', 'error');
+      return;
+    }
+
+    try {
+      const response = await cpmkAPI.update(cpmkId, {
+        description: editingCpmk.description
+      });
+
+      if (response.data.success) {
+        showToast('CPMK berhasil diperbarui', 'success');
+        await loadCpmkForCourse(selectedCourse.id);
+        setEditingCpmk(null);
+      }
+    } catch (error) {
+      console.error('Failed to update CPMK:', error);
+      showToast('Gagal memperbarui CPMK', 'error');
+    }
+  };
+
+  const handleDeleteCpmk = async (cpmkId, description) => {
+    if (!confirm(`Hapus CPMK "${description}"?\n\nSemua Sub-CPMK di dalamnya juga akan terhapus.`)) {
       return;
     }
 
     try {
       const response = await cpmkAPI.delete(cpmkId);
-      
       if (response.data.success) {
-        setUploadStatus({
-          success: true,
-          message: 'CPMK berhasil dihapus!',
-        });
-        // Reload CPMK data
-        const newData = await loadCPMKForCourse(selectedCourse.id);
-        setCpmkData(newData);
-        loadCourses(); // Update count
-        setTimeout(() => setUploadStatus(null), 3000);
+        showToast('CPMK berhasil dihapus', 'success');
+        await loadCpmkForCourse(selectedCourse.id);
+        await loadCourses();
       }
     } catch (error) {
       console.error('Failed to delete CPMK:', error);
-      alert('Gagal menghapus CPMK: ' + error.message);
+      showToast('Gagal menghapus CPMK', 'error');
     }
   };
 
-  const handleDeleteSubCPMK = async (cpmkId, subCpmkId, subCpmkDesc) => {
-    if (!confirm(`Yakin ingin menghapus Sub-CPMK "${subCpmkDesc}"?`)) {
+  const handleAddSubCpmk = async (cpmkId) => {
+    if (!newSubCpmkForm.description.trim()) {
+      showToast('Deskripsi Sub-CPMK tidak boleh kosong', 'error');
       return;
     }
 
     try {
-      const response = await cpmkAPI.deleteSubCPMK(cpmkId, subCpmkId);
+      const cpmk = cpmkList.find(c => c.id === cpmkId);
+      const nextNumber = (cpmk?.sub_cpmks?.length || 0) + 1;
       
-      if (response.data.success) {
-        setUploadStatus({
-          success: true,
-          message: 'Sub-CPMK berhasil dihapus!',
-        });
-        // Reload CPMK data
-        const newData = await loadCPMKForCourse(selectedCourse.id);
-        setCpmkData(newData);
-        setTimeout(() => setUploadStatus(null), 3000);
-      }
-    } catch (error) {
-      console.error('Failed to delete Sub-CPMK:', error);
-      alert('Gagal menghapus Sub-CPMK: ' + error.message);
-    }
-  };
-
-  const handleEditCPMK = (cpmk) => {
-    setEditingCpmk({
-      id: cpmk.id,
-      cpmk_number: cpmk.cpmk_number,
-      description: cpmk.description,
-    });
-    setShowEditModal(true);
-  };
-
-  const handleSaveEditCPMK = async () => {
-    if (!editingCpmk.description) {
-      alert('Deskripsi CPMK harus diisi!');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const response = await cpmkAPI.update(editingCpmk.id, {
-        description: editingCpmk.description,
-      });
-      
-      if (response.data.success) {
-        setUploadStatus({
-          success: true,
-          message: 'CPMK berhasil diupdate!',
-        });
-        setShowEditModal(false);
-        setEditingCpmk(null);
-        const newData = await loadCPMKForCourse(selectedCourse.id);
-        setCpmkData(newData);
-        setTimeout(() => setUploadStatus(null), 3000);
-      } else {
-        throw new Error(response.data.error || 'Gagal mengupdate CPMK');
-      }
-    } catch (error) {
-      console.error('Failed to update CPMK:', error);
-      alert('Gagal mengupdate CPMK: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAddCpmk = async () => {
-    if (!newCpmk.cpmk_number || !newCpmk.description) {
-      alert('Nomor CPMK dan deskripsi harus diisi!');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const response = await cpmkAPI.create({
-        course_id: selectedCourse.id,
-        cpmk_number: parseInt(newCpmk.cpmk_number),
-        description: newCpmk.description,
+      const response = await cpmkAPI.createSubCpmk({
+        cpmk_id: cpmkId,
+        sub_cpmk_number: nextNumber,
+        description: newSubCpmkForm.description
       });
 
       if (response.data.success) {
-        setUploadStatus({
-          success: true,
-          message: 'CPMK berhasil ditambahkan!',
-        });
-        setNewCpmk({ cpmk_number: '', description: '' });
-        setShowAddCpmkModal(false);
-        const newData = await loadCPMKForCourse(selectedCourse.id);
-        setCpmkData(newData);
-        loadCourses(); // Update count
-        setTimeout(() => setUploadStatus(null), 3000);
-      } else {
-        throw new Error(data.error || 'Gagal menambahkan CPMK');
-      }
-    } catch (error) {
-      console.error('Failed to add CPMK:', error);
-      alert('Gagal menambahkan CPMK: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAddSubCpmk = async () => {
-    if (!newSubCpmk.sub_cpmk_number || !newSubCpmk.description) {
-      alert('Nomor Sub-CPMK dan deskripsi harus diisi!');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const response = await cpmkAPI.addSubCPMK(selectedCpmkForSub.id, {
-        sub_cpmk_number: parseInt(newSubCpmk.sub_cpmk_number),
-        description: newSubCpmk.description,
-      });
-      
-      if (response.data.success) {
-        setUploadStatus({
-          success: true,
-          message: 'Sub-CPMK berhasil ditambahkan!',
-        });
-        setNewSubCpmk({ sub_cpmk_number: '', description: '' });
-        setShowAddSubCpmkModal(false);
-        setSelectedCpmkForSub(null);
-        const newData = await loadCPMKForCourse(selectedCourse.id);
-        setCpmkData(newData);
-        setTimeout(() => setUploadStatus(null), 3000);
-      } else {
-        throw new Error(data.error || 'Gagal menambahkan Sub-CPMK');
+        showToast('Sub-CPMK berhasil ditambahkan', 'success');
+        await loadCpmkForCourse(selectedCourse.id);
+        await loadCourses();
+        setNewSubCpmkForm({ description: '' });
+        setShowAddSubCpmk(null);
       }
     } catch (error) {
       console.error('Failed to add Sub-CPMK:', error);
-      alert('Gagal menambahkan Sub-CPMK: ' + error.message);
-    } finally {
-      setLoading(false);
+      showToast('Gagal menambahkan Sub-CPMK', 'error');
     }
   };
 
-  // Get unique years from courses
-  const availableYears = useMemo(() => {
-    const years = [...new Set(courses.map(c => c.tahun || '2025'))].sort((a, b) => b - a);
-    return years;
-  }, [courses]);
+  const handleUpdateSubCpmk = async (cpmkId, subCpmkId) => {
+    if (!editingSubCpmk?.description?.trim()) {
+      showToast('Deskripsi Sub-CPMK tidak boleh kosong', 'error');
+      return;
+    }
 
-  // Filtered courses
-  const filteredCourses = useMemo(() => {
-    return courses.filter(course => {
-      // Search filter
-      const matchesSearch = searchTerm === '' || 
-        course.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        course.code?.toLowerCase().includes(searchTerm.toLowerCase());
+    try {
+      const response = await cpmkAPI.updateSubCpmk(subCpmkId, {
+        description: editingSubCpmk.description
+      });
 
-      // Status filter
-      const matchesStatus = filterStatus === 'all' ||
-        (filterStatus === 'with-cpmk' && course.cpmkCount > 0) ||
-        (filterStatus === 'without-cpmk' && course.cpmkCount === 0);
-
-      // SKS filter
-      const matchesSKS = filterSKS === 'all' || 
-        String(course.credits) === filterSKS;
-
-      // Year filter
-      const matchesYear = filterYear === 'all' || 
-        String(course.tahun || '2025') === filterYear;
-
-      return matchesSearch && matchesStatus && matchesSKS && matchesYear;
-    });
-  }, [courses, searchTerm, filterStatus, filterSKS, filterYear]);
-
-  const selectedCourseName = courses.find(c => c.id === selectedCourse)?.title || '';
-
-  // Clear all filters
-  const clearFilters = () => {
-    setSearchTerm('');
-    setFilterStatus('all');
-    setFilterSKS('all');
-    setFilterYear('all');
+      if (response.data.success) {
+        showToast('Sub-CPMK berhasil diperbarui', 'success');
+        await loadCpmkForCourse(selectedCourse.id);
+        setEditingSubCpmk(null);
+      }
+    } catch (error) {
+      console.error('Failed to update Sub-CPMK:', error);
+      showToast('Gagal memperbarui Sub-CPMK', 'error');
+    }
   };
 
-  const hasActiveFilters = searchTerm !== '' || filterStatus !== 'all' || filterSKS !== 'all' || filterYear !== 'all';
+  const handleDeleteSubCpmk = async (subCpmkId, description) => {
+    if (!confirm(`Hapus Sub-CPMK "${description}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await cpmkAPI.deleteSubCpmk(subCpmkId);
+      if (response.data.success) {
+        showToast('Sub-CPMK berhasil dihapus', 'success');
+        await loadCpmkForCourse(selectedCourse.id);
+        await loadCourses();
+      }
+    } catch (error) {
+      console.error('Failed to delete Sub-CPMK:', error);
+      showToast('Gagal menghapus Sub-CPMK', 'error');
+    }
+  };
+
+  const toggleExpand = (cpmkId) => {
+    setExpandedCpmk(expandedCpmk === cpmkId ? null : cpmkId);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <Loader className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Memuat data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div>
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Manajemen CPMK & Sub-CPMK</h1>
-          <p className="text-gray-600 mt-1">Kelola Capaian Pembelajaran Mata Kuliah</p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {!isAdminRoute && (
-            <>
-              <button
-                onClick={handleDownloadTemplate}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                title="Download Template Excel"
-              >
-                <Download className="w-5 h-5" />
-                <span className="hidden sm:inline">Template</span>
-              </button>
-              <button
-                onClick={() => setShowImportModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <Upload className="w-5 h-5" />
-                <span className="hidden sm:inline">Import</span>
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Status Messages */}
-      {uploadStatus && (
-        <div className={`mb-6 p-4 rounded-lg border ${
-          uploadStatus.success
-            ? 'bg-green-50 border-green-200'
-            : 'bg-red-50 border-red-200'
-        }`}>
-          <div className="flex items-start gap-3">
-            {uploadStatus.success ? (
-              <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
-            ) : (
-              <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
-            )}
-            <div className="flex-1">
-              <p className={`font-medium ${uploadStatus.success ? 'text-green-900' : 'text-red-900'}`}>
-                {uploadStatus.message}
-              </p>
-              {uploadStatus.details && (
-                <p className="text-sm text-gray-600 mt-1">{uploadStatus.details}</p>
-              )}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Manajemen CPMK</h1>
+              <p className="text-gray-600 mt-1">Kelola Capaian Pembelajaran Mata Kuliah</p>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Info Box */}
-      <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <BookOpen className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-          <div className="text-sm text-blue-800">
-            <p className="font-semibold mb-2">💡 Sistem Hybrid CPMK:</p>
-            <ul className="list-disc ml-4 space-y-1">
-              <li>Jika CPMK sudah diimport dari Excel → Data diambil dari database</li>
-              <li>Jika CPMK belum ada → AI akan generate otomatis saat buat RPS</li>
-              <li>Import Excel akan <strong>mengganti</strong> CPMK lama untuk mata kuliah yang sama</li>
-              <li>Format Excel harus sesuai template (download dulu untuk contoh)</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      {/* Filter Section */}
-      <div className="mb-6 bg-white rounded-xl shadow p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <Filter className="w-5 h-5 text-gray-600" />
-          <h2 className="text-lg font-semibold text-gray-900">Filter Mata Kuliah</h2>
-          {hasActiveFilters && (
             <button
-              onClick={clearFilters}
-              className="ml-auto flex items-center gap-1 px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              onClick={() => navigate(isAdminRoute ? '/admin/courses' : '/kaprodi/courses')}
+              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
-              <X className="w-4 h-4" />
-              <span>Clear Filters</span>
+              Kembali
             </button>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Search */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              <Search className="w-4 h-4 inline mr-1" />
-              Cari Mata Kuliah
-            </label>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Nama atau kode..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
           </div>
-
-          {/* Status Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Status CPMK
-            </label>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">Semua</option>
-              <option value="with-cpmk">Sudah Ada CPMK</option>
-              <option value="without-cpmk">Belum Ada CPMK</option>
-            </select>
-          </div>
-
-          {/* SKS Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              SKS
-            </label>
-            <select
-              value={filterSKS}
-              onChange={(e) => setFilterSKS(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">Semua SKS</option>
-              <option value="2">2 SKS</option>
-              <option value="3">3 SKS</option>
-              <option value="4">4 SKS</option>
-            </select>
-          </div>
-
-          {/* Year Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Tahun Kurikulum
-            </label>
-            <select
-              value={filterYear}
-              onChange={(e) => setFilterYear(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">Semua Tahun</option>
-              {availableYears.map(year => (
-                <option key={year} value={year}>{year}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Filter Summary */}
-        <div className="mt-4 flex items-center justify-between text-sm">
-          <p className="text-gray-600">
-            Menampilkan <span className="font-semibold text-gray-900">{filteredCourses.length}</span> dari <span className="font-semibold text-gray-900">{courses.length}</span> mata kuliah
-          </p>
-          {hasActiveFilters && (
-            <div className="flex items-center gap-2 text-blue-600">
-              <Filter className="w-4 h-4" />
-              <span>Filter aktif</span>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Courses Table */}
-      <div className="bg-white rounded-xl shadow overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    No
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Kode
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Mata Kuliah
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    SKS
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Tahun
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Jumlah CPMK
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredCourses.map((course, index) => (
-                  <tr key={course.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {index + 1}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {course.code}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      {course.title}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {course.credits || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {course.tahun || '2025'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        course.cpmkCount > 0 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {course.cpmkCount || 0} CPMK
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => handleViewCPMK(course)}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs"
-                          title={isAdminRoute ? "Lihat CPMK" : "Lihat & Edit CPMK"}
-                        >
-                          <BookOpen className="w-3.5 h-3.5" />
-                          <span>Lihat</span>
-                        </button>
-                        {!isAdminRoute && course.cpmkCount > 0 && (
-                          <button
-                            onClick={() => handleDeleteAllCPMK(course)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-xs"
-                            title="Hapus Semua CPMK"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>Hapus</span>
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            
-            {/* Empty States */}
-            {courses.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-                <BookOpen className="w-12 h-12 mb-2 opacity-50" />
-                <p className="font-medium">Belum ada mata kuliah</p>
-              </div>
-            )}
-            
-            {courses.length > 0 && filteredCourses.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-                <Search className="w-12 h-12 mb-2 opacity-50" />
-                <p className="font-medium">Tidak ada mata kuliah yang sesuai filter</p>
-                <button
-                  onClick={clearFilters}
-                  className="mt-4 px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                >
-                  Clear Filters
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Import Modal */}
-      {showImportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Import CPMK</h2>
-            
-            <div className="space-y-4">
-              {/* Import Type Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Pilih Format Import
-                </label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      value="excel"
-                      checked={importType === 'excel'}
-                      onChange={(e) => setImportType(e.target.value)}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="text-sm font-medium text-gray-700">Excel (.xlsx) - Single File</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      value="csv"
-                      checked={importType === 'csv'}
-                      onChange={(e) => setImportType(e.target.value)}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="text-sm font-medium text-gray-700">CSV - Dua File Terpisah</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm text-yellow-800">
-                  ⚠️ <strong>Perhatian:</strong>
-                </p>
-                {importType === 'excel' ? (
-                  <ul className="text-sm text-yellow-700 mt-2 ml-4 list-disc space-y-1">
-                    <li>Download template terlebih dahulu</li>
-                    <li>Isi sesuai format (2 sheet: CPMK Template & Sub-CPMK Template)</li>
-                    <li>Nama mata kuliah harus <strong>sama persis</strong> dengan data di sistem</li>
-                    <li>Import akan mengganti CPMK lama untuk mata kuliah yang sama</li>
-                  </ul>
-                ) : (
-                  <ul className="text-sm text-yellow-700 mt-2 ml-4 list-disc space-y-1">
-                    <li>Upload <strong>2 file CSV terpisah</strong>: cpmk.csv dan subs-cpmk.csv</li>
-                    <li>Format CSV harus sesuai dengan file di folder docs/</li>
-                    <li>Nama mata kuliah harus <strong>sama persis</strong> dengan data di sistem</li>
-                    <li>Import akan mengganti CPMK lama untuk mata kuliah yang sama</li>
-                  </ul>
-                )}
-              </div>
-
-              {/* File Upload */}
-              {importType === 'excel' ? (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    File Excel (.xlsx)
-                  </label>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Course List - Left Sidebar */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden sticky top-24">
+              <div className="p-4 border-b border-gray-200 bg-gray-50">
+                <h2 className="font-semibold text-gray-900 mb-3">Mata Kuliah</h2>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
-                    type="file"
-                    accept=".xlsx"
-                    onChange={(e) => setExcelFile(e.target.files[0])}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    type="text"
+                    placeholder="Cari mata kuliah..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
-                  {excelFile && (
-                    <p className="text-sm text-gray-600 mt-1">✓ {excelFile.name}</p>
-                  )}
                 </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      File CPMK CSV
-                    </label>
-                    <input
-                      type="file"
-                      accept=".csv"
-                      onChange={(e) => setCpmkCsvFile(e.target.files[0])}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                    />
-                    {cpmkCsvFile && (
-                      <p className="text-xs text-gray-600 mt-1">✓ {cpmkCsvFile.name}</p>
-                    )}
+              </div>
+              
+              <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
+                {filteredCourses.length === 0 ? (
+                  <div className="p-8 text-center text-gray-500">
+                    <BookOpen className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                    <p>Tidak ada mata kuliah</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      File Sub-CPMK CSV
-                    </label>
-                    <input
-                      type="file"
-                      accept=".csv"
-                      onChange={(e) => setSubCpmkCsvFile(e.target.files[0])}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                    />
-                    {subCpmkCsvFile && (
-                      <p className="text-xs text-gray-600 mt-1">✓ {subCpmkCsvFile.name}</p>
-                    )}
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {filteredCourses.map((course) => (
+                      <button
+                        key={course.id}
+                        onClick={() => handleSelectCourse(course)}
+                        className={`w-full text-left p-4 hover:bg-blue-50 transition-colors ${
+                          selectedCourse?.id === course.id ? 'bg-blue-50 border-l-4 border-blue-600' : ''
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-gray-900 truncate">{course.code}</p>
+                            <p className="text-sm text-gray-600 line-clamp-2 mt-1">{course.title}</p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                            <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded">
+                              {course.cpmkCount || 0} CPMK
+                            </span>
+                            {course.subCpmkCount > 0 && (
+                              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded">
+                                {course.subCpmkCount} Sub
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
                   </div>
-                </div>
-              )}
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={importType === 'excel' ? handleImportExcel : handleImportCSV}
-                  disabled={
-                    loading || 
-                    (importType === 'excel' ? !excelFile : (!cpmkCsvFile || !subCpmkCsvFile))
-                  }
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span>Importing...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-5 h-5" />
-                      <span>Import {importType === 'excel' ? 'Excel' : 'CSV'}</span>
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowImportModal(false);
-                    setExcelFile(null);
-                    setCpmkCsvFile(null);
-                    setSubCpmkCsvFile(null);
-                  }}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Batal
-                </button>
+                )}
               </div>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Detail Modal - View & Edit CPMK */}
-      {showDetailModal && selectedCourse && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">
-                  {isAdminRoute ? "Lihat CPMK & Sub-CPMK" : "CPMK & Sub-CPMK"}: {selectedCourse.title}
-                </h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  {selectedCourse.code} | {cpmkData.length} CPMK
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {!isAdminRoute && (
-                  <button
-                    onClick={() => setShowAddCpmkModal(true)}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Tambah CPMK</span>
-                  </button>
-                )}
-                <button
-                  onClick={() => {
-                    setShowDetailModal(false);
-                    setSelectedCourse(null);
-                    setCpmkData([]);
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-6">
-              {cpmkData.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-                  <BookOpen className="w-12 h-12 mb-2 opacity-50" />
-                  <p className="font-medium">Belum ada CPMK untuk mata kuliah ini</p>
-                  <p className="text-sm mt-1">Import dari Excel/CSV atau akan di-generate otomatis oleh AI saat buat RPS</p>
+          {/* CPMK Detail - Main Content */}
+          <div className="lg:col-span-2">
+            {!selectedCourse ? (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12">
+                <div className="text-center text-gray-500">
+                  <ListChecks className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Pilih Mata Kuliah</h3>
+                  <p>Pilih mata kuliah dari daftar untuk melihat dan mengelola CPMK</p>
                 </div>
-              ) : (
-                <div className="space-y-6">
-                  {cpmkData.map((cpmk) => (
-                    <div key={cpmk.id} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors">
-                      <div className="flex items-start justify-between mb-3">
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Course Header */}
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h2 className="text-2xl font-bold text-gray-900">{selectedCourse.code}</h2>
+                      <p className="text-gray-600 mt-1">{selectedCourse.title}</p>
+                      <div className="flex items-center gap-4 mt-3">
+                        <span className="text-sm text-gray-500">
+                          <span className="font-medium">{selectedCourse.credits}</span> SKS
+                        </span>
+                        <span className="text-sm text-gray-500">
+                          Semester <span className="font-medium">{selectedCourse.semester}</span>
+                        </span>
+                      </div>
+                    </div>
+                    {!isAdminRoute && (
+                      <button
+                        onClick={() => setShowAddCpmk(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        <Plus className="w-5 h-5" />
+                        Tambah CPMK
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Add CPMK Form */}
+                  {showAddCpmk && !isAdminRoute && (
+                    <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="flex items-start gap-3">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="inline-flex items-center px-2.5 py-1 text-sm font-semibold bg-blue-100 text-blue-800 rounded">
-                              CPMK {cpmk.cpmk_number}
-                            </span>
-                          </div>
-                          <p className="text-gray-900 leading-relaxed">{cpmk.description}</p>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            CPMK {cpmkList.length + 1}
+                          </label>
+                          <textarea
+                            value={newCpmkForm.description}
+                            onChange={(e) => setNewCpmkForm({ description: e.target.value })}
+                            placeholder="Deskripsi CPMK..."
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            rows="3"
+                          />
                         </div>
-                        <div className="flex items-center gap-2">
-                          {!isAdminRoute && (
-                            <>
-                              <button
-                                onClick={() => handleEditCPMK(cpmk)}
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                title="Edit CPMK ini"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteSingleCPMK(cpmk.id, cpmk.description)}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
-                                title="Hapus CPMK ini"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
+                        <div className="flex flex-col gap-2">
+                          <button
+                            onClick={handleAddCpmk}
+                            className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                            title="Simpan"
+                          >
+                            <Save className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowAddCpmk(false);
+                              setNewCpmkForm({ description: '' });
+                            }}
+                            className="p-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 transition-colors"
+                            title="Batal"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
                         </div>
                       </div>
+                    </div>
+                  )}
+                </div>
 
-                      {/* Sub-CPMKs */}
-                      {cpmk.sub_cpmks && cpmk.sub_cpmks.length > 0 ? (
-                        <div className="mt-4 pl-6 border-l-2 border-blue-200">
-                          <div className="flex items-center justify-between mb-3">
-                            <p className="text-xs font-semibold text-gray-600">Sub-CPMK:</p>
-                            {!isAdminRoute && (
-                              <button
-                                onClick={() => {
-                                  setSelectedCpmkForSub(cpmk);
-                                  setShowAddSubCpmkModal(true);
-                                }}
-                                className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                              >
-                                <Plus className="w-3 h-3" />
-                                <span>Tambah Sub</span>
-                              </button>
-                            )}
-                          </div>
-                          <div className="space-y-2">
-                            {cpmk.sub_cpmks.map((sub) => (
-                              <div key={sub.id} className="flex items-start gap-3">
-                                <span className="inline-flex items-center justify-center w-7 h-7 text-xs font-medium bg-blue-50 text-blue-700 rounded-full flex-shrink-0">
-                                  {sub.sub_cpmk_number}
-                                </span>
-                                <p className="text-sm text-gray-700 flex-1 leading-relaxed">{sub.description}</p>
-                                {!isAdminRoute && (
-                                  <button
-                                    onClick={() => handleDeleteSubCPMK(cpmk.id, sub.id, sub.description)}
-                                    className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors flex-shrink-0"
-                                    title="Hapus Sub-CPMK ini"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="mt-4 pl-6 border-l-2 border-gray-200">
-                          <div className="flex items-center justify-between">
-                            <p className="text-xs text-gray-500 italic">Belum ada Sub-CPMK</p>
-                            {!isAdminRoute && (
-                              <button
-                                onClick={() => {
-                                  setSelectedCpmkForSub(cpmk);
-                                  setShowAddSubCpmkModal(true);
-                                }}
-                                className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                              >
-                                <Plus className="w-3 h-3" />
-                                <span>Tambah Sub</span>
-                              </button>
-                            )}
-                          </div>
-                        </div>
+                {/* CPMK List */}
+                {cpmkList.length === 0 ? (
+                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12">
+                    <div className="text-center text-gray-500">
+                      <AlertCircle className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                      <p>Belum ada CPMK untuk mata kuliah ini</p>
+                      {!isAdminRoute && (
+                        <button
+                          onClick={() => setShowAddCpmk(true)}
+                          className="mt-4 text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                          Tambah CPMK Pertama
+                        </button>
                       )}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowDetailModal(false);
-                  setSelectedCourse(null);
-                  setCpmkData([]);
-                }}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add CPMK Modal */}
-      {showAddCpmkModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Tambah CPMK Baru</h2>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Mata Kuliah
-                </label>
-                <input
-                  type="text"
-                  value={selectedCourse?.title || ''}
-                  disabled
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nomor CPMK <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={newCpmk.cpmk_number}
-                  onChange={(e) => setNewCpmk({ ...newCpmk, cpmk_number: e.target.value })}
-                  placeholder="Contoh: 1"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Deskripsi CPMK <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={newCpmk.description}
-                  onChange={(e) => setNewCpmk({ ...newCpmk, description: e.target.value })}
-                  placeholder="Contoh: Mahasiswa mampu menjelaskan konsep dasar..."
-                  rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={handleAddCpmk}
-                  disabled={loading || !newCpmk.cpmk_number || !newCpmk.description}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span>Menyimpan...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="w-5 h-5" />
-                      <span>Simpan CPMK</span>
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowAddCpmkModal(false);
-                    setNewCpmk({ cpmk_number: '', description: '' });
-                  }}
-                  disabled={loading}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Batal
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit CPMK Modal */}
-      {showEditModal && editingCpmk && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Edit CPMK</h2>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Mata Kuliah
-                </label>
-                <input
-                  type="text"
-                  value={selectedCourse?.title || ''}
-                  disabled
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nomor CPMK
-                </label>
-                <input
-                  type="number"
-                  value={editingCpmk.cpmk_number}
-                  disabled
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Deskripsi CPMK <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={editingCpmk.description}
-                  onChange={(e) => setEditingCpmk({ ...editingCpmk, description: e.target.value })}
-                  placeholder="Contoh: Mahasiswa mampu menjelaskan konsep dasar..."
-                  rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={handleSaveEditCPMK}
-                disabled={loading}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Menyimpan...</span>
-                  </>
+                  </div>
                 ) : (
-                  <>
-                    <Edit className="w-5 h-5" />
-                    <span>Update CPMK</span>
-                  </>
+                  <div className="space-y-3">
+                    {cpmkList.map((cpmk, index) => (
+                      <div
+                        key={cpmk.id}
+                        className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
+                      >
+                        {/* CPMK Header */}
+                        <div className="p-4">
+                          <div className="flex items-start gap-3">
+                            {/* CPMK Number Badge */}
+                            <div className="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                              <span className="text-lg font-bold text-blue-700">{cpmk.cpmk_number}</span>
+                            </div>
+
+                            {/* CPMK Content */}
+                            <div className="flex-1 min-w-0">
+                              {editingCpmk?.id === cpmk.id ? (
+                                // Edit Mode
+                                <div className="space-y-2">
+                                  <textarea
+                                    value={editingCpmk.description}
+                                    onChange={(e) => setEditingCpmk({ ...editingCpmk, description: e.target.value })}
+                                    className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    rows="3"
+                                  />
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => handleUpdateCpmk(cpmk.id)}
+                                      className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1"
+                                    >
+                                      <CheckCircle className="w-4 h-4" />
+                                      Simpan
+                                    </button>
+                                    <button
+                                      onClick={() => setEditingCpmk(null)}
+                                      className="px-3 py-1.5 bg-gray-400 text-white text-sm rounded-lg hover:bg-gray-500 transition-colors flex items-center gap-1"
+                                    >
+                                      <X className="w-4 h-4" />
+                                      Batal
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                // View Mode
+                                <>
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="text-gray-900 leading-relaxed flex-1">{cpmk.description}</p>
+                                    {!isAdminRoute && (
+                                      <div className="flex items-center gap-1 flex-shrink-0">
+                                        <button
+                                          onClick={() => setEditingCpmk({ id: cpmk.id, description: cpmk.description })}
+                                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                          title="Edit CPMK"
+                                        >
+                                          <Edit className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteCpmk(cpmk.id, cpmk.description)}
+                                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                          title="Hapus CPMK"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Sub-CPMK Toggle */}
+                                  {cpmk.sub_cpmks && cpmk.sub_cpmks.length > 0 && (
+                                    <button
+                                      onClick={() => toggleExpand(cpmk.id)}
+                                      className="mt-3 flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                                    >
+                                      {expandedCpmk === cpmk.id ? (
+                                        <>
+                                          <ChevronUp className="w-4 h-4" />
+                                          Sembunyikan Sub-CPMK ({cpmk.sub_cpmks.length})
+                                        </>
+                                      ) : (
+                                        <>
+                                          <ChevronDown className="w-4 h-4" />
+                                          Lihat Sub-CPMK ({cpmk.sub_cpmks.length})
+                                        </>
+                                      )}
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Sub-CPMK Section */}
+                        {expandedCpmk === cpmk.id && (
+                          <div className="border-t border-gray-200 bg-gray-50 p-4">
+                            <div className="flex items-center justify-between mb-4">
+                              <h4 className="text-sm font-semibold text-gray-700">Sub-CPMK</h4>
+                              {!isAdminRoute && (
+                                <button
+                                  onClick={() => setShowAddSubCpmk(cpmk.id)}
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+                                >
+                                  <Plus className="w-4 h-4" />
+                                  Tambah Sub
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Add Sub-CPMK Form */}
+                            {showAddSubCpmk === cpmk.id && !isAdminRoute && (
+                              <div className="mb-4 p-3 bg-white rounded-lg border border-green-200">
+                                <div className="flex items-start gap-2">
+                                  <div className="flex-1">
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                                      Sub-CPMK {(cpmk.sub_cpmks?.length || 0) + 1}
+                                    </label>
+                                    <textarea
+                                      value={newSubCpmkForm.description}
+                                      onChange={(e) => setNewSubCpmkForm({ description: e.target.value })}
+                                      placeholder="Deskripsi Sub-CPMK..."
+                                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                      rows="2"
+                                    />
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <button
+                                      onClick={() => handleAddSubCpmk(cpmk.id)}
+                                      className="p-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                                      title="Simpan"
+                                    >
+                                      <Save className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setShowAddSubCpmk(null);
+                                        setNewSubCpmkForm({ description: '' });
+                                      }}
+                                      className="p-1.5 bg-gray-400 text-white rounded hover:bg-gray-500 transition-colors"
+                                      title="Batal"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Sub-CPMK List */}
+                            {cpmk.sub_cpmks && cpmk.sub_cpmks.length > 0 ? (
+                              <div className="space-y-2">
+                                {cpmk.sub_cpmks.map((sub) => (
+                                  <div
+                                    key={sub.id}
+                                    className="bg-white rounded-lg p-3 border border-gray-200 hover:border-blue-300 transition-colors"
+                                  >
+                                    {editingSubCpmk?.id === sub.id ? (
+                                      // Edit Mode
+                                      <div className="space-y-2">
+                                        <textarea
+                                          value={editingSubCpmk.description}
+                                          onChange={(e) => setEditingSubCpmk({ ...editingSubCpmk, description: e.target.value })}
+                                          className="w-full px-2 py-1.5 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                          rows="2"
+                                        />
+                                        <div className="flex items-center gap-2">
+                                          <button
+                                            onClick={() => handleUpdateSubCpmk(cpmk.id, sub.id)}
+                                            className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors flex items-center gap-1"
+                                          >
+                                            <CheckCircle className="w-3 h-3" />
+                                            Simpan
+                                          </button>
+                                          <button
+                                            onClick={() => setEditingSubCpmk(null)}
+                                            className="px-2 py-1 bg-gray-400 text-white text-xs rounded hover:bg-gray-500 transition-colors flex items-center gap-1"
+                                          >
+                                            <X className="w-3 h-3" />
+                                            Batal
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      // View Mode
+                                      <div className="flex items-start gap-3">
+                                        <span className="flex-shrink-0 w-6 h-6 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-semibold">
+                                          {sub.sub_cpmk_number}
+                                        </span>
+                                        <p className="flex-1 text-sm text-gray-700 leading-relaxed">{sub.description}</p>
+                                        {!isAdminRoute && (
+                                          <div className="flex items-center gap-1 flex-shrink-0">
+                                            <button
+                                              onClick={() => setEditingSubCpmk({ id: sub.id, description: sub.description })}
+                                              className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                              title="Edit Sub-CPMK"
+                                            >
+                                              <Edit className="w-3 h-3" />
+                                            </button>
+                                            <button
+                                              onClick={() => handleDeleteSubCpmk(sub.id, sub.description)}
+                                              className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                              title="Hapus Sub-CPMK"
+                                            >
+                                              <Trash2 className="w-3 h-3" />
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-center py-6 text-gray-400 text-sm">
+                                Belum ada Sub-CPMK
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 )}
-              </button>
-              <button
-                onClick={() => {
-                  setShowEditModal(false);
-                  setEditingCpmk(null);
-                }}
-                disabled={loading}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Batal
-              </button>
-            </div>
+              </div>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Add Sub-CPMK Modal */}
-      {showAddSubCpmkModal && selectedCpmkForSub && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Tambah Sub-CPMK Baru</h2>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Parent CPMK
-                </label>
-                <div className="px-4 py-2 border border-gray-300 rounded-lg bg-gray-50">
-                  <p className="text-sm font-medium text-gray-900">CPMK {selectedCpmkForSub.cpmk_number}</p>
-                  <p className="text-xs text-gray-600 mt-1">{selectedCpmkForSub.description}</p>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nomor Sub-CPMK <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={newSubCpmk.sub_cpmk_number}
-                  onChange={(e) => setNewSubCpmk({ ...newSubCpmk, sub_cpmk_number: e.target.value })}
-                  placeholder="Contoh: 1"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Deskripsi Sub-CPMK <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={newSubCpmk.description}
-                  onChange={(e) => setNewSubCpmk({ ...newSubCpmk, description: e.target.value })}
-                  placeholder="Contoh: Menjelaskan pengertian algoritma..."
-                  rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={handleAddSubCpmk}
-                  disabled={loading || !newSubCpmk.sub_cpmk_number || !newSubCpmk.description}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span>Menyimpan...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="w-5 h-5" />
-                      <span>Simpan Sub-CPMK</span>
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowAddSubCpmkModal(false);
-                    setSelectedCpmkForSub(null);
-                    setNewSubCpmk({ sub_cpmk_number: '', description: '' });
-                  }}
-                  disabled={loading}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Batal
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Toast */}
+      {toast.show && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast({ ...toast, show: false })}
+        />
       )}
     </div>
   );
