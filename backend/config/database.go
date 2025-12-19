@@ -19,7 +19,20 @@ func NewPostgresConnection() (*gorm.DB, error) {
 		return nil, err
 	}
 
-	log.Println("✓ Connected to PostgreSQL database")
+	// Configure connection pool to prevent "too many connections" error
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+
+	// Set maximum number of open connections
+	sqlDB.SetMaxOpenConns(10)
+	// Set maximum number of idle connections
+	sqlDB.SetMaxIdleConns(5)
+	// Set maximum lifetime of a connection (in seconds)
+	// sqlDB.SetConnMaxLifetime(time.Hour)
+
+	log.Println("✓ Connected to PostgreSQL database with connection pooling")
 	return db, nil
 }
 

@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"smart-rps-backend/models"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"smart-rps-backend/models"
 	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 )
@@ -42,9 +43,10 @@ func (cc *CPMKController) GetByCourseId(c *gin.Context) {
 // Create - Create CPMK with Sub-CPMKs
 func (cc *CPMKController) Create(c *gin.Context) {
 	var req struct {
-		CourseID    string `json:"course_id" binding:"required"`
-		CPMKNumber  int    `json:"cpmk_number" binding:"required"`
-		Description string `json:"description" binding:"required"`
+		CourseID    string   `json:"course_id" binding:"required"`
+		CPMKNumber  int      `json:"cpmk_number" binding:"required"`
+		Description string   `json:"description" binding:"required"`
+		Bobot       *float64 `json:"bobot"`
 		SubCPMKs    []struct {
 			SubCPMKNumber int    `json:"sub_cpmk_number" binding:"required"`
 			Description   string `json:"description" binding:"required"`
@@ -75,6 +77,7 @@ func (cc *CPMKController) Create(c *gin.Context) {
 		CourseID:    courseUUID,
 		CPMKNumber:  req.CPMKNumber,
 		Description: req.Description,
+		Bobot:       req.Bobot,
 	}
 
 	if err := cc.db.Create(&cpmk).Error; err != nil {
@@ -337,6 +340,16 @@ func (cc *CPMKController) ImportExcel(c *gin.Context) {
 		return
 	}
 
+	// Get program_id from form data (optional - if provided, will filter by program)
+	programIDStr := c.PostForm("program_id")
+	var programID *uuid.UUID
+	if programIDStr != "" {
+		parsed, err := uuid.Parse(programIDStr)
+		if err == nil {
+			programID = &parsed
+		}
+	}
+
 	src, err := file.Open()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open file"})
@@ -378,11 +391,19 @@ func (cc *CPMKController) ImportExcel(c *gin.Context) {
 			continue // Skip empty rows
 		}
 
-		// Find course by name
+		// Find course by name, with optional program_id filter
 		var course models.Course
-		if err := cc.db.Where("title = ?", courseName).First(&course).Error; err != nil {
+		query := cc.db.Where("title = ?", courseName)
+		if programID != nil {
+			query = query.Where("program_id = ?", programID)
+		}
+		if err := query.First(&course).Error; err != nil {
 			failed++
-			errors = append(errors, fmt.Sprintf("Baris %d: Mata kuliah '%s' tidak ditemukan", i+2, courseName))
+			if programID != nil {
+				errors = append(errors, fmt.Sprintf("Baris %d: Mata kuliah '%s' tidak ditemukan di program ini", i+2, courseName))
+			} else {
+				errors = append(errors, fmt.Sprintf("Baris %d: Mata kuliah '%s' tidak ditemukan", i+2, courseName))
+			}
 			continue
 		}
 
@@ -440,7 +461,11 @@ func (cc *CPMKController) ImportExcel(c *gin.Context) {
 			if !found {
 				// Try to find from database as fallback
 				var course models.Course
-				if err := cc.db.Where("title = ?", courseName).First(&course).Error; err != nil {
+				query := cc.db.Where("title = ?", courseName)
+				if programID != nil {
+					query = query.Where("program_id = ?", programID)
+				}
+				if err := query.First(&course).Error; err != nil {
 					errors = append(errors, fmt.Sprintf("Sub-CPMK Baris %d: Mata kuliah '%s' tidak ditemukan", i+2, courseName))
 					continue
 				}
@@ -943,5 +968,152 @@ func (cc *CPMKController) BatchCreateOrUpdate(c *gin.Context) {
 		"message":       fmt.Sprintf("Saved %d CPMK(s) to database", len(req.CPMKs)),
 		"created_count": len(createdCPMKs),
 		"updated_count": len(updatedCPMKs),
+	})
+}
+
+// Update - Update CPMK
+func (cc *CPMKController) Update(c *gin.Context) {
+	cpmkID := c.Param("id")
+
+	var req struct {
+		Description string   `json:"description" binding:"required"`
+		Bobot       *float64 `json:"bobot"`
+		MatchedCPL  string   `json:"matched_cpl"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Find CPMK
+	var cpmk models.CPMK
+	if err := cc.db.Where("id = ?", cpmkID).First(&cpmk).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "CPMK not found"})
+		return
+	}
+
+	// Update
+	cpmk.Description = req.Description
+	if req.Bobot != nil {
+		cpmk.Bobot = req.Bobot
+	}
+	cpmk.MatchedCPL = req.MatchedCPL
+
+	if err := cc.db.Save(&cpmk).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update CPMK"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "CPMK updated successfully",
+		"data":    cpmk,
+	})
+}
+
+// CreateSubCPMK - Create Sub-CPMK
+func (cc *CPMKController) CreateSubCPMK(c *gin.Context) {
+	var req struct {
+		CPMKID        string `json:"cpmk_id" binding:"required"`
+		SubCPMKNumber int    `json:"sub_cpmk_number" binding:"required"`
+		Description   string `json:"description" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Verify CPMK exists
+	var cpmk models.CPMK
+	if err := cc.db.Where("id = ?", req.CPMKID).First(&cpmk).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "CPMK not found"})
+		return
+	}
+
+	// Create Sub-CPMK
+	subCpmk := models.SubCPMK{
+		ID:            uuid.New(),
+		CPMKId:        uuid.MustParse(req.CPMKID),
+		SubCPMKNumber: req.SubCPMKNumber,
+		Description:   req.Description,
+	}
+
+	if err := cc.db.Create(&subCpmk).Error; err != nil {
+		// Check if duplicate
+		if strings.Contains(err.Error(), "duplicate") {
+			c.JSON(http.StatusConflict, gin.H{"error": "Sub-CPMK already exists"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create Sub-CPMK"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"success": true,
+		"message": "Sub-CPMK created successfully",
+		"data":    subCpmk,
+	})
+}
+
+// UpdateSubCPMK - Update Sub-CPMK
+func (cc *CPMKController) UpdateSubCPMK(c *gin.Context) {
+	subCpmkID := c.Param("id")
+
+	var req struct {
+		Description string   `json:"description" binding:"required"`
+		Bobot       *float64 `json:"bobot"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Find Sub-CPMK
+	var subCpmk models.SubCPMK
+	if err := cc.db.Where("id = ?", subCpmkID).First(&subCpmk).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Sub-CPMK not found"})
+		return
+	}
+
+	// Update
+	subCpmk.Description = req.Description
+	if req.Bobot != nil {
+		subCpmk.Bobot = req.Bobot
+	}
+	if err := cc.db.Save(&subCpmk).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update Sub-CPMK"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Sub-CPMK updated successfully",
+		"data":    subCpmk,
+	})
+}
+
+// DeleteSubCPMK - Delete Sub-CPMK
+func (cc *CPMKController) DeleteSubCPMK(c *gin.Context) {
+	subCpmkID := c.Param("id")
+
+	// Find Sub-CPMK
+	var subCpmk models.SubCPMK
+	if err := cc.db.Where("id = ?", subCpmkID).First(&subCpmk).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Sub-CPMK not found"})
+		return
+	}
+
+	// Delete
+	if err := cc.db.Delete(&subCpmk).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete Sub-CPMK"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Sub-CPMK deleted successfully",
 	})
 }

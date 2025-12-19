@@ -328,6 +328,81 @@ export default function RPSCreate() {
     }
   }, [editRpsId, courses]);
 
+  // 🆕 Fungsi untuk sync CPL Matching ke database CPMK
+  const syncCPLMatchingToDatabase = async (courseId, cpmkList) => {
+    try {
+      console.log('🔗 Starting CPL matching sync for course:', courseId);
+      console.log('🔗 CPMK with CPL:', cpmkList);
+      
+      // Step 1: Load existing CPMK from database
+      const existingCpmkRes = await cpmkAPI.getByCourseId(courseId);
+      let existingCpmk = existingCpmkRes.data?.data || [];
+      
+      // Step 2: Jika belum ada CPMK, create dulu
+      if (existingCpmk.length === 0) {
+        console.log('🆕 No CPMK in database, creating new CPMK...');
+        
+        const cpmkPayload = {
+          course_id: courseId,
+          cpmks: cpmkList.map((c, idx) => ({
+            cpmk_number: idx + 1,
+            description: c.description,
+            matched_cpl: c.selected_cpls ? c.selected_cpls.join(',') : ''
+          }))
+        };
+        
+        await cpmkAPI.batchCreateOrUpdate(cpmkPayload);
+        
+        // Reload CPMK dari database
+        const reloadRes = await cpmkAPI.getByCourseId(courseId);
+        existingCpmk = reloadRes.data?.data || [];
+        console.log(`✅ ${existingCpmk.length} CPMK created with CPL matching`);
+        
+        return existingCpmk.length;
+      }
+      
+      // Step 3: Update matched_cpl untuk setiap CPMK yang sudah ada
+      let updatedCount = 0;
+      for (const cpmk of cpmkList) {
+        // Skip jika tidak ada CPL yang dipilih
+        if (!cpmk.selected_cpls || cpmk.selected_cpls.length === 0) {
+          console.log(`⏭️ Skipping ${cpmk.code} - no CPL selected`);
+          continue;
+        }
+        
+        // Find matching CPMK in database by number
+        const cpmkNumber = parseInt(cpmk.code.match(/\d+/)?.[0] || '0');
+        const dbCpmk = existingCpmk.find(c => c.cpmk_number === cpmkNumber);
+        
+        if (!dbCpmk) {
+          console.warn(`⚠️ CPMK ${cpmk.code} not found in database`);
+          continue;
+        }
+        
+        // Format matched_cpl as comma-separated string
+        const matchedCplString = cpmk.selected_cpls.join(',');
+        
+        try {
+          await cpmkAPI.update(dbCpmk.id, {
+            description: cpmk.description,
+            matched_cpl: matchedCplString
+          });
+          
+          updatedCount++;
+          console.log(`✅ CPL matching saved for ${cpmk.code}: ${matchedCplString}`);
+        } catch (updateError) {
+          console.error(`❌ Failed to update ${cpmk.code}:`, updateError);
+        }
+      }
+      
+      console.log(`✅ CPL matching sync completed: ${updatedCount}/${cpmkList.length} CPMK updated`);
+      return updatedCount;
+    } catch (error) {
+      console.error('❌ CPL matching sync failed:', error);
+      throw error;
+    }
+  };
+
   // Fungsi untuk sync Sub-CPMK ke tabel database
   const syncSubCPMKToDatabase = async (courseId, cpmkList, subCpmkList) => {
     try {
@@ -383,6 +458,10 @@ export default function RPSCreate() {
       
       console.log('🗺️ Existing Sub-CPMK:', existingSubCpmk);
       
+      // FIXED bobot: 100% / 14 (standar RPS)
+      const subCpmkBobot = 100 / 14; // 7.142857142857143%
+      console.log(`💯 Sub-CPMK Bobot: ${subCpmkBobot.toFixed(6)}% (standar 14 Sub-CPMK)`);
+      
       // Step 5: Add Sub-CPMK for each CPMK
       let subCpmkSaved = 0;
       let subCpmkSkipped = 0;
@@ -424,7 +503,8 @@ export default function RPSCreate() {
           const payload = {
             cpmk_id: cpmkId,
             sub_cpmk_number: subCpmkNumber,
-            description: subCpmk.description
+            description: subCpmk.description,
+            bobot: subCpmkBobot
           };
           
           console.log('📤 Creating Sub-CPMK:', payload);
@@ -545,6 +625,16 @@ export default function RPSCreate() {
       if (res.data && res.data.data) {
         setSavedRpsId(res.data.data.id);
         
+        // � SYNC CPL MATCHING KE DATABASE CPMK
+        console.log('🔗 Syncing CPL matching to database after RPS save...');
+        try {
+          const cplUpdateCount = await syncCPLMatchingToDatabase(course.id, rpsContent.cpmk);
+          console.log(`✅ CPL matching sync completed: ${cplUpdateCount} CPMK updated`);
+        } catch (cplSyncError) {
+          console.error('⚠️ CPL matching sync failed (non-critical):', cplSyncError);
+          // Don't block RPS save if CPL sync fails
+        }
+        
         // 🔄 SYNC SUB-CPMK KE DATABASE
         console.log('🔄 Syncing Sub-CPMK to database after RPS save...');
         try {
@@ -555,7 +645,7 @@ export default function RPSCreate() {
           // Don't block RPS save if Sub-CPMK sync fails
         }
         
-        alert('✅ RPS dan Sub-CPMK berhasil disimpan!');
+        alert('✅ RPS, CPL Matching, dan Sub-CPMK berhasil disimpan!');
         // Navigate based on role
         const userRole = localStorage.getItem('role');
         if (userRole === 'kaprodi') {
@@ -748,7 +838,24 @@ export default function RPSCreate() {
 
             {currentStep < steps.length ? (
               <button
-                onClick={() => setCurrentStep(currentStep + 1)}
+                onClick={async () => {
+                  // 🔗 Jika di step CPMK (step 2), save CPL matching dulu
+                  if (currentStep === 2 && course?.id) {
+                    console.log('🔗 Saving CPL matching before next step...');
+                    try {
+                      const validCpmk = formData.cpmk.filter(c => c.description && c.description.trim());
+                      if (validCpmk.length > 0) {
+                        const cplUpdateCount = await syncCPLMatchingToDatabase(course.id, validCpmk);
+                        console.log(`✅ CPL matching saved: ${cplUpdateCount} CPMK updated`);
+                      }
+                    } catch (error) {
+                      console.error('⚠️ Failed to save CPL matching:', error);
+                      // Don't block navigation, just log error
+                    }
+                  }
+                  
+                  setCurrentStep(currentStep + 1);
+                }}
                 disabled={!selectedCourseId}
                 className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all"
               >
@@ -875,6 +982,14 @@ function CPMKStep({ formData, setFormData, course }) {
   const [loadingFromDB, setLoadingFromDB] = useState(false);
   const [matchingAllCPL, setMatchingAllCPL] = useState(false);
   const [matchingProgress, setMatchingProgress] = useState({ current: 0, total: 0 });
+  const [cpmkFromDB, setCpmkFromDB] = useState([]); // Data CPMK dari database (dengan bobot)
+
+  // Helper: Get CPMK bobot by code
+  const getCpmkBobot = (cpmkCode) => {
+    const cpmkNumber = parseInt(cpmkCode.match(/\d+/)?.[0] || '0');
+    const cpmk = cpmkFromDB.find(c => c.cpmk_number === cpmkNumber);
+    return cpmk?.bobot || 0;
+  };
 
   // Check if course has CPMK in database
   useEffect(() => {
@@ -886,9 +1001,12 @@ function CPMKStep({ formData, setFormData, course }) {
   const checkCpmkExists = async () => {
     try {
       const res = await cpmkAPI.getByCourseId(course.id);
-      setHasCpmkInDB(res.data?.data?.length > 0);
+      const cpmkData = res.data?.data || [];
+      setHasCpmkInDB(cpmkData.length > 0);
+      setCpmkFromDB(cpmkData); // Simpan data CPMK lengkap dengan bobot
     } catch (error) {
       setHasCpmkInDB(false);
+      setCpmkFromDB([]);
     }
   };
 
@@ -979,10 +1097,12 @@ function CPMKStep({ formData, setFormData, course }) {
         code: `CPMK-${item.cpmk_number || idx + 1}`,
         description: item.description || '',
         selected_cpls: [],
-        sub_cpmk: item.sub_cpmk || [] // Include sub-CPMK if available
+        sub_cpmk: item.sub_cpmk || [], // Include sub-CPMK if available
+        bobot: item.bobot || 0 // Include bobot
       }));
 
       setFormData({ ...formData, cpmk: loadedCpmk });
+      setCpmkFromDB(cpmkData); // Update cpmkFromDB state
       setCpmkVersion('database');
       alert(`✅ Berhasil memuat ${loadedCpmk.length} CPMK dari database!`);
     } catch (error) {
@@ -1308,6 +1428,8 @@ function CPMKStep({ formData, setFormData, course }) {
                 cpmk={item}
                 cpmkIndex={index}
                 course={course}
+                cpmkBobot={getCpmkBobot(item.code)}
+                totalCpmk={formData.cpmk.length}
                 onChange={(updatedCpmk) => {
                   const newCpmk = [...formData.cpmk];
                   newCpmk[index] = updatedCpmk;
@@ -1336,6 +1458,31 @@ function SubCPMKStep({ formData, setFormData, course, viewMode = false }) {
   const [progress, setProgress] = useState(0);
   const [progressText, setProgressText] = useState('');
   const [savingToDb, setSavingToDb] = useState(false);
+  const [cpmkFromDB, setCpmkFromDB] = useState([]); // Data CPMK dari database (dengan bobot)
+
+  // Load CPMK from database when course changes
+  useEffect(() => {
+    if (course?.id) {
+      loadCpmkData();
+    }
+  }, [course?.id]);
+
+  const loadCpmkData = async () => {
+    try {
+      const res = await cpmkAPI.getByCourseId(course.id);
+      const cpmkData = res.data?.data || [];
+      setCpmkFromDB(cpmkData);
+    } catch (error) {
+      console.error('Failed to load CPMK:', error);
+      setCpmkFromDB([]);
+    }
+  };
+
+  // Helper: Calculate Sub-CPMK bobot
+  // FIXED: RPS standar membutuhkan 14 Sub-CPMK, bobot selalu 100/14
+  const calculateSubCpmkBobot = () => {
+    return 100 / 14; // 7.142857142857143%
+  };
 
   // Simple change handler without auto-save (will be saved when RPS is saved)
   const handleSubCPMKChange = (newSubCpmk) => {
@@ -1402,6 +1549,10 @@ function SubCPMKStep({ formData, setFormData, course, viewMode = false }) {
       console.log('🗺️ CPMK code to ID map:', cpmkCodeToId);
       console.log('🗺️ SubCpmk list:', validSubCpmk);
       
+      // FIXED bobot: 100% / 14 (standar RPS)
+      const subCpmkBobot = 100 / 14; // 7.142857142857143%
+      console.log(`💯 Sub-CPMK Bobot: ${subCpmkBobot.toFixed(6)}% (standar 14 Sub-CPMK)`);
+      
       // Step 3: Save Sub-CPMK
       let subCpmkSaved = 0;
       for (const subCpmk of validSubCpmk) {
@@ -1421,7 +1572,8 @@ function SubCPMKStep({ formData, setFormData, course, viewMode = false }) {
           
           await cpmkAPI.addSubCPMK(cpmkId, {
             sub_cpmk_number: subCpmkNumber,
-            description: subCpmk.description
+            description: subCpmk.description,
+            bobot: subCpmkBobot
           });
           
           subCpmkSaved++;
@@ -1680,6 +1832,9 @@ function SubCPMKStep({ formData, setFormData, course, viewMode = false }) {
                   <option key={c.code} value={c.code}>{c.code}</option>
                 ))}
               </select>
+              <span className="inline-block px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded whitespace-nowrap self-start">
+                Bobot: {calculateSubCpmkBobot().toFixed(6)}%
+              </span>
               {!viewMode && (
                 <button
                   onClick={() => handleGenerateOne(index)}

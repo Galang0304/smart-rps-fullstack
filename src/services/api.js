@@ -101,9 +101,7 @@ export const courseAPI = {
     });
   },
   downloadTemplate: () => apiClient.get('/courses/template/excel', { responseType: 'blob' }),
-  importExcel: (file) => {
-    const formData = new FormData();
-    formData.append('file', file);
+  importExcel: (formData) => {
     return apiClient.post('/courses/import/excel', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
@@ -118,12 +116,23 @@ export const cpmkAPI = {
   batchCreateOrUpdate: (data) => apiClient.post('/cpmk/batch', data),
   update: (id, data) => apiClient.put(`/cpmk/${id}`, data),
   delete: (id) => apiClient.delete(`/cpmk/${id}`),
-  addSubCPMK: (cpmkId, data) => apiClient.post(`/cpmk/${cpmkId}/sub-cpmk`, data),
-  deleteSubCPMK: (cpmkId, subCpmkId) => apiClient.delete(`/cpmk/${cpmkId}/sub-cpmk/${subCpmkId}`),
+  
+  // Sub-CPMK APIs
+  createSubCpmk: (data) => apiClient.post('/sub-cpmk', data),
+  updateSubCpmk: (id, data) => apiClient.put(`/sub-cpmk/${id}`, data),
+  deleteSubCpmk: (id) => apiClient.delete(`/sub-cpmk/${id}`),
+  
+  // Legacy aliases (for backward compatibility)
+  addSubCPMK: (cpmkId, data) => apiClient.post('/sub-cpmk', { ...data, cpmk_id: cpmkId }),
+  deleteSubCPMK: (cpmkId, subCpmkId) => apiClient.delete(`/sub-cpmk/${subCpmkId}`),
+  
+  // Import/Export
   downloadTemplate: () => apiClient.get('/cpmk/template/excel', { responseType: 'blob' }),
   importExcel: (courseId, file) => {
     const formData = new FormData();
     formData.append('file', file);
+    // Note: We send course_id but backend actually needs program_id for filtering
+    // We'll get program_id from the selected course in the component
     formData.append('course_id', courseId);
     return apiClient.post('/cpmk/import/excel', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -174,9 +183,9 @@ export const generatedRPSAPI = {
   createSync: (data) => apiClient.post('/generate/sync', data),
   createDraft: (data) => apiClient.post('/generated/draft', data),
   update: (id, data) => apiClient.put(`/generated/${id}`, data),
-  updateStatus: (id, status) => apiClient.patch(`/generated/${id}/status`, { status }),
+  updateStatus: (id, status) => apiClient.put(`/generated/${id}`, { status }), // Changed from PATCH to PUT
   delete: (id) => apiClient.delete(`/generated/${id}`),
-  export: (id) => apiClient.get(`/generated/${id}/export`),
+  export: (id) => apiClient.get(`/generated/${id}/export-html`),
 };
 
 // === AI HELPER APIs ===

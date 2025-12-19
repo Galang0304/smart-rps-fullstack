@@ -77,15 +77,15 @@ export default function RPSList() {
 
   const handleExport = async (rpsId, mataKuliah) => {
     try {
-      const response = await api.get(`/generated/${rpsId}/export`, {
+      const response = await api.get(`/generated/${rpsId}/export-html`, {
         responseType: 'blob',
       });
       
       // Create download link
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'text/html' }));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `RPS_${mataKuliah}_${new Date().getTime()}.docx`);
+      link.setAttribute('download', `RPS_${mataKuliah}_${new Date().getTime()}.html`);
       document.body.appendChild(link);
       link.click();
       link.remove();

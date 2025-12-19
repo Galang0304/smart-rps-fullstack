@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPS - Universitas Muhammadiyah Makassar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @media print {
+            body { background-color: white !important; margin: 0 !important; padding: 0 !important; }
+            .page { 
+                margin: 0 !important; 
+                box-shadow: none !important; 
+                width: 100% !important; 
+                height: auto !important;
+                page-break-after: always; 
+                padding: 10mm !important;
+                border: none !important;
+            }
+            .no-print { display: none !important; }
+        }
+
+        body {
+            background-color: #f0f2f5;
+            font-family: 'Times New Roman', Times, serif;
+            color: black;
+            margin: 0;
+            padding: 0;
+            font-size: 10pt; /* Diperkecil dari 12pt ke 10pt */
+        }
+
+        .page {
+            background-color: white;
+            width: 210mm;
+            min-height: 297mm;
+            padding: 15mm;
+            margin: 20px auto;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            position: relative;
+            box-sizing: border-box;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 0px; 
+        }
+
+        th, td {
+            border: 1px solid black;
+            padding: 4px 8px;
+            vertical-align: top;
+            font-size: 10pt; /* Diperkecil dari 12pt ke 10pt */
+            font-weight: normal;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+
+        .bg-sky-unismuh {
+            background-color: #00adef; 
+            color: black;
+        }
+
+        .text-center { text-align: center; }
+        .uppercase { text-transform: uppercase; }
+
+        .header-container {
+            display: flex;
+            border: 1px solid black;
+            margin-bottom: 0;
+        }
+
+        .header-logo {
+            width: 15%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-right: 1px solid black;
+            padding: 5px;
+        }
+
+        .header-text {
+            width: 85%;
+            background-color: #00adef;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-weight: bold; 
+            font-size: 10pt; /* Diperkecil dari 12pt ke 10pt */
+        }
+
+        .section-title {
+            text-align: center;
+            font-weight: bold; 
+            font-size: 10pt; /* Diperkecil dari 12pt ke 10pt sesuai instruksi "semua coba" sebelumnya */
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+
+        .label-kolom {
+            font-weight: bold; 
+        }
+
+        .font-bold {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- PAGE 1: DESKRIPSI RPS -->
+    <div class="page">
+        <div class="section-title">DESKRIPSI RPS</div>
+        
+        <div class="header-container">
+            <div class="header-logo">
+                <img src="data:image/png;base64,{{.LogoBase64}}" alt="Logo Unismuh" style="width: 70px;">
+            </div>
+            <div class="header-text">
+                PERGURUAN TINGGI<br>FAKULTAS<br>PROGRAM STUDI
+            </div>
+        </div>
+
+        <table>
+            <tr class="text-center uppercase label-kolom">
+                <td style="width: 25%;">NAMA MATA KULIAH</td>
+                <td style="width: 10%;">KODE MK</td>
+                <td style="width: 15%;">RUMPUN MK</td>
+                <td style="width: 15%;">BOBOT (SKS)</td>
+                <td style="width: 15%;">SEMESTER</td>
+                <td style="width: 20%;">TGL PENYUSUNAN</td>
+            </tr>
+            <tr style="height: 30px;">
+                <td>{{.NamaMataKuliah}}</td>
+                <td class="text-center">{{.KodeMK}}</td>
+                <td class="text-center">{{.RumpunMK}}</td>
+                <td class="text-center">{{.BobotSKS}}</td>
+                <td class="text-center">{{.Semester}}</td>
+                <td class="text-center">{{.TglPenyusunan}}</td>
+            </tr>
+            <tr class="text-center uppercase label-kolom">
+                <td>UPM FAKULTAS</td>
+                <td>NAMA PENYUSUN RPS</td>
+                <td colspan="2">KOORDINATOR RMK</td>
+                <td colspan="2">KA PRODI</td>
+            </tr>
+            <tr style="height: 55px;">
+                <td>{{.UPMFakultas}}</td>
+                <td>{{.NamaPenyusunRPS}}</td>
+                <td colspan="2">{{.KoordinatorRMK}}</td>
+                <td colspan="2">{{.KaProdi}}</td>
+            </tr>
+        </table>
+
+        <table>
+            <tr>
+                <td rowspan="{{add (add (add (len .CPLList) (len .CPMKList)) (len .SubCPMKList)) 7}}" class="label-kolom" style="width: 15%;">CAPAIAN PEMBELAJARAN (CPL – CPMK – Sub CPMK)</td>
+                <td colspan="2" class="bg-gray-100 label-kolom uppercase">CAPAIAN PEMBELAJARAN LULUSAN YANG DIBEBANKAN PADA MK (CPL)</td>
+            </tr>
+            {{range .CPLList}}
+            <tr>
+                <td class="text-center label-kolom" style="width: 10%;">{{.Kode}}</td>
+                <td>{{.Deskripsi}}</td>
+            </tr>
+            {{end}}
+            <tr>
+                <td colspan="2" class="bg-gray-100 label-kolom uppercase">CAPAIAN PEMBELAJARAN MATA KULIAH (CPMK)</td>
+            </tr>
+            {{range .CPMKList}}
+            <tr>
+                <td class="text-center label-kolom">{{.Kode}}{{if .CPL}}<br><span style="font-size: 8pt; color: #059669; font-weight: bold;">({{.CPL}})</span>{{end}}</td>
+                <td>{{.Deskripsi}}</td>
+            </tr>
+            {{end}}
+            <tr>
+                <td colspan="2" class="bg-gray-100 label-kolom uppercase">KEMAMPUAN AKHIR TIAP TAHAPAN PEMBELAJARAN (Sub-CPMK)</td>
+            </tr>
+            {{range .SubCPMKList}}
+            <tr>
+                <td class="text-center label-kolom">{{.Kode}}</td>
+                <td>{{.Deskripsi}}</td>
+            </tr>
+            {{end}}
+            <tr>
+                <td class="label-kolom uppercase">KORELASI CPMK - Sub-CPMK</td>
+                <td>
+                    <table style="width: 100%; border-collapse: collapse; margin: 0;">
+                        <tr class="bg-gray-100 text-center label-kolom" style="font-size: 8pt; font-weight: bold;">
+                            <td style="width: 50px; border: 1px solid black; padding: 2px;">CPMK</td>
+                            {{range $index, $header := .SubCPMKHeaders}}
+                            <td style="border: 1px solid black; padding: 2px; width: 30px;">S-{{add $index 1}}</td>
+                            {{end}}
+                        </tr>
+                        {{range .CPMKKorelasi}}
+                        <tr class="text-center" style="font-size: 8pt;">
+                            <td style="border: 1px solid black; padding: 2px;" class="label-kolom">{{.CPMKKode}}</td>
+                            {{range .Korelasi}}
+                            <td style="border: 1px solid black; padding: 2px;">{{if .}}✓{{end}}</td>
+                            {{end}}
+                        </tr>
+                        {{end}}
+                    </table>
+                </td>
+            </tr>
+            <tr>
+                <td class="label-kolom uppercase">DESKRIPSI MATA KULIAH</td>
+                <td>{{.DeskripsiMK}}</td>
+            </tr>
+            <tr>
+                <td class="label-kolom uppercase" style="width: 25%;">BAHAN KAJIAN (TOPIK)</td>
+                <td style="white-space: pre-line; font-size: 9pt;">{{.BahanKajian}}</td>
+            </tr>
+            <tr>
+                <td class="label-kolom uppercase" style="width: 25%;">REFERENSI</td>
+                <td style="white-space: pre-line; font-size: 9pt;">{{.Referensi}}</td>
+            </tr>
+            <tr>
+                <td class="label-kolom uppercase">NAMA DOSEN</td>
+                <td>{{.NamaDosen}}</td>
+            </tr>
+             <tr>
+                <td class="uppercase label-kolom" style="width: 25%;">MATA KULIAH PRSYARAT</td>
+                <td></td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- PAGE 3: RENCANA PEMBELAJARAN -->
+    <div class="page">
+        <div class="section-title">RENCANA PEMBELAJARAN</div>
+        <table style="table-layout: fixed;">
+            <thead>
+                <tr class="bg-sky-unismuh text-center uppercase label-kolom" style="font-size: 8pt;">
+                    <th style="width: 5%;">MG</th>
+                    <th style="width: 18%;">SUB CPMK</th>
+                    <th style="width: 14%;">INDIKATOR</th>
+                    <th style="width: 16%;">MATERI</th>
+                    <th style="width: 15%;">METODE</th>
+                    <th style="width: 7%;">WAKTU</th>
+                    <th style="width: 16%;">PENILAIAN</th>
+                    <th style="width: 9%;">BOBOT</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .RencanaMingguan}}
+                {{if le .Minggu 7}}
+                <tr style="height: auto; font-size: 9pt;">
+                    <td class="text-center label-kolom">{{.Minggu}}</td>
+                    <td style="font-size: 8pt;">{{.SubCPMK}}</td>
+                    <td style="font-size: 8pt;">{{.Indikator}}</td>
+                    <td style="font-size: 8pt;">{{.Materi}}</td>
+                    <td style="font-size: 8pt;">{{.Metode}}</td>
+                    <td class="text-center" style="font-size: 8pt;">{{.Waktu}}</td>
+                    <td style="font-size: 8pt;">{{.Penilaian}}</td>
+                    <td class="text-center">{{.Bobot}}</td>
+                </tr>
+                {{end}}
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- PAGE 4: RENCANA PEMBELAJARAN Lanjutan (Minggu 8-16) -->
+    <div class="page">
+        <table style="table-layout: fixed;">
+            <thead>
+                <tr class="bg-sky-unismuh text-center uppercase label-kolom" style="font-size: 8pt;">
+                    <th style="width: 5%;">MG</th>
+                    <th style="width: 18%;">SUB CPMK</th>
+                    <th style="width: 14%;">INDIKATOR</th>
+                    <th style="width: 16%;">MATERI</th>
+                    <th style="width: 15%;">METODE</th>
+                    <th style="width: 7%;">WAKTU</th>
+                    <th style="width: 16%;">PENILAIAN</th>
+                    <th style="width: 9%;">BOBOT</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .RencanaMingguan}}
+                {{if and (ge .Minggu 8) (le .Minggu 16)}}
+                <tr style="height: auto; font-size: 9pt;">
+                    <td class="text-center label-kolom">{{.Minggu}}</td>
+                    <td style="font-size: 8pt;">{{.SubCPMK}}</td>
+                    <td style="font-size: 8pt;">{{.Indikator}}</td>
+                    <td style="font-size: 8pt;">{{.Materi}}</td>
+                    <td style="font-size: 8pt;">{{.Metode}}</td>
+                    <td class="text-center" style="font-size: 8pt;">{{.Waktu}}</td>
+                    <td style="font-size: 8pt;">{{.Penilaian}}</td>
+                    <td class="text-center">{{.Bobot}}</td>
+                </tr>
+                {{end}}
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- PAGES 5-18: RENCANA TUGAS -->
+    {{range .RencanaTugas}}
+    <div class="page">
+        <div class="section-title">RENCANA TUGAS</div>
+        <div class="label-kolom mb-2">TUGAS {{.TugasKe}}</div>
+        
+        <div class="header-container">
+            <div class="header-logo">
+                <img src="data:image/png;base64,{{$.LogoBase64}}" alt="Logo Unismuh" style="width: 70px;">
+            </div>
+            <div class="header-text">
+                PERGURUAN TINGGI<br>FAKULTAS<br>PROGRAM STUDI
+            </div>
+        </div>
+
+        <table>
+            <tr class="bg-sky-unismuh text-center uppercase label-kolom">
+                <td colspan="3">RENCANA TUGAS MAHASISWA</td>
+            </tr>
+            <tr>
+                <td rowspan="4" class="label-kolom" style="width: 25%; vertical-align: middle;">Identitas Mata Kuliah</td>
+                <td style="width: 20%;">Nama MK</td>
+                <td>{{$.NamaMataKuliah}}</td>
+            </tr>
+            <tr>
+                <td>Kode</td>
+                <td>{{$.KodeMK}}</td>
+            </tr>
+            <tr>
+                <td>Semester</td>
+                <td>{{$.Semester}}</td>
+            </tr>
+            <tr>
+                <td>SKS</td>
+                <td>{{$.BobotSKS}}</td>
+            </tr>
+            <tr>
+                <td rowspan="2" class="label-kolom" style="vertical-align: middle;">Sub-CPMK & Indikator</td>
+                <td>Sub-CPMK</td>
+                <td>{{.SubCPMK}}</td>
+            </tr>
+            <tr>
+                <td>Indikator</td>
+                <td>{{.Indikator}}</td>
+            </tr>
+            <tr>
+                <td rowspan="4" class="label-kolom" style="vertical-align: middle;">Rencana Tugas</td>
+                <td>Judul Tugas</td>
+                <td>{{.JudulTugas}}</td>
+            </tr>
+            <tr>
+                <td>Batas Waktu</td>
+                <td>{{.BatasWaktu}}</td>
+            </tr>
+            <tr>
+                <td>Petunjuk Pengerjaan Tugas</td>
+                <td style="white-space: pre-line;">{{.PetunjukPengerjaan}}</td>
+            </tr>
+            <tr>
+                <td>Luaran Tugas</td>
+                <td>{{.LuaranTugas}}</td>
+            </tr>
+            <tr>
+                <td rowspan="3" class="label-kolom" style="vertical-align: middle;">Penilaian</td>
+                <td>Kriteria</td>
+                <td style="white-space: pre-line;">{{.KriteriaPenilaian}}</td>
+            </tr>
+            <tr>
+                <td>Teknik Penilaian</td>
+                <td>{{.TeknikPenilaian}}</td>
+            </tr>
+            <tr>
+                <td>Bobot (%)</td>
+                <td>{{.BobotPersen}}</td>
+            </tr>
+            <tr>
+                <td class="label-kolom">Daftar Rujukan</td>
+                <td colspan="2" style="white-space: pre-line;">{{.DaftarRujukan}}</td>
+            </tr>
+        </table>
+    </div>
+    {{end}}
+
+    <!-- PAGE 19: ANALISIS KETERCAPAIAN -->
+    <div class="page">
+        <div class="section-title">ANALISIS KETERCAPAIAN CPL DAN BOBOT PENILAIAN</div>
+        <table style="table-layout: fixed;">
+            <thead>
+                <tr class="bg-sky-unismuh text-center uppercase label-kolom" style="font-size: 8pt;">
+                    <th style="width: 8%;">MINGGU</th>
+                    <th style="width: 12%;">CPL</th>
+                    <th style="width: 12%;">CPMK</th>
+                    <th style="width: 15%;">Sub-CPMK</th>
+                    <th style="width: 23%;">MATERI</th>
+                    <th style="width: 18%;">ASSESSMEN</th>
+                    <th style="width: 8%;">BOBOT</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .AnalisisKetercapaian}}
+                <tr style="height: auto; font-size: 8pt;">
+                    <td class="text-center label-kolom">{{.Minggu}}</td>
+                    <td style="font-size: 8pt;">{{.CPL}}</td>
+                    <td style="font-size: 8pt;">{{.CPMK}}</td>
+                    <td style="font-size: 8pt;">{{.SubCPMK}}</td>
+                    <td style="font-size: 8pt;">{{.TopikMateri}}</td>
+                    <td style="font-size: 8pt;">{{.JenisAssessmen}}</td>
+                    <td class="text-center">{{.Bobot}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- PAGE 20: SKALA PENILAIAN & TANDA TANGAN -->
+    <div class="page">
+        <div class="section-title">SKALA PENILAIAN</div>
+        <table class="w-3/4 mx-auto mb-16">
+            <thead>
+                <tr class="bg-sky-unismuh text-center uppercase label-kolom">
+                    <th rowspan="2" style="width: 50px; vertical-align: middle;">No</th>
+                    <th colspan="3">Nilai</th>
+                    <th rowspan="2" style="vertical-align: middle;">Keterangan</th>
+                </tr>
+                <tr class="bg-sky-unismuh text-center uppercase label-kolom">
+                    <th>Interval</th>
+                    <th>Huruf</th>
+                    <th>Bobot</th>
+                </tr>
+            </thead>
+            <tbody class="text-center">
+                <tr><td>1</td><td>90 – 100</td><td>A</td><td>4,00</td><td>Lulus</td></tr>
+                <tr><td>2</td><td>85 – 89</td><td>A-</td><td>3,75</td><td>Lulus</td></tr>
+                <tr><td>3</td><td>80 – 84</td><td>B+</td><td>3,50</td><td>Lulus</td></tr>
+                <tr><td>4</td><td>75 – 79</td><td>B</td><td>3,00</td><td>Lulus</td></tr>
+                <tr><td>5</td><td>70 – 74</td><td>B-</td><td>2,75</td><td>Lulus</td></tr>
+                <tr><td>6</td><td>60 – 69</td><td>C</td><td>2,50</td><td>Lulus</td></tr>
+                <tr><td>7</td><td>&lt; 60</td><td>E</td><td>0</td><td>Tidak Lulus</td></tr>
+            </tbody>
+        </table>
+
+        <div class="flex justify-between px-10 mt-20">
+            <div class="text-center">
+                <p class="label-kolom">Penelaah</p>
+                <p>Penjamin Mutu Program Studi</p>
+                <div class="mt-20 border-b border-black w-56 mx-auto"></div>
+                <p>NIDN.</p>
+            </div>
+            <div class="text-center">
+                <p class="label-kolom">Penyusun RPS</p>
+                <p>Koordinator Mata Kuliah</p>
+                <div class="mt-20 border-b border-black w-56 mx-auto"></div>
+                <p>NIDN.</p>
+            </div>
+        </div>
+
+        <div class="text-center mt-12">
+            <p>Disahkan oleh:</p>
+            <p class="label-kolom uppercase">Ketua Program Studi</p>
+            <div class="mt-20 border-b border-black w-56 mx-auto"></div>
+            <p>NIDN.</p>
+        </div>
+    </div>
+
+</body>
+</html>

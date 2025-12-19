@@ -492,12 +492,12 @@ func (ac *AIController) GenerateRencanaMingguan(c *gin.Context) {
 
 	bahanContext := strings.Join(req.BahanKajian, "\n")
 
-	prompt := fmt.Sprintf(`Buatkan rencana pembelajaran 16 minggu untuk mata kuliah "%s" (%s).
+	prompt := fmt.Sprintf(`Buatkan rencana pembelajaran untuk mata kuliah "%s" (%s).
 
 CPMK:
 %s
 
-Sub-CPMK (14 minggu pembelajaran, minggu 8 UTS, minggu 16 UAS):
+Sub-CPMK (14 minggu pembelajaran):
 %s
 
 Bahan Kajian:
@@ -508,12 +508,20 @@ Format output dalam JSON object dengan struktur:
   "weeks": [
     {"minggu": 1, "subCpmk": "Sub-CPMK-1", "materi": "materi minggu 1", "metode": "Ceramah, Diskusi", "penilaian": "Quiz"},
     {"minggu": 2, "subCpmk": "Sub-CPMK-2", "materi": "materi minggu 2", "metode": "Praktikum", "penilaian": "Tugas"},
-    ...
+    ...sampai minggu 7
+    {"minggu": 9, "subCpmk": "Sub-CPMK-8", "materi": "materi minggu 9", "metode": "Ceramah", "penilaian": "Quiz"},
+    ...sampai minggu 15
   ]
 }
 
-Buatkan untuk 14 minggu (skip minggu 8 dan 16 karena UTS/UAS).
-Urutkan materi dari dasar ke kompleks, cocokkan dengan urutan Sub-CPMK.
+PENTING:
+- Buatkan untuk minggu 1-7 (7 minggu sebelum UTS)
+- Buatkan untuk minggu 9-15 (7 minggu setelah UTS, sebelum UAS)
+- Total 14 minggu pembelajaran (SKIP minggu 8 untuk UTS dan minggu 16 untuk UAS)
+- Cocokkan dengan 14 Sub-CPMK yang ada
+- Urutkan materi dari dasar ke kompleks
+- Setiap minggu harus ada: minggu, subCpmk, materi, metode, penilaian
+
 HANYA kembalikan JSON object, tanpa penjelasan tambahan.`, req.CourseTitle, req.CourseCode, cpmkContext, subCpmkContext, bahanContext)
 
 	result, err := ac.callOpenAI(prompt)
@@ -604,8 +612,11 @@ HANYA kembalikan JSON array, tanpa penjelasan tambahan.`, weeks, req.CourseTitle
 // GenerateReferensi - Generate references using Gemini
 func (ac *AIController) GenerateReferensi(c *gin.Context) {
 	var req struct {
+		CourseCode  string   `json:"course_code"`
 		CourseTitle string   `json:"course_title" binding:"required"`
-		Topics      []string `json:"topics"`
+		Description string   `json:"description"`
+		CPMKList    []string `json:"cpmk_list"`
+		BahanKajian []string `json:"bahan_kajian"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -613,19 +624,44 @@ func (ac *AIController) GenerateReferensi(c *gin.Context) {
 		return
 	}
 
-	prompt := fmt.Sprintf(`Buatkan 8-10 referensi buku dan jurnal untuk mata kuliah "%s".
+	// Build context
+	cpmkContext := ""
+	if len(req.CPMKList) > 0 {
+		cpmkContext = "CPMK yang harus dicapai:\n"
+		for i, cpmk := range req.CPMKList {
+			cpmkContext += fmt.Sprintf("%d. %s\n", i+1, cpmk)
+		}
+	}
 
-Topik yang diajarkan:
-%v
+	bahanContext := ""
+	if len(req.BahanKajian) > 0 {
+		bahanContext = "Bahan Kajian:\n"
+		bahanContext += strings.Join(req.BahanKajian, "\n")
+	}
+
+	prompt := fmt.Sprintf(`Buatkan 8-10 referensi buku dan jurnal ilmiah untuk mata kuliah "%s" (%s).
+
+Deskripsi Mata Kuliah:
+%s
+
+%s
+
+%s
 
 Format output dalam JSON array dengan struktur:
 [
-  {"title": "judul buku/jurnal", "author": "nama penulis", "year": 2023, "publisher": "penerbit", "type": "book/journal"},
-  {"title": "judul buku/jurnal", "author": "nama penulis", "year": 2022, "publisher": "penerbit", "type": "book/journal"}
+  {"title": "judul buku/jurnal", "author": "nama penulis", "year": 2023, "publisher": "penerbit/jurnal", "type": "book"},
+  {"title": "judul jurnal", "author": "nama penulis", "year": 2023, "publisher": "nama jurnal", "type": "journal"}
 ]
 
-Prioritaskan referensi terbaru (2020-2024) dan yang relevan dengan topik.
-HANYA kembalikan JSON array, tanpa penjelasan tambahan.`, req.CourseTitle, req.Topics)
+PENTING:
+- Minimal 5 buku referensi standar di bidang ini
+- Minimal 3 jurnal ilmiah internasional/nasional terakreditasi
+- Prioritaskan referensi terbaru (2020-2024)
+- Pastikan relevan dengan CPMK dan bahan kajian
+- Gunakan referensi yang kredibel dan terkenal di bidangnya
+
+HANYA kembalikan JSON array, tanpa penjelasan tambahan.`, req.CourseTitle, req.CourseCode, req.Description, cpmkContext, bahanContext)
 
 	result, err := ac.callOpenAI(prompt)
 	if err != nil {

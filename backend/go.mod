@@ -6,8 +6,6 @@ require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.4.0
-	github.com/lukasjarosch/go-docx v0.5.0
-	github.com/unidoc/unioffice v1.29.0
 	github.com/xuri/excelize/v2 v2.10.0
 	golang.org/x/crypto v0.43.0
 	gorm.io/datatypes v1.2.7
@@ -53,6 +51,7 @@ require (
 	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/sys v0.37.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
+	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/mysql v1.5.6 // indirect

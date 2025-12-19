@@ -7,9 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"smart-rps-backend/models"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"smart-rps-backend/models"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -87,9 +88,9 @@ func (cc *CourseController) DownloadTemplate(c *gin.Context) {
 
 	// Add example data
 	exampleData := [][]interface{}{
-		{1, "AW60910042101", "Pendidikan Pancasila", 2, 1, strconv.Itoa(time.Now().Year())},
-		{2, "AW60910042103", "Bahasa Indonesia", 2, 1, strconv.Itoa(time.Now().Year())},
-		{3, "AW60910042104", "Bahasa Inggris", 2, 1, strconv.Itoa(time.Now().Year())},
+		{1, "AW60910042101", "Pendidikan Pancasila", 2, 1, "20251"},
+		{2, "AW60910042103", "Bahasa Indonesia", 2, 1, "20251"},
+		{3, "CW6220202201", "Mekanika Teknik I", 2, 2, "20252"},
 	}
 
 	for i, row := range exampleData {
@@ -115,16 +116,22 @@ func (cc *CourseController) DownloadTemplate(c *gin.Context) {
 		"   - Mata Kuliah: Nama mata kuliah",
 		"   - SKS: Satuan Kredit Semester (angka)",
 		"   - Semester: Semester (angka 1-8)",
-		"   - Tahun: Tahun akademik (contoh: 2025, 2024, 2026)",
+		"   - Tahun: Format 5 digit (contoh: 20251 = Tahun 2025 Semester 1, 20252 = Tahun 2025 Semester 2)",
 		"",
-		"3. Hapus baris contoh data sebelum mengisi data Anda",
-		"4. Pastikan tidak ada baris kosong di tengah data",
-		"5. Format file yang diunggah harus .xlsx",
+		"3. Format Tahun:",
+		"   - 4 digit pertama = Tahun akademik (2025, 2024, 2026, dll)",
+		"   - 1 digit terakhir = Semester (1 atau 2)",
+		"   - Contoh: 20251 (Tahun 2025 Semester Ganjil/1)",
+		"   - Contoh: 20252 (Tahun 2025 Semester Genap/2)",
 		"",
-		"6. Contoh pengisian:",
+		"4. Hapus baris contoh data sebelum mengisi data Anda",
+		"5. Pastikan tidak ada baris kosong di tengah data",
+		"6. Format file yang diunggah harus .xlsx",
+		"",
+		"7. Contoh pengisian:",
 		"   No  | Kode MK        | Mata Kuliah           | SKS | Semester | Tahun",
-		"   1   | AW60910042101  | Pendidikan Pancasila  | 2   | 1        | 2025",
-		"   2   | CW65520223103  | Matematika Informatika| 3   | 2        | 2025",
+		"   1   | AW60910042101  | Pendidikan Pancasila  | 2   | 1        | 20251",
+		"   2   | CW6220202201   | Mekanika Teknik I     | 2   | 2        | 20252",
 	}
 
 	for i, instruction := range instructions {
@@ -237,7 +244,7 @@ func (cc *CourseController) ImportExcel(c *gin.Context) {
 		title := strings.TrimSpace(row[2])
 		creditsStr := strings.TrimSpace(row[3])
 		semesterStr := strings.TrimSpace(row[4])
-		tahun := strings.TrimSpace(row[5])
+		tahunStr := strings.TrimSpace(row[5])
 
 		// Validate required fields
 		if code == "" || title == "" {
@@ -261,9 +268,25 @@ func (cc *CourseController) ImportExcel(c *gin.Context) {
 			continue
 		}
 
-		// Default tahun to current year if empty
+		// Parse tahun - handle both formats (4 digit: 2025 or 5 digit: 20251)
+		tahun := tahunStr
 		if tahun == "" {
-			tahun = strconv.Itoa(time.Now().Year())
+			// Default to current year + semester 1
+			tahun = fmt.Sprintf("%d1", time.Now().Year())
+		}
+
+		// Validate tahun format (must be 4 or 5 digits)
+		if len(tahun) != 4 && len(tahun) != 5 {
+			failed++
+			errors = append(errors, fmt.Sprintf("Baris %d: Format Tahun harus 4 digit (2025) atau 5 digit (20251)", i+2))
+			continue
+		}
+
+		// Validate tahun is numeric
+		if _, err := strconv.Atoi(tahun); err != nil {
+			failed++
+			errors = append(errors, fmt.Sprintf("Baris %d: Tahun harus berupa angka", i+2))
+			continue
 		}
 
 		// Check if course already exists for that year

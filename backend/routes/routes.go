@@ -20,6 +20,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 	cpmkController := controllers.NewCPMKController(db)
 	cplController := controllers.NewCPLController(db)
 	aiController := controllers.NewAIController(db)
+	cleanupController := controllers.NewCleanupController(db)
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
@@ -103,13 +104,21 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 		{
 			cpmk.GET("/course/:course_id", cpmkController.GetByCourseId)
 			cpmk.POST("", cpmkController.Create)
+			cpmk.PUT("/:id", cpmkController.Update)
 			cpmk.POST("/batch", cpmkController.BatchCreateOrUpdate) // For RPS creation
 			cpmk.DELETE("/:id", cpmkController.Delete)
-			cpmk.POST("/:id/sub-cpmk", cpmkController.AddSubCPMK)
 			cpmk.GET("/template/excel", cpmkController.DownloadTemplate)
 			cpmk.POST("/import/excel", cpmkController.ImportExcel)
 			cpmk.POST("/import/csv", cpmkController.ImportCSV)
 			cpmk.GET("/export/excel", cpmkController.ExportExcel)
+		}
+
+		// Sub-CPMK routes
+		subCpmk := v1.Group("/sub-cpmk")
+		{
+			subCpmk.POST("", cpmkController.CreateSubCPMK)
+			subCpmk.PUT("/:id", cpmkController.UpdateSubCPMK)
+			subCpmk.DELETE("/:id", cpmkController.DeleteSubCPMK)
 		}
 
 		// CPL routes
@@ -124,6 +133,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 			cpl.DELETE("/:id", cplController.Delete)
 			cpl.GET("/template/excel", cplController.DownloadTemplate)
 			cpl.POST("/import/excel", cplController.ImportExcel)
+			cpl.GET("/export/excel", cplController.ExportExcel)
 		}
 
 		// Templates routes
@@ -142,7 +152,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 			generated.POST("", generatedRPSController.Create)
 			generated.PUT("/:id", generatedRPSController.Update)
 			generated.DELETE("/:id", generatedRPSController.Delete)
-			generated.GET("/:id/export", generatedRPSController.Export)
+			generated.GET("/:id/export-html", generatedRPSController.ExportHTML)
 		}
 
 		// AI Helper routes
@@ -159,6 +169,12 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 			ai.POST("/generate/tugas", aiController.GenerateTugas)
 			ai.POST("/generate/referensi", aiController.GenerateReferensi)
 			ai.POST("/match/cpmk-cpl", aiController.MatchCPMKWithCPL) // NEW: AI matching CPMK dengan CPL
+		}
+
+		// Cleanup routes (CAUTION: Destructive operations!)
+		cleanup := v1.Group("/cleanup")
+		{
+			cleanup.POST("/all-except-admin", cleanupController.CleanupAllDataExceptAdmin)
 		}
 	}
 }

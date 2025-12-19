@@ -218,7 +218,7 @@ export default function RPSList() {
                     Edit RPS
                   </Link>
                   <button
-                    onClick={() => window.open(`${API_BASE_URL}/generated/${rps.id}/export`, '_blank')}
+                    onClick={() => window.open(`${API_BASE_URL}/generated/${rps.id}/export-html`, '_blank')}
                     className="flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
                   >
                     <Download className="w-4 h-4" />

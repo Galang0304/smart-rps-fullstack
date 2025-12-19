@@ -15,6 +15,12 @@ func RunMigrations(db *gorm.DB) error {
 		log.Printf("Warning: Could not create UUID extension: %v", err)
 	}
 
+	// FIX: Drop and recreate foreign key constraint for generated_rps
+	log.Println("Fixing foreign key constraints...")
+	db.Exec("ALTER TABLE generated_rps DROP CONSTRAINT IF EXISTS generated_rps_course_id_fkey CASCADE")
+	db.Exec("ALTER TABLE generated_rps ADD CONSTRAINT generated_rps_course_id_fkey FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE")
+	log.Println("✓ Foreign key constraints fixed")
+
 	// Create all tables
 	tables := []string{
 		`CREATE TABLE IF NOT EXISTS users (
@@ -108,8 +114,8 @@ func RunMigrations(db *gorm.DB) error {
 
 		`CREATE TABLE IF NOT EXISTS generated_rps (
 			id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-			template_version_id uuid REFERENCES template_versions(id),
-			course_id uuid REFERENCES courses(id),
+			template_version_id uuid REFERENCES template_versions(id) ON DELETE SET NULL,
+			course_id uuid REFERENCES courses(id) ON DELETE CASCADE,
 			generated_by uuid REFERENCES users(id),
 			status text DEFAULT 'draft',
 			result jsonb,
@@ -151,11 +157,34 @@ func RunMigrations(db *gorm.DB) error {
 		updated_at timestamp DEFAULT CURRENT_TIMESTAMP,
 		deleted_at timestamp
 	)`,
+
+		`CREATE TABLE IF NOT EXISTS cpmk (
+		id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+		course_id uuid NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+		cpmk_number int NOT NULL,
+		description text NOT NULL,
+		created_at timestamp DEFAULT CURRENT_TIMESTAMP,
+		updated_at timestamp DEFAULT CURRENT_TIMESTAMP,
+		deleted_at timestamp
+	)`,
+
+		`CREATE TABLE IF NOT EXISTS sub_cpmk (
+		id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+		cpmk_id uuid NOT NULL REFERENCES cpmk(id) ON DELETE CASCADE,
+		sub_cpmk_number int NOT NULL,
+		description text NOT NULL,
+		created_at timestamp DEFAULT CURRENT_TIMESTAMP,
+		updated_at timestamp DEFAULT CURRENT_TIMESTAMP,
+		deleted_at timestamp
+	)`,
 	}
 
 	for i, sql := range tables {
+		log.Printf("Creating table %d...", i+1)
 		if err := db.Exec(sql).Error; err != nil {
 			log.Printf("Warning: Failed to create table %d: %v", i+1, err)
+		} else {
+			log.Printf("✓ Table %d created successfully", i+1)
 		}
 	}
 
@@ -173,6 +202,8 @@ func RunMigrations(db *gorm.DB) error {
 		"CREATE INDEX IF NOT EXISTS idx_cpl_prodi_id ON cpl(prodi_id)",
 		"CREATE INDEX IF NOT EXISTS idx_cpl_kode_cpl ON cpl(kode_cpl)",
 		"CREATE INDEX IF NOT EXISTS idx_cpl_indikator_cpl_id ON cpl_indikator(cpl_id)",
+		"CREATE INDEX IF NOT EXISTS idx_cpmk_course_id ON cpmk(course_id)",
+		"CREATE INDEX IF NOT EXISTS idx_sub_cpmk_cpmk_id ON sub_cpmk(cpmk_id)",
 	}
 
 	for _, sql := range indexes {
@@ -184,6 +215,17 @@ func RunMigrations(db *gorm.DB) error {
 	// Create foreign key for prodis.program_id (after programs table exists)
 	db.Exec(`ALTER TABLE prodis ADD CONSTRAINT fk_prodis_programs 
 		FOREIGN KEY (program_id) REFERENCES programs(id) ON DELETE SET NULL`)
+
+	// Add bobot columns if they don't exist
+	log.Println("Adding bobot columns...")
+	db.Exec(`ALTER TABLE cpmk ADD COLUMN IF NOT EXISTS bobot DECIMAL(5,2) DEFAULT 0`)
+	db.Exec(`ALTER TABLE sub_cpmk ADD COLUMN IF NOT EXISTS bobot DECIMAL(5,2) DEFAULT 0`)
+	log.Println("✓ Bobot columns added")
+
+	// Add matched_cpl column to cpmk table
+	log.Println("Adding matched_cpl column...")
+	db.Exec(`ALTER TABLE cpmk ADD COLUMN IF NOT EXISTS matched_cpl TEXT`)
+	log.Println("✓ matched_cpl column added")
 
 	log.Println("✓ Database migrations completed")
 	return nil

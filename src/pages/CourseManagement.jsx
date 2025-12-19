@@ -34,7 +34,7 @@ export default function CourseManagement() {
     credits: '',
     semester: '',
     category: '',
-    tahun: new Date().getFullYear().toString(),
+    tahun: `${new Date().getFullYear()}1`, // Format: 20251 (tahun + semester)
   });
   
   const userRole = localStorage.getItem('role');
@@ -311,7 +311,7 @@ export default function CourseManagement() {
       setShowAddModal(false);
       setEditMode(false);
       setEditingCourse(null);
-      setFormData({ code: '', title: '', credits: '', semester: '', category: '', tahun: new Date().getFullYear().toString() });
+      setFormData({ code: '', title: '', credits: '', semester: '', category: '', tahun: `${new Date().getFullYear()}1` });
       loadCourses();
       
       // Clear status after 3 seconds
@@ -333,7 +333,7 @@ export default function CourseManagement() {
       credits: course.credits?.toString() || '',
       semester: course.semester?.toString() || '',
       category: category,
-      tahun: course.tahun || new Date().getFullYear().toString(),
+      tahun: course.tahun || `${new Date().getFullYear()}1`,
     });
     setEditMode(true);
     setShowAddModal(true);
@@ -343,7 +343,7 @@ export default function CourseManagement() {
     setShowAddModal(false);
     setEditMode(false);
     setEditingCourse(null);
-    setFormData({ code: '', title: '', credits: '', semester: '', category: '', tahun: new Date().getFullYear().toString() });
+    setFormData({ code: '', title: '', credits: '', semester: '', category: '', tahun: `${new Date().getFullYear()}1` });
   };
 
   const handleAddCategory = () => {
@@ -514,7 +514,7 @@ export default function CourseManagement() {
               onClick={() => {
                 setEditMode(false);
                 setEditingCourse(null);
-                setFormData({ code: '', title: '', credits: '', semester: '', category: '', tahun: new Date().getFullYear().toString() });
+                setFormData({ code: '', title: '', credits: '', semester: '', category: '', tahun: `${new Date().getFullYear()}1` });
                 setShowAddModal(true);
               }}
               className="flex items-center gap-2 px-3 md:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm md:text-base"
@@ -1225,18 +1225,30 @@ function AddCourseModal({ show, onClose, onSubmit, formData, setFormData, loadin
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Tahun Akademik
+              Tahun Akademik & Semester
             </label>
-            <input
-              type="number"
+            <select
               required
-              min="2020"
-              max="2050"
               value={formData.tahun}
               onChange={(e) => setFormData({ ...formData, tahun: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              placeholder="Contoh: 2025"
-            />
+            >
+              <option value="">Pilih Tahun & Semester</option>
+              {(() => {
+                const currentYear = new Date().getFullYear();
+                const years = [];
+                for (let y = currentYear + 1; y >= currentYear - 5; y--) {
+                  years.push(
+                    <option key={`${y}-1`} value={`${y}1`}>{y}/{y + 1} - Semester 1</option>,
+                    <option key={`${y}-2`} value={`${y}2`}>{y}/{y + 1} - Semester 2</option>
+                  );
+                }
+                return years;
+              })()}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Contoh: 20251 = Tahun 2025/2026 Semester 1
+            </p>
           </div>
 
           <div className="flex gap-3 pt-4">

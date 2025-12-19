@@ -552,3 +552,120 @@ func (c *CPLController) ImportExcel(ctx *gin.Context) {
 		},
 	})
 }
+
+// ExportExcel - Export CPL to Excel file
+func (c *CPLController) ExportExcel(ctx *gin.Context) {
+	prodiID := ctx.Query("prodi_id")
+	if prodiID == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "prodi_id is required"})
+		return
+	}
+
+	prodiUUID, err := uuid.Parse(prodiID)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid prodi_id format"})
+		return
+	}
+
+	// Get prodi info
+	var prodi models.Prodi
+	if err := c.db.First(&prodi, "id = ?", prodiUUID).Error; err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Prodi not found"})
+		return
+	}
+
+	// Get all CPL for this prodi
+	var cpls []models.CPL
+	if err := c.db.Where("prodi_id = ? AND deleted_at IS NULL", prodiUUID).
+		Preload("Indikators", func(db *gorm.DB) *gorm.DB {
+			return db.Order("urutan ASC")
+		}).
+		Order("kode_cpl ASC").
+		Find(&cpls).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch CPL"})
+		return
+	}
+
+	if len(cpls) == 0 {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "No CPL found for this prodi"})
+		return
+	}
+
+	// Create Excel file
+	f := excelize.NewFile()
+	defer f.Close()
+
+	sheetName := "CPL"
+	index, err := f.NewSheet(sheetName)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create sheet"})
+		return
+	}
+
+	// Set headers
+	headers := []string{"No", "Kode CPL", "Komponen", "CPL", "Indikator Kinerja 1", "Indikator Kinerja 2", "Indikator Kinerja 3", "Indikator Kinerja 4", "Indikator Kinerja 5"}
+	for i, header := range headers {
+		cell := string(rune('A'+i)) + "1"
+		f.SetCellValue(sheetName, cell, header)
+	}
+
+	// Style header
+	headerStyle, _ := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{Bold: true, Color: "FFFFFF"},
+		Fill: excelize.Fill{Type: "pattern", Color: []string{"4472C4"}, Pattern: 1},
+		Alignment: &excelize.Alignment{
+			Horizontal: "center",
+			Vertical:   "center",
+		},
+	})
+	f.SetCellStyle(sheetName, "A1", "I1", headerStyle)
+
+	// Fill data
+	for i, cpl := range cpls {
+		rowNum := i + 2
+		f.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), i+1)
+		f.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), cpl.KodeCPL)
+		f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), cpl.Komponen)
+		f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), cpl.CPL)
+
+		// Add indikators
+		for j, indikator := range cpl.Indikators {
+			if j < 5 { // Max 5 indikators
+				colNum := rune('E' + j)
+				f.SetCellValue(sheetName, fmt.Sprintf("%c%d", colNum, rowNum), indikator.IndikatorKerja)
+			}
+		}
+	}
+
+	// Set column widths
+	f.SetColWidth(sheetName, "A", "A", 5)
+	f.SetColWidth(sheetName, "B", "B", 12)
+	f.SetColWidth(sheetName, "C", "C", 20)
+	f.SetColWidth(sheetName, "D", "D", 50)
+	f.SetColWidth(sheetName, "E", "I", 45)
+
+	// Apply text wrap for long columns
+	wrapStyle, _ := f.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{
+			WrapText: true,
+			Vertical: "top",
+		},
+	})
+	lastRow := len(cpls) + 1
+	f.SetCellStyle(sheetName, "D2", fmt.Sprintf("I%d", lastRow), wrapStyle)
+
+	f.SetActiveSheet(index)
+	f.DeleteSheet("Sheet1")
+
+	// Generate filename with prodi name
+	filename := fmt.Sprintf("CPL_%s_%s.xlsx", prodi.KodeProdi, prodi.NamaProdi)
+	filename = strings.ReplaceAll(filename, " ", "_")
+
+	// Set content type and filename
+	ctx.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	ctx.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+
+	if err := f.Write(ctx.Writer); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to write file"})
+	}
+}

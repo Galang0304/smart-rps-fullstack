@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"smart-rps-backend/models"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"smart-rps-backend/models"
 	"gorm.io/gorm"
 )
 
@@ -241,7 +242,7 @@ func (cc *CourseController) Update(c *gin.Context) {
 	})
 }
 
-// Delete - Delete course
+// Delete - Delete course permanently (hard delete)
 func (cc *CourseController) Delete(c *gin.Context) {
 	id := c.Param("id")
 
@@ -255,7 +256,9 @@ func (cc *CourseController) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := cc.db.Delete(&course).Error; err != nil {
+	// Hard delete (permanent) - use Unscoped() to bypass soft delete
+	// This will also cascade delete related CPMK and Sub-CPMK if foreign keys are set correctly
+	if err := cc.db.Unscoped().Delete(&course).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete course"})
 		return
 	}

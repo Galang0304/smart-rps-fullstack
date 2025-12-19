@@ -34,7 +34,6 @@ export default function Home() {
           <div className="absolute -top-28 -left-28 h-72 w-72 rounded-full bg-blue-600/20 blur-3xl" />
           <div className="absolute top-24 -right-20 h-72 w-72 rounded-full bg-sky-500/20 blur-3xl" />
           <div className="absolute bottom-0 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-indigo-500/10 blur-3xl" />
-          <img src="/gedung-unismuh.jpg" alt="Universitas Muhammadiyah Makassar" className="w-full h-full object-cover opacity-[0.06]" />
         </div>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
@@ -122,58 +121,54 @@ export default function Home() {
             <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto">Struktur pimpinan Fakultas Teknik Universitas Muhammadiyah Makassar.</p>
             <div className="w-24 h-1 bg-blue-600 mx-auto rounded-full mt-4"></div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {['Dekan', 'Wakil Dekan I', 'Wakil Dekan II'].map((jabatan, idx) => (
+          
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-6 max-w-6xl mx-auto">
+            {[
+              { jabatan: 'Dekan', nama: 'Ir. Muhammad Syafaat S Kuba, ST.,MT.', file: '2.jpg' },
+              { jabatan: 'Wakil Dekan I', nama: 'Dr. Ir. Ar. Hj. Irnawaty Idrus, S.T.,M.T., IPM., AIA', file: '3.jpg' },
+              { jabatan: 'Wakil Dekan II', nama: 'Dr. Ir. Andi Makbul Syamsuri, ST., MT., IPM.', file: '4.jpg' },
+              { jabatan: 'Wakil Dekan III', nama: 'Soemitro Emin Praja, S.T., M.Si.', file: '5.jpg' },
+              { jabatan: 'Wakil Dekan IV', nama: 'Dr. Alamsyah, S.Pd.I.,M.H.', file: '6.jpg' }
+            ].map((pimpinan, idx) => (
               <div key={idx} className="group">
-                <div className="relative rounded-2xl bg-white border border-blue-100 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden">
+                <div className="relative rounded-2xl bg-white border border-blue-100 shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden">
                   <div className="aspect-[3/4] bg-gradient-to-b from-blue-50 to-white relative overflow-hidden">
                     <img 
-                      src={`/pemimpin/${idx + 1}.jpg`} 
-                      alt={jabatan}
+                      src={`/pemimpin/${pimpinan.file}`} 
+                      alt={pimpinan.jabatan}
                       className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
                       onError={(e) => {
-                        e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500"%3E%3Crect fill="%23e0f2fe" width="400" height="500"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%230c4a6e" font-family="sans-serif" font-size="24" font-weight="bold"%3E' + jabatan + '%3C/text%3E%3C/svg%3E';
+                        e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500"%3E%3Crect fill="%23e0f2fe" width="400" height="500"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%230c4a6e" font-family="sans-serif" font-size="20" font-weight="bold"%3E' + pimpinan.jabatan + '%3C/text%3E%3C/svg%3E';
                       }}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-blue-950/60 via-blue-950/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
-                  <div className="p-5 text-center bg-white">
-                    <div className="text-base font-bold text-blue-950 mb-1">{jabatan}</div>
-                    <div className="text-sm text-blue-800/70">Fakultas Teknik</div>
+                  <div className="p-4 text-center bg-white">
+                    <div className="text-sm font-bold text-blue-950 mb-1">{pimpinan.jabatan}</div>
+                    <div className="text-xs text-slate-700 leading-relaxed">{pimpinan.nama}</div>
                   </div>
                 </div>
               </div>
-            ))} bg-gradient-to-b from-blue-50/40 to-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-8 sm:mb-12">
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-blue-950 mb-3">Tim Pengembang</h2>
-            <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto">Tim yang mengembangkan sistem SMART RPS agar mudah digunakan dan siap produksi.</p>
-            <div className="w-24 h-1 bg-blue-600 mx-auto rounded-full mt-4"></div>
+            ))}
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 max-w-6xl mx-auto">
-            {[
-              { name: 'Developer 1', role: 'Fullstack Developer' },
-              { name: 'Developer 2', role: 'Backend Engineer' },
-              { name: 'Developer 3', role: 'Frontend Engineer' },
-              { name: 'Developer 4', role: 'UI/UX Designer' }
-            ].map((dev, idx) => (
-              <div key={idx} className="group">
-                <div className="relative rounded-2xl bg-white border border-blue-100 shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden">
-                  <div className="aspect-square bg-gradient-to-br from-blue-50 via-sky-50 to-indigo-50 relative overflow-hidden">
-                    <img 
-                      src={`/pengembang/${idx + 1}.jpg`} 
-                      alt={dev.name}
-                      className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
-                      onError={(e) => {
-                        e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"%3E%3Cdefs%3E%3ClinearGradient id="grad" x1="0%25" y1="0%25" x2="100%25" y2="100%25"%3E%3Cstop offset="0%25" style="stop-color:%2393c5fd;stop-opacity:1" /%3E%3Cstop offset="100%25" style="stop-color:%233b82f6;stop-opacity:1" /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill="url(%23grad)" width="400" height="400"/%3E%3Ccircle cx="200" cy="160" r="60" fill="white" opacity="0.3"/%3E%3Ccircle cx="200" cy="320" r="100" fill="white" opacity="0.3"/%3E%3Ctext x="50%25" y="52%25" dominant-baseline="middle" text-anchor="middle" fill="white" font-family="sans-serif" font-size="20" font-weight="bold"%3E' + dev.name + '%3C/text%3E%3C/svg%3E';
-                      }}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-blue-950/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                  <div className="p-4 text-center bg-white">
-                    <div className="text-sm font-bold text-blue-950 mb-1">{dev.name}</div>
-                    <div className="text-xs text-blue-800/70">{dev.role}</div>
-                  m-sky-50 to-white relative overflow-hidden">
+
+          {/* Ketua Program Studi Section */}
+          <div className="mt-16">
+            <div className="text-center mb-8">
+              <h3 className="text-xl sm:text-2xl font-extrabold text-blue-950 mb-2">Ketua Program Studi</h3>
+              <p className="text-sm text-slate-600">Program Studi di Fakultas Teknik</p>
+              <div className="w-20 h-1 bg-blue-600 mx-auto rounded-full mt-3"></div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+              {[
+                'Teknik Informatika',
+                'Teknik Industri', 
+                'Teknik Sipil',
+                'Teknik Elektro'
+              ].map((prodi, idx) => (
+                <div key={idx} className="group">
+                  <div className="relative rounded-2xl bg-white border border-blue-100 shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden">
+                    <div className="aspect-[3/4] bg-gradient-to-b from-sky-50 to-white relative overflow-hidden">
                       <img 
                         src={`/kaprodi/${idx + 1}.jpg`} 
                         alt={`Kaprodi ${prodi}`}
@@ -191,6 +186,45 @@ export default function Home() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Tim Pengembang */}
+      <section id="team" className="py-12 sm:py-16 bg-gradient-to-b from-blue-50/40 to-white">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-8 sm:mb-12">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-blue-950 mb-3">Tim Pengembang</h2>
+            <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto">Tim yang mengembangkan sistem SMART RPS agar mudah digunakan dan siap produksi.</p>
+            <div className="w-24 h-1 bg-blue-600 mx-auto rounded-full mt-4"></div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 max-w-6xl mx-auto">
+            {[
+              { name: 'Developer 1', role: 'Fullstack Developer', file: '7.jpg' },
+              { name: 'Developer 2', role: 'Backend Engineer', file: '8.jpg' },
+              { name: 'Developer 3', role: 'Frontend Engineer', file: '9.jpg' },
+              { name: 'Developer 4', role: 'UI/UX Designer', file: '10.jpg' }
+            ].map((dev, idx) => (
+              <div key={idx} className="group">
+                <div className="relative rounded-2xl bg-white border border-blue-100 shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden">
+                  <div className="aspect-square bg-gradient-to-br from-blue-50 via-sky-50 to-indigo-50 relative overflow-hidden">
+                    <img 
+                      src={`/pengembang/${dev.file}`} 
+                      alt={dev.name}
+                      className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"%3E%3Cdefs%3E%3ClinearGradient id="grad" x1="0%25" y1="0%25" x2="100%25" y2="100%25"%3E%3Cstop offset="0%25" style="stop-color:%2393c5fd;stop-opacity:1" /%3E%3Cstop offset="100%25" style="stop-color:%233b82f6;stop-opacity:1" /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill="url(%23grad)" width="400" height="400"/%3E%3Ccircle cx="200" cy="160" r="60" fill="white" opacity="0.3"/%3E%3Ccircle cx="200" cy="320" r="100" fill="white" opacity="0.3"/%3E%3Ctext x="50%25" y="52%25" dominant-baseline="middle" text-anchor="middle" fill="white" font-family="sans-serif" font-size="20" font-weight="bold"%3E' + dev.name + '%3C/text%3E%3C/svg%3E';
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-blue-950/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  <div className="p-4 text-center bg-white">
+                    <div className="text-sm font-bold text-blue-950 mb-1">{dev.name}</div>
+                    <div className="text-xs text-blue-800/70">{dev.role}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
