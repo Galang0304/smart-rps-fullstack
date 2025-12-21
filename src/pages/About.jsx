@@ -146,7 +146,7 @@ export default function About() {
                         <div className="text-sm text-slate-600">NIM: [NIM]</div>
                       </div>
                     </div>
-                    <div className="text-sm text-slate-600">System Analyst & Documentation</div>
+                    <div className="text-sm text-slate-600">Api architecture</div>
                   </div>
 
                   <div className="bg-white rounded-xl p-5 border border-blue-200 shadow-sm hover:shadow-md transition-shadow">
@@ -163,7 +163,7 @@ export default function About() {
                         <div className="text-sm text-slate-600">NIM: [NIM]</div>
                       </div>
                     </div>
-                    <div className="text-sm text-slate-600">Quality Assurance & Testing</div>
+                    <div className="text-sm text-slate-600">UI/UX Designer</div>
                   </div>
                 </div>
               </div>
