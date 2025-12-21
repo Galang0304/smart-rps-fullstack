@@ -19,6 +19,8 @@ import {
 // Pages
 import Login from './pages/Login';
 import HomePage from './pages/Home';
+import About from './pages/About';
+import Panduan from './pages/Panduan';
 import Dashboard from './pages/Dashboard';
 
 // Admin Pages
@@ -346,6 +348,8 @@ export default function App() {
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={<HomePage />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/panduan" element={<Panduan />} />
         <Route path="/login" element={<Login />} />
 
         {/* Admin Routes */}
