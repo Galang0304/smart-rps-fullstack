@@ -269,6 +269,7 @@ export default function About() {
               </div>
             </div>
           </div>
+          
 
           {/* Instruksi untuk user */}
       

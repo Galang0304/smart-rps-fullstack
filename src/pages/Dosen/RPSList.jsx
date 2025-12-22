@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, Download, FileText, Calendar, User, Search, Edit } from 'lucide-react';
+import { BookOpen, Download, FileText, Calendar, User, Search, Edit, X } from 'lucide-react';
 import api from '../../services/api';
 
 export default function RPSList() {
@@ -8,6 +8,8 @@ export default function RPSList() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dosenId, setDosenId] = useState(null);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [selectedRPS, setSelectedRPS] = useState(null);
 
   useEffect(() => {
     fetchDosenInfo();
@@ -89,12 +91,77 @@ export default function RPSList() {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      
-      alert('RPS berhasil diexport!');
+      window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Failed to export RPS:', error);
-      alert('Gagal export RPS: ' + (error.response?.data?.message || error.message));
+      console.error('Export failed:', error);
+      alert('Gagal mengekspornya RPS');
     }
+  };
+
+  const handleExportWord = async (rpsId, mataKuliah) => {
+    try {
+      const response = await api.get(`/generated/${rpsId}/export-word`, {
+        responseType: 'blob',
+      });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data], { 
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+      }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `RPS_${mataKuliah}_${new Date().getTime()}.docx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setShowExportModal(false);
+    } catch (error) {
+      console.error('Export Word failed:', error);
+      alert('Gagal mengekspornya ke Word');
+    }
+  };
+
+  const handleExportExcel = async (rpsId, mataKuliah) => {
+    try {
+      const response = await api.get(`/generated/${rpsId}/export-excel`, {
+        responseType: 'blob',
+      });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `RPS_${mataKuliah}_${new Date().getTime()}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setShowExportModal(false);
+    } catch (error) {
+      console.error('Export Excel failed:', error);
+      alert('Gagal mengekspornya ke Excel');
+    }
+  };
+
+  const openExportModal = (rps) => {
+    setSelectedRPS(rps);
+    setShowExportModal(true);
+  };
+
+  const handleExportChoice = async (format) => {
+    if (!selectedRPS) return;
+    
+    if (format === 'html') {
+      await handleExport(selectedRPS.id, selectedRPS.course?.title || 'Untitled');
+    } else if (format === 'word') {
+      await handleExportWord(selectedRPS.id, selectedRPS.course?.title || 'Untitled');
+    } else if (format === 'excel') {
+      await handleExportExcel(selectedRPS.id, selectedRPS.course?.title || 'Untitled');
+    }
+    setShowExportModal(false);
   };
 
   return (
@@ -197,11 +264,11 @@ export default function RPSList() {
                     className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
                   >
                     <Edit className="w-4 h-4" />
-                    Edit RPS
+                    Edit
                   </Link>
                   <button
-                    onClick={() => handleExport(rps.id, rps.course?.title || 'RPS')}
-                    className="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                    onClick={() => openExportModal(rps)}
+                    className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-green-700 hover:to-blue-700 transition-all shadow-md hover:shadow-lg"
                   >
                     <Download className="w-4 h-4" />
                     Export
@@ -228,6 +295,97 @@ export default function RPSList() {
             <li>• RPS yang ditampilkan adalah yang telah diberikan akses oleh Kaprodi</li>
             <li>• Untuk RPS tambahan, hubungi Kaprodi program studi Anda</li>
           </ul>
+        </div>
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 transform transition-all animate-slideUp">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-green-600 to-blue-600 px-6 py-4 rounded-t-2xl flex justify-between items-center">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <Download className="w-6 h-6" />
+                Pilih Format Export
+              </h3>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-1 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <p className="text-gray-600 mb-6 text-center">
+                Pilih format dokumen yang ingin Anda download
+              </p>
+
+              <div className="space-y-3">
+                {/* HTML Option */}
+                <button
+                  onClick={() => handleExportChoice('html')}
+                  className="w-full group relative overflow-hidden bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border-2 border-green-200 hover:border-green-400 rounded-xl p-6 transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="bg-green-600 text-white p-3 rounded-lg group-hover:bg-green-700 transition-colors">
+                      <FileText className="w-8 h-8" />
+                    </div>
+                    <div className="text-left flex-1">
+                      <h4 className="font-bold text-lg text-green-800">HTML</h4>
+                      <p className="text-sm text-green-600">Format web, buka di browser</p>
+                    </div>
+                    <Download className="w-6 h-6 text-green-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </button>
+
+                {/* Word Option */}
+                <button
+                  onClick={() => handleExportChoice('word')}
+                  className="w-full group relative overflow-hidden bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border-2 border-blue-200 hover:border-blue-400 rounded-xl p-6 transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="bg-blue-600 text-white p-3 rounded-lg group-hover:bg-blue-700 transition-colors">
+                      <FileText className="w-8 h-8" />
+                    </div>
+                    <div className="text-left flex-1">
+                      <h4 className="font-bold text-lg text-blue-800">Word</h4>
+                      <p className="text-sm text-blue-600">Format Microsoft Word (.docx)</p>
+                    </div>
+                    <Download className="w-6 h-6 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </button>
+
+                {/* Excel Option */}
+                <button
+                  onClick={() => handleExportChoice('excel')}
+                  className="w-full group relative overflow-hidden bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 border-2 border-emerald-200 hover:border-emerald-400 rounded-xl p-6 transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="bg-emerald-600 text-white p-3 rounded-lg group-hover:bg-emerald-700 transition-colors">
+                      <FileText className="w-8 h-8" />
+                    </div>
+                    <div className="text-left flex-1">
+                      <h4 className="font-bold text-lg text-emerald-800">Excel</h4>
+                      <p className="text-sm text-emerald-600">Format Microsoft Excel (.xlsx)</p>
+                    </div>
+                    <Download className="w-6 h-6 text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 pb-6">
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="w-full px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

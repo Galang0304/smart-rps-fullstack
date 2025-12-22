@@ -153,6 +153,8 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 			generated.PUT("/:id", generatedRPSController.Update)
 			generated.DELETE("/:id", generatedRPSController.Delete)
 			generated.GET("/:id/export-html", generatedRPSController.ExportHTML)
+			generated.GET("/:id/export-word", generatedRPSController.ExportWord)
+			generated.GET("/:id/export-excel", generatedRPSController.ExportExcel)
 		}
 
 		// AI Helper routes

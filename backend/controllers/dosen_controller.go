@@ -27,7 +27,6 @@ func NewDosenController(db *gorm.DB) *DosenController {
 type CreateDosenRequest struct {
 	UserID            *string `json:"user_id"`
 	ProdiID           *string `json:"prodi_id"`
-	NIDN              string  `json:"nidn" binding:"required"`
 	NamaLengkap       string  `json:"nama_lengkap" binding:"required"`
 	Email             string  `json:"email" binding:"required,email"`
 	NoTelepon         string  `json:"no_telepon"`
@@ -51,11 +50,11 @@ func (dc *DosenController) GetAll(c *gin.Context) {
 		query = query.Where("prodi_id = ?", prodiID)
 	}
 
-	// Filter by search (nama_lengkap, nidn, email)
+	// Filter by search (nama_lengkap, email)
 	search := c.Query("search")
 	if search != "" {
-		query = query.Where("nama_lengkap ILIKE ? OR nidn ILIKE ? OR email ILIKE ?",
-			"%"+search+"%", "%"+search+"%", "%"+search+"%")
+		query = query.Where("nama_lengkap ILIKE ? OR email ILIKE ?",
+			"%"+search+"%", "%"+search+"%")
 	}
 
 	// Count total with filters
@@ -203,11 +202,14 @@ func (dc *DosenController) Create(c *gin.Context) {
 		userID = &newUserID
 	}
 
+	// Set default empty string for NIDN to satisfy NOT NULL constraint
+	emptyNIDN := ""
+
 	dosen := models.Dosen{
 		ID:                uuid.New(),
 		UserID:            userID,
 		ProdiID:           prodiID,
-		NIDN:              req.NIDN,
+		NIDN:              &emptyNIDN,
 		NamaLengkap:       req.NamaLengkap,
 		Email:             req.Email,
 		NoTelepon:         req.NoTelepon,
@@ -296,7 +298,6 @@ func (dc *DosenController) Update(c *gin.Context) {
 		dosen.ProdiID = &prodiID
 	}
 
-	dosen.NIDN = req.NIDN
 	dosen.NamaLengkap = req.NamaLengkap
 	dosen.Email = req.Email
 	dosen.NoTelepon = req.NoTelepon

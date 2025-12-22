@@ -11,7 +11,7 @@ type Dosen struct {
 	ID                uuid.UUID      `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
 	UserID            *uuid.UUID     `json:"user_id,omitempty" gorm:"type:uuid"`
 	ProdiID           *uuid.UUID     `json:"prodi_id,omitempty" gorm:"type:uuid"`
-	NIDN              string         `json:"nidn" gorm:"column:nidn;unique;not null"`
+	NIDN              *string        `json:"nidn,omitempty" gorm:"column:n_id_n"`
 	NamaLengkap       string         `json:"nama_lengkap" gorm:"not null"`
 	Email             string         `json:"email" gorm:"unique;not null"`
 	NoTelepon         string         `json:"no_telepon,omitempty"`
