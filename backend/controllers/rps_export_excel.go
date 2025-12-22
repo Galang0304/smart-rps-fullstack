@@ -286,50 +286,42 @@ func createSubCPMKSheet(f *excelize.File, result map[string]interface{}) {
 	}
 	f.SetRowHeight(sheetName, 1, 25)
 
-	// Sub-CPMK Data - Support both formats:
-	// 1. Flat array: result["subCpmk"] (camelCase from frontend)
-	// 2. Nested in CPMK: result["cpmk"][].sub_cpmk
+	// Sub-CPMK Data - Support both top-level and nested formats
 	row := 2
 	no := 1
-
-	// Try flat array first (camelCase)
-	if subCpmkData, ok := result["subCpmk"].([]interface{}); ok && len(subCpmkData) > 0 {
-		for _, subCpmk := range subCpmkData {
-			if subMap, ok := subCpmk.(map[string]interface{}); ok {
-				f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), no)
-				f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), getMapValue(subMap, "code"))
-				f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), getMapValue(subMap, "description"))
-				f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), getMapValue(subMap, "bobot"))
-
-				f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row), dataStyle)
-				f.SetRowHeight(sheetName, row, 30)
-				row++
-				no++
-			}
-		}
-	} else {
-		// Try nested format (snake_case)
-		if cpmkData, ok := result["cpmk"].([]interface{}); ok {
-			for _, cpmk := range cpmkData {
-				if cpmkMap, ok := cpmk.(map[string]interface{}); ok {
-					// Get sub_cpmk array
-					if subCpmkList, ok := cpmkMap["sub_cpmk"].([]interface{}); ok {
-						for _, subCpmk := range subCpmkList {
-							if subMap, ok := subCpmk.(map[string]interface{}); ok {
-								f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), no)
-								f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), getMapValue(subMap, "code"))
-								f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), getMapValue(subMap, "description"))
-								f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), getMapValue(subMap, "bobot"))
-
-								f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row), dataStyle)
-								f.SetRowHeight(sheetName, row, 30)
-								row++
-								no++
-							}
-						}
-					}
+	
+	// Try top-level subCpmk array first (frontend format)
+	var subCpmkData []interface{}
+	if data, ok := result["subCpmk"].([]interface{}); ok {
+		subCpmkData = data
+	} else if data, ok := result["sub_cpmk"].([]interface{}); ok {
+		subCpmkData = data
+	} else if cpmkData, ok := result["cpmk"].([]interface{}); ok {
+		// Fallback: nested in CPMK (old format)
+		for _, cpmk := range cpmkData {
+			if cpmkMap, ok := cpmk.(map[string]interface{}); ok {
+				if subList, ok := cpmkMap["sub_cpmk"].([]interface{}); ok {
+					subCpmkData = append(subCpmkData, subList...)
 				}
 			}
+		}
+	}
+	
+	for _, subCpmk := range subCpmkData {
+		if subMap, ok := subCpmk.(map[string]interface{}); ok {
+			f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), no)
+			f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), getMapValue(subMap, "code"))
+			f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), getMapValue(subMap, "description"))
+			bobot := getMapValue(subMap, "bobotPersen")
+			if bobot == "-" {
+				bobot = getMapValue(subMap, "bobot")
+			}
+			f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), bobot)
+
+			f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row), dataStyle)
+			f.SetRowHeight(sheetName, row, 30)
+			row++
+			no++
 		}
 	}
 }
@@ -450,7 +442,7 @@ func createTugasSheet(f *excelize.File, result map[string]interface{}) {
 	}
 	f.SetRowHeight(sheetName, 1, 25)
 
-	// Task data - Support both camelCase (rencanaTugas) and snake_case (rencana_tugas)
+	// Task data - Support both camelCase and snake_case
 	row := 2
 	var tugasData []interface{}
 	if data, ok := result["rencanaTugas"].([]interface{}); ok {
@@ -461,36 +453,33 @@ func createTugasSheet(f *excelize.File, result map[string]interface{}) {
 
 	for i, tugas := range tugasData {
 		if tugasMap, ok := tugas.(map[string]interface{}); ok {
-			// Try camelCase first, then snake_case
-			judulTugas := getMapValue(tugasMap, "judulTugas")
-			if judulTugas == "-" {
-				judulTugas = getMapValue(tugasMap, "judul")
+			f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), i+1)
+			
+			// Try camelCase first, fallback to snake_case
+			judul := getMapValue(tugasMap, "judulTugas")
+			if judul == "-" {
+				judul = getMapValue(tugasMap, "judul_tugas")
 			}
-
-			batasWaktu := getMapValue(tugasMap, "batasWaktu")
-			if batasWaktu == "-" {
-				batasWaktu = getMapValue(tugasMap, "batas_waktu")
+			batas := getMapValue(tugasMap, "batasWaktu")
+			if batas == "-" {
+				batas = getMapValue(tugasMap, "batas_waktu")
 			}
-
-			petunjuk := getMapValue(tugasMap, "petunjukPengerjaan")
-			if petunjuk == "-" {
-				petunjuk = getMapValue(tugasMap, "petunjuk")
+			deskripsi := getMapValue(tugasMap, "petunjukPengerjaan")
+			if deskripsi == "-" {
+				deskripsi = getMapValue(tugasMap, "petunjuk")
 			}
-
 			kriteria := getMapValue(tugasMap, "kriteriaPenilaian")
 			if kriteria == "-" {
 				kriteria = getMapValue(tugasMap, "kriteria_penilaian")
 			}
-
 			bobot := getMapValue(tugasMap, "bobotPersen")
 			if bobot == "-" {
 				bobot = getMapValue(tugasMap, "bobot_persen")
 			}
-
-			f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), i+1)
-			f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), judulTugas)
-			f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), batasWaktu)
-			f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), petunjuk)
+			
+			f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), judul)
+			f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), batas)
+			f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), deskripsi)
 			f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), kriteria)
 			f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), bobot)
 
