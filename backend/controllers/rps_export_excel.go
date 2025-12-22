@@ -42,6 +42,29 @@ func (gc *GeneratedRPSController) ExportExcel(c *gin.Context) {
 		return
 	}
 
+	// Fetch CPL from database if not in result
+	if _, ok := result["cpl"]; !ok || result["cpl"] == nil {
+		if rps.Course != nil && rps.Course.Program != nil && rps.Course.Program.ProdiID != nil {
+			var cplList []models.CPL
+			if err := gc.db.Preload("Indikators").
+				Where("prodi_id = ?", rps.Course.Program.ProdiID).
+				Order("kode_cpl ASC").
+				Find(&cplList).Error; err == nil && len(cplList) > 0 {
+
+				// Convert CPL to result format
+				cplData := make([]map[string]interface{}, len(cplList))
+				for i, cpl := range cplList {
+					cplData[i] = map[string]interface{}{
+						"code":        cpl.KodeCPL,
+						"description": cpl.CPL,
+						"komponen":    cpl.Komponen,
+					}
+				}
+				result["cpl"] = cplData
+			}
+		}
+	}
+
 	// Create Excel file
 	f := excelize.NewFile()
 	defer f.Close()
@@ -237,12 +260,28 @@ func createCPMKSheet(f *excelize.File, result map[string]interface{}) {
 
 	// CPMK Data
 	if cpmkData, ok := result["cpmk"].([]interface{}); ok {
+		// Calculate equal distribution if bobot is missing
+		totalCPMK := len(cpmkData)
+		defaultBobot := 0
+		if totalCPMK > 0 {
+			defaultBobot = 100 / totalCPMK
+		}
+
 		for i, cpmk := range cpmkData {
 			if cpmkMap, ok := cpmk.(map[string]interface{}); ok {
 				f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), i+1)
 				f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), getMapValue(cpmkMap, "code"))
 				f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), getMapValue(cpmkMap, "description"))
-				f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), getMapValue(cpmkMap, "bobot"))
+
+				// Try to get bobot, use default if not available
+				bobot := getMapValue(cpmkMap, "bobot")
+				if bobot == "-" {
+					bobot = getMapValue(cpmkMap, "bobotPersen")
+				}
+				if bobot == "-" && defaultBobot > 0 {
+					bobot = fmt.Sprintf("%d%%", defaultBobot)
+				}
+				f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), bobot)
 
 				f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row), dataStyle)
 				f.SetRowHeight(sheetName, row, 30)
@@ -289,7 +328,7 @@ func createSubCPMKSheet(f *excelize.File, result map[string]interface{}) {
 	// Sub-CPMK Data - Support both top-level and nested formats
 	row := 2
 	no := 1
-	
+
 	// Try top-level subCpmk array first (frontend format)
 	var subCpmkData []interface{}
 	if data, ok := result["subCpmk"].([]interface{}); ok {
@@ -306,7 +345,7 @@ func createSubCPMKSheet(f *excelize.File, result map[string]interface{}) {
 			}
 		}
 	}
-	
+
 	for _, subCpmk := range subCpmkData {
 		if subMap, ok := subCpmk.(map[string]interface{}); ok {
 			f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), no)
@@ -454,7 +493,7 @@ func createTugasSheet(f *excelize.File, result map[string]interface{}) {
 	for i, tugas := range tugasData {
 		if tugasMap, ok := tugas.(map[string]interface{}); ok {
 			f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), i+1)
-			
+
 			// Try camelCase first, fallback to snake_case
 			judul := getMapValue(tugasMap, "judulTugas")
 			if judul == "-" {
@@ -476,7 +515,7 @@ func createTugasSheet(f *excelize.File, result map[string]interface{}) {
 			if bobot == "-" {
 				bobot = getMapValue(tugasMap, "bobot_persen")
 			}
-			
+
 			f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), judul)
 			f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), batas)
 			f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), deskripsi)
