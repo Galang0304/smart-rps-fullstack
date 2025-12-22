@@ -42,8 +42,9 @@ func (gc *GeneratedRPSController) ExportExcel(c *gin.Context) {
 		return
 	}
 
-	// Fetch CPL from database if not in result
-	if _, ok := result["cpl"]; !ok || result["cpl"] == nil {
+	// Fetch CPL from database if not in result or empty array
+	cplData, hasCPL := result["cpl"].([]interface{})
+	if !hasCPL || len(cplData) == 0 {
 		if rps.Course != nil && rps.Course.Program != nil && rps.Course.Program.ProdiID != nil {
 			var cplList []models.CPL
 			if err := gc.db.Preload("Indikators").
@@ -52,15 +53,15 @@ func (gc *GeneratedRPSController) ExportExcel(c *gin.Context) {
 				Find(&cplList).Error; err == nil && len(cplList) > 0 {
 
 				// Convert CPL to result format
-				cplData := make([]map[string]interface{}, len(cplList))
+				cplDataNew := make([]map[string]interface{}, len(cplList))
 				for i, cpl := range cplList {
-					cplData[i] = map[string]interface{}{
+					cplDataNew[i] = map[string]interface{}{
 						"code":        cpl.KodeCPL,
 						"description": cpl.CPL,
 						"komponen":    cpl.Komponen,
 					}
 				}
-				result["cpl"] = cplData
+				result["cpl"] = cplDataNew
 			}
 		}
 	}
