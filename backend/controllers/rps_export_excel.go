@@ -47,9 +47,11 @@ func (gc *GeneratedRPSController) ExportExcel(c *gin.Context) {
 	defer f.Close()
 
 	// Create sheets
-	createInfoSheet(f, &rps, dosens)
+	createInfoSheet(f, &rps, dosens, result)
 	createCPMKSheet(f, result)
+	createSubCPMKSheet(f, result)
 	createRencanaSheet(f, result)
+	createTugasSheet(f, result)
 	createPenilaianSheet(f, result)
 
 	// Delete default sheet
@@ -68,7 +70,7 @@ func (gc *GeneratedRPSController) ExportExcel(c *gin.Context) {
 }
 
 // createInfoSheet creates the general information sheet
-func createInfoSheet(f *excelize.File, rps *models.GeneratedRPS, dosens []models.Dosen) {
+func createInfoSheet(f *excelize.File, rps *models.GeneratedRPS, dosens []models.Dosen, result map[string]interface{}) {
 	sheetName := "Informasi Umum"
 	index, _ := f.NewSheet(sheetName)
 	f.SetActiveSheet(index)
@@ -123,6 +125,20 @@ func createInfoSheet(f *excelize.File, rps *models.GeneratedRPS, dosens []models
 	}
 	data = append(data, []string{"Dosen Pengampu", dosenNames})
 
+	// Add deskripsi MK
+	if desc, ok := result["deskripsi_mk"].(string); ok && desc != "" {
+		data = append(data, []string{"Deskripsi Mata Kuliah", desc})
+	}
+
+	// Add referensi
+	if referensi, ok := result["referensi"].([]interface{}); ok && len(referensi) > 0 {
+		var refList string
+		for i, ref := range referensi {
+			refList += fmt.Sprintf("%d. %v\n", i+1, ref)
+		}
+		data = append(data, []string{"Referensi", refList})
+	}
+
 	for _, item := range data {
 		f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), item[0])
 		f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), item[1])
@@ -158,17 +174,67 @@ func createCPMKSheet(f *excelize.File, result map[string]interface{}) {
 		Border:    getBorder(),
 	})
 
-	// Headers
-	headers := []string{"No", "Kode CPMK", "Deskripsi", "Bobot"}
-	for i, header := range headers {
-		cell := string(rune('A'+i)) + "1"
+	titleStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Bold: true, Size: 12},
+		Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "center"},
+	})
+
+	row := 1
+
+	// === SECTION 1: CPL (Capaian Pembelajaran Lulusan) ===
+	f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), "CAPAIAN PEMBELAJARAN LULUSAN (CPL)")
+	f.MergeCell(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row))
+	f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row), titleStyle)
+	f.SetRowHeight(sheetName, row, 25)
+	row++
+
+	// CPL Headers
+	cplHeaders := []string{"No", "Kode CPL", "Deskripsi CPL", "Komponen"}
+	for i, header := range cplHeaders {
+		cell := string(rune('A'+i)) + fmt.Sprintf("%d", row)
 		f.SetCellValue(sheetName, cell, header)
 		f.SetCellStyle(sheetName, cell, cell, headerStyle)
 	}
-	f.SetRowHeight(sheetName, 1, 25)
+	f.SetRowHeight(sheetName, row, 25)
+	row++
+
+	// CPL Data
+	if cplData, ok := result["cpl"].([]interface{}); ok {
+		for i, cpl := range cplData {
+			if cplMap, ok := cpl.(map[string]interface{}); ok {
+				f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), i+1)
+				f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), getMapValue(cplMap, "code"))
+				f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), getMapValue(cplMap, "description"))
+				f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), getMapValue(cplMap, "komponen"))
+
+				f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row), dataStyle)
+				f.SetRowHeight(sheetName, row, 30)
+				row++
+			}
+		}
+	}
+
+	// Empty row
+	row++
+
+	// === SECTION 2: CPMK (Capaian Pembelajaran Mata Kuliah) ===
+	f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), "CAPAIAN PEMBELAJARAN MATA KULIAH (CPMK)")
+	f.MergeCell(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row))
+	f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row), titleStyle)
+	f.SetRowHeight(sheetName, row, 25)
+	row++
+
+	// CPMK Headers
+	headers := []string{"No", "Kode CPMK", "Deskripsi", "Bobot"}
+	for i, header := range headers {
+		cell := string(rune('A'+i)) + fmt.Sprintf("%d", row)
+		f.SetCellValue(sheetName, cell, header)
+		f.SetCellStyle(sheetName, cell, cell, headerStyle)
+	}
+	f.SetRowHeight(sheetName, row, 25)
+	row++
 
 	// CPMK Data
-	row := 2
 	if cpmkData, ok := result["cpmk"].([]interface{}); ok {
 		for i, cpmk := range cpmkData {
 			if cpmkMap, ok := cpmk.(map[string]interface{}); ok {
@@ -180,6 +246,67 @@ func createCPMKSheet(f *excelize.File, result map[string]interface{}) {
 				f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row), dataStyle)
 				f.SetRowHeight(sheetName, row, 30)
 				row++
+			}
+		}
+	}
+}
+
+// createSubCPMKSheet creates the Sub-CPMK sheet with bobot
+func createSubCPMKSheet(f *excelize.File, result map[string]interface{}) {
+	sheetName := "Sub-CPMK"
+	f.NewSheet(sheetName)
+
+	// Set column widths
+	f.SetColWidth(sheetName, "A", "A", 8)
+	f.SetColWidth(sheetName, "B", "B", 15)
+	f.SetColWidth(sheetName, "C", "C", 60)
+	f.SetColWidth(sheetName, "D", "D", 10)
+
+	// Styles
+	headerStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Bold: true, Size: 11, Color: "#FFFFFF"},
+		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#28A745"}, Pattern: 1},
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+		Border:    getBorder(),
+	})
+
+	dataStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Size: 10},
+		Alignment: &excelize.Alignment{Vertical: "top", WrapText: true},
+		Border:    getBorder(),
+	})
+
+	// Headers
+	headers := []string{"No", "Sub-CPMK", "Deskripsi", "Bobot (%)"}
+	for i, header := range headers {
+		cell := string(rune('A'+i)) + "1"
+		f.SetCellValue(sheetName, cell, header)
+		f.SetCellStyle(sheetName, cell, cell, headerStyle)
+	}
+	f.SetRowHeight(sheetName, 1, 25)
+
+	// Sub-CPMK Data
+	row := 2
+	no := 1
+	if cpmkData, ok := result["cpmk"].([]interface{}); ok {
+		for _, cpmk := range cpmkData {
+			if cpmkMap, ok := cpmk.(map[string]interface{}); ok {
+				// Get sub_cpmk array
+				if subCpmkList, ok := cpmkMap["sub_cpmk"].([]interface{}); ok {
+					for _, subCpmk := range subCpmkList {
+						if subMap, ok := subCpmk.(map[string]interface{}); ok {
+							f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), no)
+							f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), getMapValue(subMap, "code"))
+							f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), getMapValue(subMap, "description"))
+							f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), getMapValue(subMap, "bobot"))
+
+							f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row), dataStyle)
+							f.SetRowHeight(sheetName, row, 30)
+							row++
+							no++
+						}
+					}
+				}
 			}
 		}
 	}
@@ -233,6 +360,62 @@ func createRencanaSheet(f *excelize.File, result map[string]interface{}) {
 
 				f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("E%d", row), dataStyle)
 				f.SetRowHeight(sheetName, row, 35)
+				row++
+			}
+		}
+	}
+}
+
+// createTugasSheet creates the task/assignment sheet with bobot
+func createTugasSheet(f *excelize.File, result map[string]interface{}) {
+	sheetName := "Rencana Tugas"
+	f.NewSheet(sheetName)
+
+	// Set column widths
+	f.SetColWidth(sheetName, "A", "A", 8)
+	f.SetColWidth(sheetName, "B", "B", 30)
+	f.SetColWidth(sheetName, "C", "C", 15)
+	f.SetColWidth(sheetName, "D", "D", 40)
+	f.SetColWidth(sheetName, "E", "E", 25)
+	f.SetColWidth(sheetName, "F", "F", 10)
+
+	// Styles
+	headerStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Bold: true, Size: 11, Color: "#FFFFFF"},
+		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#FF6B6B"}, Pattern: 1},
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+		Border:    getBorder(),
+	})
+
+	dataStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Size: 10},
+		Alignment: &excelize.Alignment{Vertical: "top", WrapText: true},
+		Border:    getBorder(),
+	})
+
+	// Headers
+	headers := []string{"No", "Judul Tugas", "Batas Waktu", "Deskripsi", "Kriteria Penilaian", "Bobot (%)"}
+	for i, header := range headers {
+		cell := string(rune('A'+i)) + "1"
+		f.SetCellValue(sheetName, cell, header)
+		f.SetCellStyle(sheetName, cell, cell, headerStyle)
+	}
+	f.SetRowHeight(sheetName, 1, 25)
+
+	// Task data
+	row := 2
+	if tugasData, ok := result["rencana_tugas"].([]interface{}); ok {
+		for i, tugas := range tugasData {
+			if tugasMap, ok := tugas.(map[string]interface{}); ok {
+				f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), i+1)
+				f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), getMapValue(tugasMap, "judul"))
+				f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), getMapValue(tugasMap, "batas_waktu"))
+				f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), getMapValue(tugasMap, "petunjuk"))
+				f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), getMapValue(tugasMap, "kriteria_penilaian"))
+				f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), getMapValue(tugasMap, "bobot_persen"))
+
+				f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("F%d", row), dataStyle)
+				f.SetRowHeight(sheetName, row, 40)
 				row++
 			}
 		}
