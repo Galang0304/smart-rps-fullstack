@@ -354,8 +354,8 @@ export default function RPSList() {
                       <FileText className="w-8 h-8" />
                     </div>
                     <div className="text-left flex-1">
-                      <h4 className="font-bold text-lg text-green-800">HTML</h4>
-                      <p className="text-sm text-green-600">Format web, buka di browser</p>
+                      <h4 className="font-bold text-lg text-green-800">PDF</h4>
+                      <p className="text-sm text-green-600">Format PDF, buka di browser</p>
                     </div>
                     <Download className="w-6 h-6 text-green-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>

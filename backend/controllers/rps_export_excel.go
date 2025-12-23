@@ -12,6 +12,7 @@ import (
 	"smart-rps-backend/models"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -89,7 +90,9 @@ func (gc *GeneratedRPSController) ExportExcel(c *gin.Context) {
 	if !hasCPL || len(cplData) == 0 {
 		fmt.Printf("[DEBUG Excel] Building CPL from matched_cpl...\n")
 		// Extract unique CPL codes from CPMK matched_cpl field
+		// Also build reverse mapping: CPL -> list of CPMK
 		cplMap := make(map[string]bool)
+		cplToCpmkMap := make(map[string][]string) // CPL code -> list of CPMK codes
 		if cpmkData, ok := result["cpmk"].([]interface{}); ok {
 			fmt.Printf("[DEBUG Excel] Found %d CPMK entries\n", len(cpmkData))
 			for idx, cpmk := range cpmkData {
@@ -97,14 +100,16 @@ func (gc *GeneratedRPSController) ExportExcel(c *gin.Context) {
 					cpmkCode := getMapValue(cpmkMap, "code")
 					matchedCPL := getMapValue(cpmkMap, "matched_cpl")
 					fmt.Printf("[DEBUG Excel] CPMK[%d]: code=%s, matched_cpl=%s\n", idx, cpmkCode, matchedCPL)
-					if matchedCPL != "-" {
+					if matchedCPL != "-" && matchedCPL != "" {
 						// Split by comma
 						cplCodes := strings.Split(matchedCPL, ",")
 						for _, code := range cplCodes {
 							code = strings.TrimSpace(code)
 							if code != "" && code != "-" {
 								cplMap[code] = true
-								fmt.Printf("[DEBUG Excel] Added CPL: %s\n", code)
+								// Add to reverse mapping
+								cplToCpmkMap[code] = append(cplToCpmkMap[code], cpmkCode)
+								fmt.Printf("[DEBUG Excel] Added CPL: %s -> CPMK: %s\n", code, cpmkCode)
 							}
 						}
 					}
@@ -114,7 +119,7 @@ func (gc *GeneratedRPSController) ExportExcel(c *gin.Context) {
 			fmt.Printf("[DEBUG Excel] No CPMK data found in result\n")
 		}
 
-		// Convert map to sorted array
+		// Convert map to sorted array and fetch CPL details from database
 		if len(cplMap) > 0 {
 			cplCodes := make([]string, 0, len(cplMap))
 			for code := range cplMap {
@@ -124,14 +129,53 @@ func (gc *GeneratedRPSController) ExportExcel(c *gin.Context) {
 
 			fmt.Printf("[DEBUG Excel] Created %d CPL entries: %v\n", len(cplCodes), cplCodes)
 
-			// Create CPL data array with codes only (descriptions will be "-")
+			// Try to get ProdiID from Course -> Program
+			var prodiID *uuid.UUID
+			if rps.Course != nil && rps.Course.Program != nil {
+				if rps.Course.Program.ProdiID != nil {
+					prodiID = rps.Course.Program.ProdiID
+				} else if rps.Course.Program.Prodi != nil {
+					prodiID = &rps.Course.Program.Prodi.ID
+				}
+			}
+
+			// Fetch CPL details from database
+			cplDetailsMap := make(map[string]models.CPL)
+			if prodiID != nil {
+				var cplList []models.CPL
+				if err := gc.db.Where("prodi_id = ?", *prodiID).Find(&cplList).Error; err == nil {
+					for _, cpl := range cplList {
+						cplDetailsMap[cpl.KodeCPL] = cpl
+						fmt.Printf("[DEBUG Excel] Loaded CPL from DB: %s = %s\n", cpl.KodeCPL, cpl.CPL[:min(50, len(cpl.CPL))])
+					}
+				}
+			}
+
+			// Create CPL data array with details from database
 			cplDataNew := make([]interface{}, len(cplCodes))
 			for i, code := range cplCodes {
-				cplDataNew[i] = map[string]interface{}{
-					"code":        code,
-					"description": "-",
-					"komponen":    "-",
+				description := "-"
+				komponen := "-"
+
+				// Try to get details from database
+				if cpl, exists := cplDetailsMap[code]; exists {
+					description = cpl.CPL
+					komponen = cpl.Komponen
 				}
+
+				// Get related CPMK codes
+				relatedCPMK := "-"
+				if cpmks, exists := cplToCpmkMap[code]; exists && len(cpmks) > 0 {
+					relatedCPMK = strings.Join(cpmks, ", ")
+				}
+
+				cplDataNew[i] = map[string]interface{}{
+					"code":         code,
+					"description":  description,
+					"komponen":     komponen,
+					"related_cpmk": relatedCPMK,
+				}
+				fmt.Printf("[DEBUG Excel] CPL %s: desc=%s, komponen=%s, cpmk=%s\n", code, description[:min(30, len(description))], komponen, relatedCPMK)
 			}
 			result["cpl"] = cplDataNew
 		} else {
@@ -147,7 +191,6 @@ func (gc *GeneratedRPSController) ExportExcel(c *gin.Context) {
 
 	// Create sheets
 	createInfoSheet(f, &rps, dosens, result)
-	createCPLSheet(f, result)
 	createCPMKSheet(f, result)
 	createSubCPMKSheet(f, result)
 	createRencanaSheet(f, result)
@@ -351,8 +394,9 @@ func createCPMKSheet(f *excelize.File, result map[string]interface{}) {
 	// Set column widths
 	f.SetColWidth(sheetName, "A", "A", 8)
 	f.SetColWidth(sheetName, "B", "B", 15)
-	f.SetColWidth(sheetName, "C", "C", 60)
-	f.SetColWidth(sheetName, "D", "D", 8)
+	f.SetColWidth(sheetName, "C", "C", 50)
+	f.SetColWidth(sheetName, "D", "D", 15)
+	f.SetColWidth(sheetName, "E", "E", 20)
 
 	// Styles
 	headerStyle, _ := f.NewStyle(&excelize.Style{
@@ -375,52 +419,15 @@ func createCPMKSheet(f *excelize.File, result map[string]interface{}) {
 
 	row := 1
 
-	// === SECTION 1: CPL (Capaian Pembelajaran Lulusan) ===
-	// Only show if CPL data exists
-	if cplData, ok := result["cpl"].([]interface{}); ok && len(cplData) > 0 {
-		f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), "CAPAIAN PEMBELAJARAN LULUSAN (CPL)")
-		f.MergeCell(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row))
-		f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row), titleStyle)
-		f.SetRowHeight(sheetName, row, 25)
-		row++
-
-		// CPL Headers
-		cplHeaders := []string{"No", "Kode CPL", "Deskripsi CPL", "Komponen"}
-		for i, header := range cplHeaders {
-			cell := string(rune('A'+i)) + fmt.Sprintf("%d", row)
-			f.SetCellValue(sheetName, cell, header)
-			f.SetCellStyle(sheetName, cell, cell, headerStyle)
-		}
-		f.SetRowHeight(sheetName, row, 25)
-		row++
-
-		// CPL Data
-		for i, cpl := range cplData {
-			if cplMap, ok := cpl.(map[string]interface{}); ok {
-				f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), i+1)
-				f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), getMapValue(cplMap, "code"))
-				f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), getMapValue(cplMap, "description"))
-				f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), getMapValue(cplMap, "komponen"))
-
-				f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row), dataStyle)
-				f.SetRowHeight(sheetName, row, 30)
-				row++
-			}
-		}
-
-		// Empty row
-		row++
-	}
-
-	// === SECTION 2: CPMK (Capaian Pembelajaran Mata Kuliah) ===
+	// === CPMK (Capaian Pembelajaran Mata Kuliah) ===
 	f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), "CAPAIAN PEMBELAJARAN MATA KULIAH (CPMK)")
-	f.MergeCell(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row))
-	f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row), titleStyle)
+	f.MergeCell(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("E%d", row))
+	f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("E%d", row), titleStyle)
 	f.SetRowHeight(sheetName, row, 25)
 	row++
 
 	// CPMK Headers
-	headers := []string{"No", "Kode CPMK", "Deskripsi", "Bobot"}
+	headers := []string{"No", "Kode CPMK", "Deskripsi", "Bobot", "CPL Terkait"}
 	for i, header := range headers {
 		cell := string(rune('A'+i)) + fmt.Sprintf("%d", row)
 		f.SetCellValue(sheetName, cell, header)
@@ -454,7 +461,11 @@ func createCPMKSheet(f *excelize.File, result map[string]interface{}) {
 				}
 				f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), bobot)
 
-				f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row), dataStyle)
+				// Add matched CPL
+				matchedCPL := getMapValue(cpmkMap, "matched_cpl")
+				f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), matchedCPL)
+
+				f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("E%d", row), dataStyle)
 				f.SetRowHeight(sheetName, row, 30)
 				row++
 			}
