@@ -361,7 +361,7 @@ export default function RPSList() {
                   </div>
                 </button>
 
-                {/* Word Option */}
+                {/* Word Option - DISABLED/HIDDEN
                 <button
                   onClick={() => handleExportChoice('word')}
                   className="w-full group relative overflow-hidden bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border-2 border-blue-200 hover:border-blue-400 rounded-xl p-6 transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
@@ -377,6 +377,7 @@ export default function RPSList() {
                     <Download className="w-6 h-6 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                 </button>
+                */}
 
                 {/* Excel Option */}
                 <button
