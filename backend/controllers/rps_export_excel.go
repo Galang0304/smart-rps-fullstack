@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"smart-rps-backend/models"
@@ -19,6 +21,8 @@ func (gc *GeneratedRPSController) ExportExcel(c *gin.Context) {
 
 	var rps models.GeneratedRPS
 	err := gc.db.
+		Preload("Course").
+		Preload("Course.Program").
 		Preload("Course.Program.Prodi").
 		Where("id = ?", rpsID).
 		First(&rps).Error
@@ -42,28 +46,99 @@ func (gc *GeneratedRPSController) ExportExcel(c *gin.Context) {
 		return
 	}
 
-	// Fetch CPL from database if not in result or empty array
-	cplData, hasCPL := result["cpl"].([]interface{})
-	if !hasCPL || len(cplData) == 0 {
-		if rps.Course != nil && rps.Course.Program != nil && rps.Course.Program.ProdiID != nil {
-			var cplList []models.CPL
-			if err := gc.db.Preload("Indikators").
-				Where("prodi_id = ?", rps.Course.Program.ProdiID).
-				Order("kode_cpl ASC").
-				Find(&cplList).Error; err == nil && len(cplList) > 0 {
+	// Query CPMK from database to get matched_cpl
+	var cpmkList []models.CPMK
+	fmt.Printf("[DEBUG Excel] Loading CPMK from database for courseID=%v\n", rps.CourseID)
+	if err := gc.db.Where("course_id = ?", rps.CourseID).
+		Order("cpmk_number ASC").
+		Find(&cpmkList).Error; err == nil && len(cpmkList) > 0 {
 
-				// Convert CPL to result format
-				cplDataNew := make([]map[string]interface{}, len(cplList))
-				for i, cpl := range cplList {
-					cplDataNew[i] = map[string]interface{}{
-						"code":        cpl.KodeCPL,
-						"description": cpl.CPL,
-						"komponen":    cpl.Komponen,
+		fmt.Printf("[DEBUG Excel] Found %d CPMK in database\n", len(cpmkList))
+		for i, dbCPMK := range cpmkList {
+			cpmkCode := fmt.Sprintf("CPMK-%d", dbCPMK.CPMKNumber)
+			fmt.Printf("[DEBUG Excel] DB CPMK[%d]: code=%s, matched_cpl=%s\n", i, cpmkCode, dbCPMK.MatchedCPL)
+		}
+
+		// Update result with matched_cpl from database
+		if cpmkData, ok := result["cpmk"].([]interface{}); ok {
+			fmt.Printf("[DEBUG Excel] Updating %d CPMK entries from JSON with DB data\n", len(cpmkData))
+			for i, cpmk := range cpmkData {
+				if cpmkMap, ok := cpmk.(map[string]interface{}); ok {
+					cpmkCode := getMapValue(cpmkMap, "code")
+
+					// Find matching CPMK in database by code
+					for _, dbCPMK := range cpmkList {
+						dbCPMKCode := fmt.Sprintf("CPMK-%d", dbCPMK.CPMKNumber)
+						if dbCPMKCode == cpmkCode {
+							cpmkMap["matched_cpl"] = dbCPMK.MatchedCPL
+							cpmkData[i] = cpmkMap
+							fmt.Printf("[DEBUG Excel] ✅ Updated %s with matched_cpl=%s\n", cpmkCode, dbCPMK.MatchedCPL)
+							break
+						}
 					}
 				}
-				result["cpl"] = cplDataNew
 			}
+			result["cpmk"] = cpmkData
 		}
+	} else {
+		fmt.Printf("[DEBUG Excel] Failed to load CPMK from DB. Error: %v, Count: %d\n", err, len(cpmkList))
+	}
+
+	// Build CPL list from CPMK matched_cpl (like HTML export does)
+	cplData, hasCPL := result["cpl"].([]interface{})
+	if !hasCPL || len(cplData) == 0 {
+		fmt.Printf("[DEBUG Excel] Building CPL from matched_cpl...\n")
+		// Extract unique CPL codes from CPMK matched_cpl field
+		cplMap := make(map[string]bool)
+		if cpmkData, ok := result["cpmk"].([]interface{}); ok {
+			fmt.Printf("[DEBUG Excel] Found %d CPMK entries\n", len(cpmkData))
+			for idx, cpmk := range cpmkData {
+				if cpmkMap, ok := cpmk.(map[string]interface{}); ok {
+					cpmkCode := getMapValue(cpmkMap, "code")
+					matchedCPL := getMapValue(cpmkMap, "matched_cpl")
+					fmt.Printf("[DEBUG Excel] CPMK[%d]: code=%s, matched_cpl=%s\n", idx, cpmkCode, matchedCPL)
+					if matchedCPL != "-" {
+						// Split by comma
+						cplCodes := strings.Split(matchedCPL, ",")
+						for _, code := range cplCodes {
+							code = strings.TrimSpace(code)
+							if code != "" && code != "-" {
+								cplMap[code] = true
+								fmt.Printf("[DEBUG Excel] Added CPL: %s\n", code)
+							}
+						}
+					}
+				}
+			}
+		} else {
+			fmt.Printf("[DEBUG Excel] No CPMK data found in result\n")
+		}
+
+		// Convert map to sorted array
+		if len(cplMap) > 0 {
+			cplCodes := make([]string, 0, len(cplMap))
+			for code := range cplMap {
+				cplCodes = append(cplCodes, code)
+			}
+			sort.Strings(cplCodes)
+
+			fmt.Printf("[DEBUG Excel] Created %d CPL entries: %v\n", len(cplCodes), cplCodes)
+
+			// Create CPL data array with codes only (descriptions will be "-")
+			cplDataNew := make([]interface{}, len(cplCodes))
+			for i, code := range cplCodes {
+				cplDataNew[i] = map[string]interface{}{
+					"code":        code,
+					"description": "-",
+					"komponen":    "-",
+				}
+			}
+			result["cpl"] = cplDataNew
+		} else {
+			fmt.Printf("[DEBUG Excel] No CPL codes found in matched_cpl\n")
+		}
+	} else {
+		fmt.Printf("[DEBUG Excel] CPL already exists, count=%d\n", len(cplData))
 	}
 
 	// Create Excel file
@@ -72,6 +147,7 @@ func (gc *GeneratedRPSController) ExportExcel(c *gin.Context) {
 
 	// Create sheets
 	createInfoSheet(f, &rps, dosens, result)
+	createCPLSheet(f, result)
 	createCPMKSheet(f, result)
 	createSubCPMKSheet(f, result)
 	createRencanaSheet(f, result)
@@ -170,6 +246,100 @@ func createInfoSheet(f *excelize.File, rps *models.GeneratedRPS, dosens []models
 		f.SetCellStyle(sheetName, fmt.Sprintf("B%d", row), fmt.Sprintf("B%d", row), dataStyle)
 		f.SetRowHeight(sheetName, row, 20)
 		row++
+	}
+}
+
+// createCPLSheet creates the CPL sheet
+func createCPLSheet(f *excelize.File, result map[string]interface{}) {
+	sheetName := "CPL"
+	f.NewSheet(sheetName)
+
+	// Set column widths
+	f.SetColWidth(sheetName, "A", "A", 5)
+	f.SetColWidth(sheetName, "B", "B", 15)
+	f.SetColWidth(sheetName, "C", "C", 60)
+	f.SetColWidth(sheetName, "D", "D", 20)
+	f.SetColWidth(sheetName, "E", "E", 30)
+
+	// Styles
+	headerStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Bold: true, Size: 11, Color: "#FFFFFF"},
+		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#4472C4"}, Pattern: 1},
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+		Border:    getBorder(),
+	})
+
+	dataStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Size: 10},
+		Alignment: &excelize.Alignment{Vertical: "top", WrapText: true},
+		Border:    getBorder(),
+	})
+
+	// Headers
+	headers := []string{"No", "Kode CPL", "Capaian Pembelajaran Lulusan", "Komponen", "CPMK Terkait"}
+	for i, header := range headers {
+		cell := string(rune('A'+i)) + "1"
+		f.SetCellValue(sheetName, cell, header)
+		f.SetCellStyle(sheetName, cell, cell, headerStyle)
+	}
+	f.SetRowHeight(sheetName, 1, 25)
+
+	// Build CPL to CPMK mapping from matched_cpl field
+	cplToCPMK := make(map[string][]string)
+	if cpmkData, ok := result["cpmk"].([]interface{}); ok {
+		for _, cpmk := range cpmkData {
+			if cpmkMap, ok := cpmk.(map[string]interface{}); ok {
+				cpmkCode := getMapValue(cpmkMap, "code")
+
+				// Get matched_cpl (comma-separated CPL codes)
+				matchedCPL := getMapValue(cpmkMap, "matched_cpl")
+				if matchedCPL != "-" {
+					cplCodes := strings.Split(matchedCPL, ",")
+					for _, cplCode := range cplCodes {
+						cplCode = strings.TrimSpace(cplCode)
+						if cplCode != "" && cplCode != "-" {
+							cplToCPMK[cplCode] = append(cplToCPMK[cplCode], cpmkCode)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// CPL data
+	row := 2
+	if cplData, ok := result["cpl"].([]interface{}); ok {
+		for idx, cpl := range cplData {
+			if cplMap, ok := cpl.(map[string]interface{}); ok {
+				code := getMapValue(cplMap, "code")
+				if code == "-" {
+					code = getMapValue(cplMap, "kode_cpl")
+				}
+
+				description := getMapValue(cplMap, "description")
+				if description == "-" {
+					description = getMapValue(cplMap, "cpl")
+				}
+
+				komponen := getMapValue(cplMap, "komponen")
+
+				// Get related CPMK
+				relatedCPMK := "-"
+				if cpmkList, exists := cplToCPMK[code]; exists && len(cpmkList) > 0 {
+					relatedCPMK = strings.Join(cpmkList, ", ")
+				}
+
+				f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), idx+1)
+				f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), code)
+				f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), description)
+				f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), komponen)
+				f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), relatedCPMK)
+
+				f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("E%d", row), dataStyle)
+				f.SetRowHeight(sheetName, row, 30)
+				row++
+			}
+		}
 	}
 }
 
@@ -347,14 +517,25 @@ func createSubCPMKSheet(f *excelize.File, result map[string]interface{}) {
 		}
 	}
 
+	// Calculate equal bobot with decimal precision
+	totalSubCPMK := len(subCpmkData)
+	var defaultBobot float64
+	if totalSubCPMK > 0 {
+		defaultBobot = 100.0 / float64(totalSubCPMK)
+	}
+
 	for _, subCpmk := range subCpmkData {
 		if subMap, ok := subCpmk.(map[string]interface{}); ok {
 			f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), no)
 			f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), getMapValue(subMap, "code"))
 			f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), getMapValue(subMap, "description"))
+
 			bobot := getMapValue(subMap, "bobotPersen")
 			if bobot == "-" {
 				bobot = getMapValue(subMap, "bobot")
+			}
+			if bobot == "-" && defaultBobot > 0 {
+				bobot = fmt.Sprintf("%.2f%%", defaultBobot)
 			}
 			f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), bobot)
 
@@ -427,10 +608,16 @@ func createRencanaSheet(f *excelize.File, result map[string]interface{}) {
 				metode = getMapValue(mingguMap, "metode_pembelajaran")
 			}
 
-			indikator := getMapValue(mingguMap, "indikator")
+			// Indikator - try subCpmk first (frontend uses this field)
+			indikator := getMapValue(mingguMap, "subCpmk")
+			if indikator == "-" {
+				indikator = getMapValue(mingguMap, "indikator")
+			}
+
+			// Try waktu first (camelCase), then waktu_belajar (snake_case)
 			waktu := getMapValue(mingguMap, "waktu")
 			if waktu == "-" {
-				waktu = getMapValue(mingguMap, "penilaian") // frontend uses 'penilaian'
+				waktu = getMapValue(mingguMap, "waktu_belajar")
 			}
 
 			f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), mingguNum)
@@ -564,20 +751,52 @@ func createPenilaianSheet(f *excelize.File, result map[string]interface{}) {
 	}
 	f.SetRowHeight(sheetName, 1, 25)
 
-	// Assessment data
+	// Assessment data - try analisis_penilaian first, then fallback to rencanaTugas
 	row := 2
-	if analisisPenilaian, ok := result["analisis_penilaian"].([]interface{}); ok {
-		for _, penilaian := range analisisPenilaian {
-			if penilaianMap, ok := penilaian.(map[string]interface{}); ok {
-				f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), getMapValue(penilaianMap, "minggu"))
-				f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), getMapValue(penilaianMap, "topik_materi"))
-				f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), getMapValue(penilaianMap, "jenis_assessment"))
-				f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), getMapValue(penilaianMap, "bobot"))
+	var penilaianData []interface{}
 
-				f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row), dataStyle)
-				f.SetRowHeight(sheetName, row, 30)
-				row++
+	if analisisPenilaian, ok := result["analisis_penilaian"].([]interface{}); ok && len(analisisPenilaian) > 0 {
+		penilaianData = analisisPenilaian
+	} else if rencanaTugas, ok := result["rencanaTugas"].([]interface{}); ok && len(rencanaTugas) > 0 {
+		penilaianData = rencanaTugas
+	} else if rencanaTugas, ok := result["rencana_tugas"].([]interface{}); ok && len(rencanaTugas) > 0 {
+		penilaianData = rencanaTugas
+	}
+
+	for _, penilaian := range penilaianData {
+		if penilaianMap, ok := penilaian.(map[string]interface{}); ok {
+			// Try different field names for minggu
+			minggu := getMapValue(penilaianMap, "minggu")
+			if minggu == "-" {
+				minggu = getMapValue(penilaianMap, "tugasKe")
 			}
+
+			// Try different field names for topik
+			topik := getMapValue(penilaianMap, "topik_materi")
+			if topik == "-" {
+				topik = getMapValue(penilaianMap, "judulTugas")
+			}
+
+			// Try different field names for jenis
+			jenis := getMapValue(penilaianMap, "jenis_assessment")
+			if jenis == "-" {
+				jenis = getMapValue(penilaianMap, "teknikPenilaian")
+			}
+
+			// Try different field names for bobot
+			bobot := getMapValue(penilaianMap, "bobot")
+			if bobot == "-" {
+				bobot = getMapValue(penilaianMap, "bobotPersen")
+			}
+
+			f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), minggu)
+			f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), topik)
+			f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), jenis)
+			f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), bobot)
+
+			f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("D%d", row), dataStyle)
+			f.SetRowHeight(sheetName, row, 30)
+			row++
 		}
 	}
 }
