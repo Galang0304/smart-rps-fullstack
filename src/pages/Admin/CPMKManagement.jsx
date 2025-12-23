@@ -46,6 +46,11 @@ export default function CPMKManagement() {
   const [showAddSubCpmk, setShowAddSubCpmk] = useState(null);
   const [importing, setImporting] = useState(false);
   
+  // Import progress states
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0, currentCourse: '' });
+  const [importResult, setImportResult] = useState(null); // { success: [], failed: [], total: 0 }
+  const [showImportResult, setShowImportResult] = useState(false);
+  
   // Toast
   const [toast, setToast] = useState({ show: false, message: '', type: 'info' });
 
@@ -812,9 +817,9 @@ export default function CPMKManagement() {
     if (!file) return;
 
     setImporting(true);
+    setImportProgress({ current: 0, total: 0, currentCourse: 'Memproses file...' });
+    
     try {
-      showToast('Memproses file Excel...', 'info');
-      
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data, { type: 'array' });
       
@@ -854,8 +859,8 @@ export default function CPMKManagement() {
       }
       
       const headers = jsonData[0]; // Row 1: Headers
-      let totalCpmk = 0;
-      const errors = [];
+      const successList = [];
+      const failedList = [];
       
       // Find CPMK column indexes (columns starting with "CPMK")
       const cpmkColumns = [];
@@ -877,7 +882,13 @@ export default function CPMKManagement() {
         }
       });
       
+      // Count valid rows first
+      const validRows = jsonData.slice(1).filter(row => row && row[courseNameColIdx]?.toString().trim());
+      const totalRows = validRows.length;
+      setImportProgress({ current: 0, total: totalRows, currentCourse: 'Memulai import...' });
+      
       // Process each row (skip header)
+      let processedCount = 0;
       for (let row = 1; row < jsonData.length; row++) {
         const rowData = jsonData[row];
         if (!rowData || rowData.length < 2) continue;
@@ -885,13 +896,16 @@ export default function CPMKManagement() {
         const courseName = rowData[courseNameColIdx]?.toString().trim(); // NAMA MATA KULIAH
         if (!courseName) continue;
         
+        processedCount++;
+        setImportProgress({ current: processedCount, total: totalRows, currentCourse: courseName });
+        
         // Find course by name
         const course = courses.find(c => 
           c.title.toLowerCase() === courseName.toLowerCase()
         );
         
         if (!course) {
-          errors.push(`Mata kuliah "${courseName}" tidak ditemukan di database`);
+          failedList.push({ course: courseName, reason: 'Mata kuliah tidak ditemukan di database' });
           continue;
         }
         
@@ -905,7 +919,7 @@ export default function CPMKManagement() {
         });
         
         if (cpmkDescriptions.length === 0) {
-          errors.push(`Mata kuliah "${courseName}" tidak memiliki CPMK`);
+          failedList.push({ course: courseName, reason: 'Tidak memiliki data CPMK' });
           continue;
         }
         
@@ -915,6 +929,8 @@ export default function CPMKManagement() {
         const lastBobot = 100 - totalBase;
         
         // Create each CPMK
+        let courseSuccess = 0;
+        let courseFailed = 0;
         for (let i = 0; i < cpmkDescriptions.length; i++) {
           try {
             const cpmkBobot = i === cpmkDescriptions.length - 1 ? lastBobot : baseBobot;
@@ -928,13 +944,19 @@ export default function CPMKManagement() {
             
             const response = await cpmkAPI.create(cpmkPayload);
             if (response.data?.success) {
-              totalCpmk++;
+              courseSuccess++;
             }
           } catch (error) {
             console.error('Error saving CPMK:', error);
-            const errorMsg = error.response?.data?.message || error.message;
-            errors.push(`${courseName} CPMK ${i + 1}: ${errorMsg}`);
+            courseFailed++;
           }
+        }
+        
+        if (courseSuccess > 0) {
+          successList.push({ course: courseName, count: courseSuccess });
+        }
+        if (courseFailed > 0) {
+          failedList.push({ course: courseName, reason: `${courseFailed} CPMK gagal disimpan` });
         }
       }
       
@@ -944,17 +966,22 @@ export default function CPMKManagement() {
         await loadCpmkForCourse(selectedCourse.id);
       }
       
-      let message = `Berhasil import ${totalCpmk} CPMK dari ${jsonData.length - 1} mata kuliah`;
-      if (errors.length > 0) {
-        message += `\n${errors.length} error: ${errors.slice(0, 3).join(', ')}`;
-      }
+      // Show result modal
+      const totalSuccess = successList.reduce((sum, item) => sum + item.count, 0);
+      setImportResult({
+        success: successList,
+        failed: failedList,
+        totalCpmk: totalSuccess,
+        totalCourses: successList.length
+      });
+      setShowImportResult(true);
       
-      showToast(message, errors.length > 0 ? 'warning' : 'success');
     } catch (error) {
       console.error('Import error:', error);
       showToast('Gagal mengimpor data: ' + error.message, 'error');
     } finally {
       setImporting(false);
+      setImportProgress({ current: 0, total: 0, currentCourse: '' });
       event.target.value = '';
     }
   };
@@ -1443,6 +1470,129 @@ export default function CPMKManagement() {
           </div>
         </div>
       </div>
+
+      {/* Import Progress Modal */}
+      {importing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6">
+            <div className="text-center">
+              <div className="relative w-20 h-20 mx-auto mb-4">
+                <div className="absolute inset-0 border-4 border-blue-200 rounded-full"></div>
+                <div className="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Upload className="w-8 h-8 text-blue-600" />
+                </div>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Mengimpor CPMK...</h3>
+              <p className="text-gray-600 mb-4">{importProgress.currentCourse}</p>
+              
+              {importProgress.total > 0 && (
+                <div className="space-y-2">
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div 
+                      className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-300"
+                      style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-sm text-gray-500">
+                    {importProgress.current} dari {importProgress.total} mata kuliah
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Result Modal */}
+      {showImportResult && importResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[80vh] overflow-hidden">
+            {/* Header */}
+            <div className={`px-6 py-4 ${importResult.failed.length === 0 ? 'bg-gradient-to-r from-green-500 to-green-600' : 'bg-gradient-to-r from-yellow-500 to-orange-500'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {importResult.failed.length === 0 ? (
+                    <CheckCircle className="w-8 h-8 text-white" />
+                  ) : (
+                    <AlertCircle className="w-8 h-8 text-white" />
+                  )}
+                  <h3 className="text-xl font-bold text-white">Hasil Import CPMK</h3>
+                </div>
+                <button
+                  onClick={() => setShowImportResult(false)}
+                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-1"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* Summary */}
+            <div className="p-6 border-b border-gray-200">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-green-50 rounded-lg p-4 text-center">
+                  <p className="text-3xl font-bold text-green-600">{importResult.totalCpmk}</p>
+                  <p className="text-sm text-green-700">CPMK Berhasil</p>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-4 text-center">
+                  <p className="text-3xl font-bold text-blue-600">{importResult.totalCourses}</p>
+                  <p className="text-sm text-blue-700">Mata Kuliah</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Details */}
+            <div className="overflow-y-auto max-h-60">
+              {/* Success List */}
+              {importResult.success.length > 0 && (
+                <div className="p-4 border-b border-gray-100">
+                  <h4 className="font-semibold text-green-700 mb-2 flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4" />
+                    Berhasil ({importResult.success.length})
+                  </h4>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {importResult.success.map((item, idx) => (
+                      <div key={idx} className="flex justify-between text-sm py-1 px-2 bg-green-50 rounded">
+                        <span className="text-gray-700 truncate">{item.course}</span>
+                        <span className="text-green-600 font-medium flex-shrink-0 ml-2">{item.count} CPMK</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Failed List */}
+              {importResult.failed.length > 0 && (
+                <div className="p-4">
+                  <h4 className="font-semibold text-red-700 mb-2 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    Gagal ({importResult.failed.length})
+                  </h4>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {importResult.failed.map((item, idx) => (
+                      <div key={idx} className="text-sm py-1 px-2 bg-red-50 rounded">
+                        <span className="font-medium text-gray-700">{item.course}</span>
+                        <span className="text-red-600 block text-xs">{item.reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+              <button
+                onClick={() => setShowImportResult(false)}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast.show && (
