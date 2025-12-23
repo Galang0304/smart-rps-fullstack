@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { 
   Plus, 
@@ -16,15 +16,18 @@ import {
   CheckCircle,
   Loader,
   Download,
-  Upload
+  Upload,
+  Lock
 } from 'lucide-react';
-import { courseAPI, cpmkAPI, cplAPI } from '../../services/api';
+import { courseAPI, cpmkAPI, cplAPI, commonCourseAPI } from '../../services/api';
 import Toast from '../../components/Toast';
 
 export default function CPMKManagement() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const isAdminRoute = location.pathname.includes('/admin/');
+  const courseIdFromUrl = searchParams.get('course_id');
 
   // States
   const [courses, setCourses] = useState([]);
@@ -32,6 +35,7 @@ export default function CPMKManagement() {
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [cpmkList, setCpmkList] = useState([]);
   const [expandedCpmk, setExpandedCpmk] = useState(null);
+  const [isCommonCourse, setIsCommonCourse] = useState(false); // Track if selected course is common
   
   // UI States
   const [loading, setLoading] = useState(true);
@@ -105,6 +109,16 @@ export default function CPMKManagement() {
     loadCourses();
   }, []);
 
+  // Auto-select course from URL param
+  useEffect(() => {
+    if (courseIdFromUrl && courses.length > 0 && !selectedCourse) {
+      const course = courses.find(c => c.id === courseIdFromUrl);
+      if (course) {
+        handleSelectCourse(course);
+      }
+    }
+  }, [courseIdFromUrl, courses]);
+
   // Search filter
   useEffect(() => {
     if (searchTerm.trim() === '') {
@@ -123,7 +137,7 @@ export default function CPMKManagement() {
     try {
       setLoading(true);
       
-      let response;
+      let courseList = [];
       
       // Check if kaprodi route - filter by prodi
       if (!isAdminRoute) {
@@ -134,7 +148,14 @@ export default function CPMKManagement() {
         console.log('📚 Loading courses for prodi_id:', prodiId);
         
         if (prodiId) {
-          response = await courseAPI.getByProgramId(prodiId);
+          const response = await courseAPI.getByProgramId(prodiId);
+          if (response.data.success) {
+            let data = response.data.data;
+            if (data && data.data && Array.isArray(data.data)) {
+              data = data.data;
+            }
+            courseList = Array.isArray(data) ? data : [];
+          }
         } else {
           console.warn('⚠️ No prodi_id found for kaprodi user');
           setCourses([]);
@@ -143,28 +164,30 @@ export default function CPMKManagement() {
           return;
         }
       } else {
-        // Admin: get all courses
-        response = await courseAPI.getAll();
+        // Admin: get all courses + common courses
+        const [allCoursesRes, commonCoursesRes] = await Promise.all([
+          courseAPI.getAll(),
+          commonCourseAPI.getAll()
+        ]);
+        
+        // Parse regular courses
+        if (allCoursesRes.data.success) {
+          let data = allCoursesRes.data.data;
+          if (data && data.data && Array.isArray(data.data)) {
+            data = data.data;
+          }
+          // Filter out common courses from regular list (they'll be added from commonCourses)
+          courseList = Array.isArray(data) ? data.filter(c => !c.is_common) : [];
+        }
+        
+        // Add common courses
+        if (commonCoursesRes.data.success) {
+          const commonCourses = commonCoursesRes.data.data || [];
+          courseList = [...courseList, ...commonCourses];
+        }
       }
       
-      console.log('📦 Course API Response:', response);
-      
-      if (response.data.success) {
-        // Handle nested data structure (response.data.data.data)
-        let courseList = response.data.data;
-        
-        // Check if data is nested one more level
-        if (courseList && courseList.data && Array.isArray(courseList.data)) {
-          courseList = courseList.data;
-        }
-        
-        // Ensure it's an array
-        if (!Array.isArray(courseList)) {
-          console.error('❌ courseList is not an array:', courseList);
-          courseList = [];
-        }
-        
-        console.log('✅ Course List:', courseList);
+      console.log('📦 Course List:', courseList);
         
         // Calculate CPMK & Sub-CPMK counts for each course
         const coursesWithCounts = await Promise.all(
@@ -192,7 +215,6 @@ export default function CPMKManagement() {
         
         setCourses(coursesWithCounts);
         setFilteredCourses(coursesWithCounts);
-      }
     } catch (error) {
       console.error('Failed to load courses:', error);
       showToast('Gagal memuat data mata kuliah', 'error');
@@ -226,6 +248,7 @@ export default function CPMKManagement() {
 
   const handleSelectCourse = async (course) => {
     setSelectedCourse(course);
+    setIsCommonCourse(course.is_common === true);
     setExpandedCpmk(null);
     setEditingCpmk(null);
     setEditingSubCpmk(null);
@@ -1066,6 +1089,10 @@ export default function CPMKManagement() {
     }
   };
 
+  // Determine if user can edit CPMK
+  // Admin can edit all, Kaprodi can only edit non-common courses
+  const canEdit = isAdminRoute || (selectedCourse && !selectedCourse.is_common);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -1099,7 +1126,7 @@ export default function CPMKManagement() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {/* Global Action Buttons */}
-        {!isAdminRoute && (
+        {canEdit && (
           <div className="mb-4 sm:mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
@@ -1177,7 +1204,14 @@ export default function CPMKManagement() {
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-gray-900 truncate text-sm sm:text-base">{course.code}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="font-medium text-gray-900 truncate text-sm sm:text-base">{course.code}</p>
+                              {course.is_common && (
+                                <span className="inline-flex items-center px-1 py-0.5 text-[10px] bg-purple-100 text-purple-700 rounded">
+                                  Umum
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs sm:text-sm text-gray-600 line-clamp-2 mt-0.5 sm:mt-1">{course.title}</p>
                           </div>
                           <div className="flex flex-col items-end gap-0.5 sm:gap-1 flex-shrink-0">
@@ -1215,7 +1249,20 @@ export default function CPMKManagement() {
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                     <div className="flex-1">
-                      <h2 className="text-xl sm:text-2xl font-bold text-gray-900">{selectedCourse.code}</h2>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-xl sm:text-2xl font-bold text-gray-900">{selectedCourse.code}</h2>
+                        {selectedCourse.is_common && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
+                            Matkul Umum
+                          </span>
+                        )}
+                        {!canEdit && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
+                            <Lock className="w-3 h-3" />
+                            Hanya Lihat
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm sm:text-base text-gray-600 mt-1">{selectedCourse.title}</p>
                       <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-2 sm:mt-3">
                         <span className="text-xs sm:text-sm text-gray-500">
@@ -1230,7 +1277,7 @@ export default function CPMKManagement() {
                         </span>
                       </div>
                     </div>
-                    {!isAdminRoute && (
+                    {canEdit && (
                       <div className="flex flex-col gap-2">
                         {/* Add CPMK button */}
                         <button
@@ -1245,7 +1292,7 @@ export default function CPMKManagement() {
                   </div>
 
                   {/* Add CPMK Form */}
-                  {showAddCpmk && !isAdminRoute && (
+                  {showAddCpmk && canEdit && (
                     <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-blue-50 rounded-lg border border-blue-200">
                       <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                         <div className="flex-1">
@@ -1322,7 +1369,7 @@ export default function CPMKManagement() {
                     <div className="text-center text-gray-500">
                       <AlertCircle className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 text-gray-400" />
                       <p className="text-sm sm:text-base">Belum ada CPMK untuk mata kuliah ini</p>
-                      {!isAdminRoute && (
+                      {canEdit && (
                         <button
                           onClick={() => setShowAddCpmk(true)}
                           className="mt-3 sm:mt-4 text-blue-600 hover:text-blue-700 font-medium text-sm sm:text-base"
@@ -1412,7 +1459,7 @@ export default function CPMKManagement() {
                                         )}
                                       </div>
                                     </div>
-                                    {!isAdminRoute && (
+                                    {canEdit && (
                                       <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
                                         <button
                                           onClick={() => setEditingCpmk({ id: cpmk.id, description: cpmk.description, matched_cpl: cpmk.matched_cpl || '' })}
@@ -1462,7 +1509,7 @@ export default function CPMKManagement() {
                           <div className="border-t border-gray-200 bg-gray-50 p-3 sm:p-4">
                             <div className="flex items-center justify-between mb-3 sm:mb-4">
                               <h4 className="text-xs sm:text-sm font-semibold text-gray-700">Sub-CPMK</h4>
-                              {!isAdminRoute && (
+                              {canEdit && (
                                 <button
                                   onClick={() => setShowAddSubCpmk(cpmk.id)}
                                   className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-green-600 text-white text-xs sm:text-sm rounded-lg hover:bg-green-700 transition-colors"
@@ -1474,7 +1521,7 @@ export default function CPMKManagement() {
                             </div>
 
                             {/* Add Sub-CPMK Form */}
-                            {showAddSubCpmk === cpmk.id && !isAdminRoute && (
+                            {showAddSubCpmk === cpmk.id && canEdit && (
                               <div className="mb-4 p-3 bg-white rounded-lg border border-green-200">
                                 <div className="flex items-start gap-2">
                                   <div className="flex-1">
@@ -1560,7 +1607,7 @@ export default function CPMKManagement() {
                                             Bobot: {(sub.bobot || (100/14)).toFixed(2)}%
                                           </span>
                                         </div>
-                                        {!isAdminRoute && (
+                                        {canEdit && (
                                           <div className="flex items-center gap-0.5 flex-shrink-0">
                                             <button
                                               onClick={() => setEditingSubCpmk({ id: sub.id, description: sub.description })}

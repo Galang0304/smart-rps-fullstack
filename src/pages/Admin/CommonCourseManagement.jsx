@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
   Edit2, 
@@ -10,12 +11,15 @@ import {
   Building2,
   ChevronDown,
   ChevronUp,
-  Users
+  Users,
+  FileText
 } from 'lucide-react';
 import { commonCourseAPI, prodiAPI } from '../../services/api';
 import Toast from '../../components/Toast';
 
 export default function CommonCourseManagement() {
+  const navigate = useNavigate();
+  
   // States
   const [courses, setCourses] = useState([]);
   const [prodis, setProdis] = useState([]);
@@ -325,6 +329,13 @@ export default function CommonCourseManagement() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => navigate(`/admin/cpmk?course_id=${course.id}`)}
+                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                        title="Kelola CPMK"
+                      >
+                        <FileText className="w-5 h-5" />
+                      </button>
                       <button
                         onClick={() => openAssignModal(course)}
                         className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
