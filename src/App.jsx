@@ -31,6 +31,7 @@ import AdminDosenManagement from './pages/Admin/AdminDosenManagement';
 import ProgramManagement from './pages/Admin/ProgramManagement';
 import CPMKManagement from './pages/Admin/CPMKManagement';
 import CPLManagement from './pages/Admin/CPLManagement';
+import CommonCourseManagement from './pages/Admin/CommonCourseManagement';
 
 // Kaprodi Pages
 
@@ -95,6 +96,11 @@ function Layout({ children }) {
       icon: BookOpen, 
       label: 'Mata Kuliah', 
       path: '/admin/courses' 
+    },
+    { 
+      icon: BookOpen, 
+      label: 'Matkul Umum', 
+      path: '/admin/common-courses' 
     },
     { 
       icon: Target, 
@@ -388,6 +394,11 @@ export default function App() {
         <Route path="/admin/cpmk" element={
           <ProtectedRoute allowedRoles={['admin']}>
             <CPMKManagement />
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/common-courses" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <CommonCourseManagement />
           </ProtectedRoute>
         } />
 

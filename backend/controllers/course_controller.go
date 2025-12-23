@@ -54,6 +54,7 @@ func (cc *CourseController) GetAll(c *gin.Context) {
 }
 
 // GetByProgramId - Get courses by program ID (actually accepts prodi_id from frontend)
+// Also includes common courses assigned to this prodi
 func (cc *CourseController) GetByProgramId(c *gin.Context) {
 	prodiIdStr := c.Param("id")
 
@@ -71,23 +72,27 @@ func (cc *CourseController) GetByProgramId(c *gin.Context) {
 		return
 	}
 
-	if prodi.ProgramID == nil {
-		// If prodi doesn't have program_id, return empty array
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"data": gin.H{
-				"data": []models.Course{},
-			},
-		})
-		return
+	var courses []models.Course
+
+	// Get program-specific courses (non-common)
+	if prodi.ProgramID != nil {
+		programID := *prodi.ProgramID
+		cc.db.Where("program_id = ? AND (is_common = ? OR is_common IS NULL)", programID, false).
+			Preload("Program").
+			Find(&courses)
 	}
 
-	programID := *prodi.ProgramID
+	// Get common courses assigned to this prodi
+	var commonCourseIDs []uuid.UUID
+	cc.db.Model(&models.CourseProdiAssign{}).
+		Where("prodi_id = ?", prodiID).
+		Pluck("course_id", &commonCourseIDs)
 
-	var courses []models.Course
-	if err := cc.db.Where("program_id = ?", programID).Preload("Program").Find(&courses).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch courses"})
-		return
+	if len(commonCourseIDs) > 0 {
+		var commonCourses []models.Course
+		cc.db.Where("id IN ? AND is_common = ?", commonCourseIDs, true).
+			Find(&commonCourses)
+		courses = append(courses, commonCourses...)
 	}
 
 	c.JSON(http.StatusOK, gin.H{

@@ -21,6 +21,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 	cplController := controllers.NewCPLController(db)
 	aiController := controllers.NewAIController(db)
 	cleanupController := controllers.NewCleanupController(db)
+	commonCourseController := controllers.NewCommonCourseController(db)
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
@@ -177,6 +178,17 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 		cleanup := v1.Group("/cleanup")
 		{
 			cleanup.POST("/all-except-admin", cleanupController.CleanupAllDataExceptAdmin)
+		}
+
+		// Common Courses routes (Admin only - for mata kuliah umum)
+		commonCourses := v1.Group("/common-courses")
+		{
+			commonCourses.GET("", commonCourseController.GetCommonCourses)
+			commonCourses.POST("", commonCourseController.CreateCommonCourse)
+			commonCourses.PUT("/:id", commonCourseController.UpdateCommonCourse)
+			commonCourses.DELETE("/:id", commonCourseController.DeleteCommonCourse)
+			commonCourses.POST("/:id/assign", commonCourseController.AssignToProdi)
+			commonCourses.GET("/prodi/:prodi_id", commonCourseController.GetCoursesByProdi)
 		}
 	}
 }

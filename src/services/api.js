@@ -220,11 +220,14 @@ export const userAPI = {
   delete: (id) => apiClient.delete(`/users/${id}`),
 };
 
-// === MAPPING APIs ===
-export const mappingAPI = {
-  getByProdi: (prodiId) => apiClient.get(`/mapping/prodi/${prodiId}`),
-  getByCourse: (courseId) => apiClient.get(`/mapping/course/${courseId}`),
-  exportExcel: (params) => apiClient.get('/mapping/export/excel', { params, responseType: 'blob' }),
+// === COMMON COURSE APIs (Mata Kuliah Umum) ===
+export const commonCourseAPI = {
+  getAll: () => apiClient.get('/common-courses'),
+  create: (data) => apiClient.post('/common-courses', data),
+  update: (id, data) => apiClient.put(`/common-courses/${id}`, data),
+  delete: (id) => apiClient.delete(`/common-courses/${id}`),
+  assignToProdi: (id, prodiIds) => apiClient.post(`/common-courses/${id}/assign`, { prodi_ids: prodiIds }),
+  getByProdi: (prodiId) => apiClient.get(`/common-courses/prodi/${prodiId}`),
 };
 
 export default apiClient;

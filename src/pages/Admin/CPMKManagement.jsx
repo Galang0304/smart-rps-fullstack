@@ -18,7 +18,7 @@ import {
   Download,
   Upload
 } from 'lucide-react';
-import { courseAPI, cpmkAPI } from '../../services/api';
+import { courseAPI, cpmkAPI, cplAPI } from '../../services/api';
 import Toast from '../../components/Toast';
 
 export default function CPMKManagement() {
@@ -40,9 +40,12 @@ export default function CPMKManagement() {
   const [editingSubCpmk, setEditingSubCpmk] = useState(null);
   
   // Form states
-  const [newCpmkForm, setNewCpmkForm] = useState({ description: '', bobot: '' });
+  const [newCpmkForm, setNewCpmkForm] = useState({ description: '', bobot: '', matched_cpl: '' });
   const [newSubCpmkForm, setNewSubCpmkForm] = useState({ description: '' });
   const [showAddCpmk, setShowAddCpmk] = useState(false);
+  
+  // CPL states
+  const [cplList, setCplList] = useState([]);
   const [showAddSubCpmk, setShowAddSubCpmk] = useState(null);
   const [importing, setImporting] = useState(false);
   
@@ -119,7 +122,31 @@ export default function CPMKManagement() {
   const loadCourses = async () => {
     try {
       setLoading(true);
-      const response = await courseAPI.getAll();
+      
+      let response;
+      
+      // Check if kaprodi route - filter by prodi
+      if (!isAdminRoute) {
+        // Get prodi_id from localStorage
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        const prodiId = user.prodi_id || localStorage.getItem('prodi_id');
+        
+        console.log('📚 Loading courses for prodi_id:', prodiId);
+        
+        if (prodiId) {
+          response = await courseAPI.getByProgramId(prodiId);
+        } else {
+          console.warn('⚠️ No prodi_id found for kaprodi user');
+          setCourses([]);
+          setFilteredCourses([]);
+          setLoading(false);
+          return;
+        }
+      } else {
+        // Admin: get all courses
+        response = await courseAPI.getAll();
+      }
+      
       console.log('📦 Course API Response:', response);
       
       if (response.data.success) {
@@ -205,6 +232,9 @@ export default function CPMKManagement() {
     setShowAddCpmk(false);
     setShowAddSubCpmk(null);
     
+    // Load CPL for this course's prodi
+    await loadCplForCourse(course);
+    
     const cpmks = await loadCpmkForCourse(course.id);
     
     // ALWAYS force-update bobot to ensure consistency
@@ -213,6 +243,53 @@ export default function CPMKManagement() {
       await autoRedistributeBobot(course.id);
       await autoRedistributeSubCpmkBobot(course.id);
       await loadCpmkForCourse(course.id); // Reload untuk update UI
+    }
+  };
+
+  // Load CPL based on course's prodi or user's prodi
+  const loadCplForCourse = async (course) => {
+    try {
+      let prodiId = null;
+      
+      // Try to get prodi_id from course's program
+      if (course.program && course.program.prodi_id) {
+        prodiId = course.program.prodi_id;
+      } else {
+        // Fallback: get prodi_id from logged in user or localStorage
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        if (user.prodi_id) {
+          prodiId = user.prodi_id;
+        } else {
+          // Try direct localStorage prodi_id
+          prodiId = localStorage.getItem('prodi_id');
+        }
+      }
+      
+      console.log('📚 Loading CPL for prodi_id:', prodiId);
+      
+      if (prodiId) {
+        const response = await cplAPI.getByProdiId(prodiId);
+        console.log('📋 CPL Response:', response.data);
+        if (response.data.success) {
+          const cplData = response.data.data || [];
+          console.log('✅ CPL Data loaded:', cplData.length, 'items');
+          setCplList(cplData);
+        } else {
+          console.warn('CPL API response not success:', response.data);
+          setCplList([]);
+        }
+      } else {
+        // Try to get all CPL if prodi_id is not available
+        console.log('⚠️ No prodi_id found, trying to load all CPL');
+        const response = await cplAPI.getAll();
+        console.log('📋 All CPL Response:', response.data);
+        if (response.data.success) {
+          setCplList(response.data.data || []);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load CPL:', error);
+      setCplList([]);
     }
   };
 
@@ -229,7 +306,8 @@ export default function CPMKManagement() {
         course_id: selectedCourse.id,
         cpmk_number: nextNumber,
         description: newCpmkForm.description,
-        bobot: 0 // Temporary, will be auto-distributed
+        bobot: 0, // Temporary, will be auto-distributed
+        matched_cpl: newCpmkForm.matched_cpl || '' // CPL yang dipilih
       });
 
       if (response.data.success) {
@@ -237,8 +315,9 @@ export default function CPMKManagement() {
         await autoRedistributeBobot(selectedCourse.id);
         await loadCpmkForCourse(selectedCourse.id);
         await loadCourses();
-        setNewCpmkForm({ description: '', bobot: '' });
+        setNewCpmkForm({ description: '', bobot: '', matched_cpl: '' });
         setShowAddCpmk(false);
+        showToast('CPMK berhasil ditambahkan', 'success');
       }
     } catch (error) {
       console.error('Failed to add CPMK:', error);
@@ -254,7 +333,8 @@ export default function CPMKManagement() {
 
     try {
       const response = await cpmkAPI.update(cpmkId, {
-        description: editingCpmk.description
+        description: editingCpmk.description,
+        matched_cpl: editingCpmk.matched_cpl || ''
         // Bobot tidak perlu diupdate karena auto-managed
       });
 
@@ -263,7 +343,7 @@ export default function CPMKManagement() {
         setCpmkList(prevList => 
           prevList.map(c => 
             c.id === cpmkId 
-              ? { ...c, description: editingCpmk.description }
+              ? { ...c, description: editingCpmk.description, matched_cpl: editingCpmk.matched_cpl }
               : c
           )
         );
@@ -1001,15 +1081,15 @@ export default function CPMKManagement() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Manajemen CPMK</h1>
-              <p className="text-gray-600 mt-1">Kelola Capaian Pembelajaran Mata Kuliah</p>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Manajemen CPMK</h1>
+              <p className="text-sm sm:text-base text-gray-600 mt-1">Kelola Capaian Pembelajaran Mata Kuliah</p>
             </div>
             <button
               onClick={() => navigate(isAdminRoute ? '/admin/courses' : '/kaprodi/courses')}
-              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="self-start sm:self-auto px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm sm:text-base"
             >
               Kembali
             </button>
@@ -1017,37 +1097,37 @@ export default function CPMKManagement() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {/* Global Action Buttons */}
         {!isAdminRoute && (
-          <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
+          <div className="mb-4 sm:mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <h3 className="font-semibold text-gray-900">Import & Export CPMK</h3>
-                <p className="text-sm text-gray-600 mt-1">Kelola data CPMK untuk semua mata kuliah</p>
+                <h3 className="font-semibold text-gray-900 text-sm sm:text-base">Import & Export CPMK</h3>
+                <p className="text-xs sm:text-sm text-gray-600 mt-1">Kelola data CPMK untuk semua mata kuliah</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={handleExportAll}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-xs sm:text-sm"
                   title="Export SEMUA CPMK dari semua mata kuliah"
                 >
-                  <Download className="w-4 h-4" />
-                  Export All
+                  <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="hidden xs:inline">Export</span> All
                 </button>
                 
                 <button
                   onClick={handleDownloadTemplate}
-                  className="flex items-center gap-2 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-xs sm:text-sm"
                   title="Download template Excel untuk import"
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   Template
                 </button>
                 
-                <label className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors cursor-pointer">
-                  <Upload className="w-4 h-4" />
-                  {importing ? 'Importing...' : 'Import All'}
+                <label className="flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors cursor-pointer text-xs sm:text-sm">
+                  <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  {importing ? 'Importing...' : <><span className="hidden xs:inline">Import</span> All</>}
                   <input
                     type="file"
                     accept=".xlsx,.xls"
@@ -1061,29 +1141,29 @@ export default function CPMKManagement() {
           </div>
         )}
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="flex flex-col lg:grid lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Course List - Left Sidebar */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden sticky top-24">
-              <div className="p-4 border-b border-gray-200 bg-gray-50">
-                <h2 className="font-semibold text-gray-900 mb-3">Mata Kuliah</h2>
+          <div className="lg:col-span-1 order-1">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden lg:sticky lg:top-24">
+              <div className="p-3 sm:p-4 border-b border-gray-200 bg-gray-50">
+                <h2 className="font-semibold text-gray-900 mb-2 sm:mb-3 text-sm sm:text-base">Mata Kuliah</h2>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
                   <input
                     type="text"
                     placeholder="Cari mata kuliah..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
               </div>
               
-              <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
+              <div className="max-h-[250px] sm:max-h-[300px] lg:max-h-[calc(100vh-280px)] overflow-y-auto">
                 {filteredCourses.length === 0 ? (
-                  <div className="p-8 text-center text-gray-500">
-                    <BookOpen className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                    <p>Tidak ada mata kuliah</p>
+                  <div className="p-6 sm:p-8 text-center text-gray-500">
+                    <BookOpen className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 text-gray-400" />
+                    <p className="text-sm sm:text-base">Tidak ada mata kuliah</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-gray-100">
@@ -1091,21 +1171,21 @@ export default function CPMKManagement() {
                       <button
                         key={course.id}
                         onClick={() => handleSelectCourse(course)}
-                        className={`w-full text-left p-4 hover:bg-blue-50 transition-colors ${
+                        className={`w-full text-left p-3 sm:p-4 hover:bg-blue-50 transition-colors ${
                           selectedCourse?.id === course.id ? 'bg-blue-50 border-l-4 border-blue-600' : ''
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-gray-900 truncate">{course.code}</p>
-                            <p className="text-sm text-gray-600 line-clamp-2 mt-1">{course.title}</p>
+                            <p className="font-medium text-gray-900 truncate text-sm sm:text-base">{course.code}</p>
+                            <p className="text-xs sm:text-sm text-gray-600 line-clamp-2 mt-0.5 sm:mt-1">{course.title}</p>
                           </div>
-                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                            <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded">
+                          <div className="flex flex-col items-end gap-0.5 sm:gap-1 flex-shrink-0">
+                            <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium bg-green-100 text-green-800 rounded">
                               {course.cpmkCount || 0} CPMK
                             </span>
                             {course.subCpmkCount > 0 && (
-                              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded">
+                              <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium bg-blue-100 text-blue-800 rounded">
                                 {course.subCpmkCount} Sub
                               </span>
                             )}
@@ -1120,31 +1200,31 @@ export default function CPMKManagement() {
           </div>
 
           {/* CPMK Detail - Main Content */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 order-2">
             {!selectedCourse ? (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 sm:p-12">
                 <div className="text-center text-gray-500">
-                  <ListChecks className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Pilih Mata Kuliah</h3>
-                  <p>Pilih mata kuliah dari daftar untuk melihat dan mengelola CPMK</p>
+                  <ListChecks className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 text-gray-400" />
+                  <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">Pilih Mata Kuliah</h3>
+                  <p className="text-sm sm:text-base">Pilih mata kuliah dari daftar untuk melihat dan mengelola CPMK</p>
                 </div>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 {/* Course Header */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <div className="flex items-start justify-between">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                     <div className="flex-1">
-                      <h2 className="text-2xl font-bold text-gray-900">{selectedCourse.code}</h2>
-                      <p className="text-gray-600 mt-1">{selectedCourse.title}</p>
-                      <div className="flex items-center gap-4 mt-3">
-                        <span className="text-sm text-gray-500">
+                      <h2 className="text-xl sm:text-2xl font-bold text-gray-900">{selectedCourse.code}</h2>
+                      <p className="text-sm sm:text-base text-gray-600 mt-1">{selectedCourse.title}</p>
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-2 sm:mt-3">
+                        <span className="text-xs sm:text-sm text-gray-500">
                           <span className="font-medium">{selectedCourse.credits}</span> SKS
                         </span>
-                        <span className="text-sm text-gray-500">
+                        <span className="text-xs sm:text-sm text-gray-500">
                           Semester <span className="font-medium">{selectedCourse.semester}</span>
                         </span>
-                        <span className={`text-sm font-medium ${calculateTotalBobot() === 100 ? 'text-green-600' : 'text-red-600'}`}>
+                        <span className={`text-xs sm:text-sm font-medium ${calculateTotalBobot() === 100 ? 'text-green-600' : 'text-red-600'}`}>
                           Total Bobot: {calculateTotalBobot().toFixed(2)}%
                           {calculateTotalBobot() === 100 ? ' ✓' : ` (harus 100%)`}
                         </span>
@@ -1155,9 +1235,9 @@ export default function CPMKManagement() {
                         {/* Add CPMK button */}
                         <button
                           onClick={() => setShowAddCpmk(true)}
-                          className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                          className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
                         >
-                          <Plus className="w-5 h-5" />
+                          <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
                           Tambah CPMK
                         </button>
                       </div>
@@ -1166,42 +1246,69 @@ export default function CPMKManagement() {
 
                   {/* Add CPMK Form */}
                   {showAddCpmk && !isAdminRoute && (
-                    <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                      <div className="flex items-start gap-3">
+                    <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                         <div className="flex-1">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              CPMK {cpmkList.length + 1}
-                            </label>
-                            <textarea
-                              value={newCpmkForm.description}
-                              onChange={(e) => setNewCpmkForm({ ...newCpmkForm, description: e.target.value })}
-                              placeholder="Deskripsi CPMK..."
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              rows="3"
-                            />
-                            <p className="text-xs text-blue-600 mt-2">
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
+                                CPMK {cpmkList.length + 1}
+                              </label>
+                              <textarea
+                                value={newCpmkForm.description}
+                                onChange={(e) => setNewCpmkForm({ ...newCpmkForm, description: e.target.value })}
+                                placeholder="Deskripsi CPMK..."
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                rows="3"
+                              />
+                            </div>
+                            
+                            {/* CPL Selection */}
+                            <div>
+                              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
+                                Terhubung dengan CPL
+                              </label>
+                              <select
+                                value={newCpmkForm.matched_cpl || ''}
+                                onChange={(e) => setNewCpmkForm({ ...newCpmkForm, matched_cpl: e.target.value })}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              >
+                                <option value="">-- Pilih CPL --</option>
+                                {cplList.map((cpl) => (
+                                  <option key={cpl.id} value={cpl.kode_cpl}>
+                                    {cpl.kode_cpl} - {cpl.cpl?.substring(0, 60)}{cpl.cpl?.length > 60 ? '...' : ''}
+                                  </option>
+                                ))}
+                              </select>
+                              <p className="text-xs text-gray-500 mt-1">
+                                Pilih CPL yang relevan dengan CPMK ini
+                              </p>
+                            </div>
+                            
+                            <p className="text-xs text-blue-600">
                               💡 Bobot akan otomatis dibagi rata ke semua CPMK
                             </p>
                           </div>
                         </div>
-                        <div className="flex flex-col gap-2">
+                        <div className="flex sm:flex-col gap-2 mt-3 sm:mt-0">
                           <button
                             onClick={handleAddCpmk}
-                            className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                            className="flex-1 sm:flex-none p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-1"
                             title="Simpan"
                           >
-                            <Save className="w-5 h-5" />
+                            <Save className="w-4 h-4 sm:w-5 sm:h-5" />
+                            <span className="sm:hidden text-sm">Simpan</span>
                           </button>
                           <button
                             onClick={() => {
                               setShowAddCpmk(false);
-                              setNewCpmkForm({ description: '', bobot: '' });
+                              setNewCpmkForm({ description: '', bobot: '', matched_cpl: '' });
                             }}
-                            className="p-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 transition-colors"
+                            className="flex-1 sm:flex-none p-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 transition-colors flex items-center justify-center gap-1"
                             title="Batal"
                           >
-                            <X className="w-5 h-5" />
+                            <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                            <span className="sm:hidden text-sm">Batal</span>
                           </button>
                         </div>
                       </div>
@@ -1211,14 +1318,14 @@ export default function CPMKManagement() {
 
                 {/* CPMK List */}
                 {cpmkList.length === 0 ? (
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12">
+                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 sm:p-12">
                     <div className="text-center text-gray-500">
-                      <AlertCircle className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                      <p>Belum ada CPMK untuk mata kuliah ini</p>
+                      <AlertCircle className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 text-gray-400" />
+                      <p className="text-sm sm:text-base">Belum ada CPMK untuk mata kuliah ini</p>
                       {!isAdminRoute && (
                         <button
                           onClick={() => setShowAddCpmk(true)}
-                          className="mt-4 text-blue-600 hover:text-blue-700 font-medium"
+                          className="mt-3 sm:mt-4 text-blue-600 hover:text-blue-700 font-medium text-sm sm:text-base"
                         >
                           Tambah CPMK Pertama
                         </button>
@@ -1226,44 +1333,64 @@ export default function CPMKManagement() {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-2 sm:space-y-3">
                     {cpmkList.map((cpmk, index) => (
                       <div
                         key={cpmk.id}
                         className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
                       >
                         {/* CPMK Header */}
-                        <div className="p-4">
-                          <div className="flex items-start gap-3">
+                        <div className="p-3 sm:p-4">
+                          <div className="flex items-start gap-2 sm:gap-3">
                             {/* CPMK Number Badge */}
-                            <div className="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                              <span className="text-lg font-bold text-blue-700">{cpmk.cpmk_number}</span>
+                            <div className="flex-shrink-0 w-9 h-9 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                              <span className="text-base sm:text-lg font-bold text-blue-700">{cpmk.cpmk_number}</span>
                             </div>
 
                             {/* CPMK Content */}
                             <div className="flex-1 min-w-0">
                               {editingCpmk?.id === cpmk.id ? (
                                 // Edit Mode
-                                <div className="space-y-2">
+                                <div className="space-y-2 sm:space-y-3">
                                   <textarea
                                     value={editingCpmk.description}
                                     onChange={(e) => setEditingCpmk({ ...editingCpmk, description: e.target.value })}
-                                    className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                     rows="3"
                                   />
+                                  
+                                  {/* CPL Selection in Edit Mode */}
+                                  <div>
+                                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
+                                      Terhubung dengan CPL
+                                    </label>
+                                    <select
+                                      value={editingCpmk.matched_cpl || ''}
+                                      onChange={(e) => setEditingCpmk({ ...editingCpmk, matched_cpl: e.target.value })}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                    >
+                                      <option value="">-- Pilih CPL --</option>
+                                      {cplList.map((cpl) => (
+                                        <option key={cpl.id} value={cpl.kode_cpl}>
+                                          {cpl.kode_cpl} - {cpl.cpl?.substring(0, 50)}{cpl.cpl?.length > 50 ? '...' : ''}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  
                                   <div className="flex items-center gap-2">
                                     <button
                                       onClick={() => handleUpdateCpmk(cpmk.id)}
-                                      className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1"
+                                      className="px-2.5 sm:px-3 py-1.5 bg-green-600 text-white text-xs sm:text-sm rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1"
                                     >
-                                      <CheckCircle className="w-4 h-4" />
+                                      <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                       Simpan
                                     </button>
                                     <button
                                       onClick={() => setEditingCpmk(null)}
-                                      className="px-3 py-1.5 bg-gray-400 text-white text-sm rounded-lg hover:bg-gray-500 transition-colors flex items-center gap-1"
+                                      className="px-2.5 sm:px-3 py-1.5 bg-gray-400 text-white text-xs sm:text-sm rounded-lg hover:bg-gray-500 transition-colors flex items-center gap-1"
                                     >
-                                      <X className="w-4 h-4" />
+                                      <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                       Batal
                                     </button>
                                   </div>
@@ -1273,33 +1400,33 @@ export default function CPMKManagement() {
                                 <>
                                   <div className="flex items-start justify-between gap-2">
                                     <div className="flex-1">
-                                      <p className="text-gray-900 leading-relaxed">{cpmk.description}</p>
-                                      <div className="flex flex-wrap items-center gap-2 mt-2">
-                                        <span className="inline-block px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded">
+                                      <p className="text-sm sm:text-base text-gray-900 leading-relaxed">{cpmk.description}</p>
+                                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-2">
+                                        <span className="inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs font-medium bg-purple-100 text-purple-800 rounded">
                                           Bobot: {parseFloat(cpmk.bobot || 0).toFixed(2)}%
                                         </span>
                                         {cpmk.matched_cpl && cpmk.matched_cpl !== '' && (
-                                          <span className="inline-block px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">
+                                          <span className="inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs font-medium bg-green-100 text-green-800 rounded">
                                             CPL: {cpmk.matched_cpl}
                                           </span>
                                         )}
                                       </div>
                                     </div>
                                     {!isAdminRoute && (
-                                      <div className="flex items-center gap-1 flex-shrink-0">
+                                      <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
                                         <button
-                                          onClick={() => setEditingCpmk({ id: cpmk.id, description: cpmk.description })}
-                                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                          onClick={() => setEditingCpmk({ id: cpmk.id, description: cpmk.description, matched_cpl: cpmk.matched_cpl || '' })}
+                                          className="p-1 sm:p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
                                           title="Edit CPMK"
                                         >
-                                          <Edit className="w-4 h-4" />
+                                          <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                         </button>
                                         <button
                                           onClick={() => handleDeleteCpmk(cpmk.id, cpmk.description)}
-                                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                          className="p-1 sm:p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
                                           title="Hapus CPMK"
                                         >
-                                          <Trash2 className="w-4 h-4" />
+                                          <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                         </button>
                                       </div>
                                     )}
@@ -1309,16 +1436,16 @@ export default function CPMKManagement() {
                                   {cpmk.sub_cpmks && cpmk.sub_cpmks.length > 0 && (
                                     <button
                                       onClick={() => toggleExpand(cpmk.id)}
-                                      className="mt-3 flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                                      className="mt-2 sm:mt-3 flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-blue-600 hover:text-blue-700 font-medium"
                                     >
                                       {expandedCpmk === cpmk.id ? (
                                         <>
-                                          <ChevronUp className="w-4 h-4" />
+                                          <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                           Sembunyikan Sub-CPMK ({cpmk.sub_cpmks.length})
                                         </>
                                       ) : (
                                         <>
-                                          <ChevronDown className="w-4 h-4" />
+                                          <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                           Lihat Sub-CPMK ({cpmk.sub_cpmks.length})
                                         </>
                                       )}
@@ -1332,15 +1459,15 @@ export default function CPMKManagement() {
 
                         {/* Sub-CPMK Section */}
                         {expandedCpmk === cpmk.id && (
-                          <div className="border-t border-gray-200 bg-gray-50 p-4">
-                            <div className="flex items-center justify-between mb-4">
-                              <h4 className="text-sm font-semibold text-gray-700">Sub-CPMK</h4>
+                          <div className="border-t border-gray-200 bg-gray-50 p-3 sm:p-4">
+                            <div className="flex items-center justify-between mb-3 sm:mb-4">
+                              <h4 className="text-xs sm:text-sm font-semibold text-gray-700">Sub-CPMK</h4>
                               {!isAdminRoute && (
                                 <button
                                   onClick={() => setShowAddSubCpmk(cpmk.id)}
-                                  className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+                                  className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-green-600 text-white text-xs sm:text-sm rounded-lg hover:bg-green-700 transition-colors"
                                 >
-                                  <Plus className="w-4 h-4" />
+                                  <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                   Tambah Sub
                                 </button>
                               )}
@@ -1362,23 +1489,25 @@ export default function CPMKManagement() {
                                       rows="2"
                                     />
                                   </div>
-                                  <div className="flex flex-col gap-1">
+                                  <div className="flex sm:flex-col gap-1 mt-2 sm:mt-0">
                                     <button
                                       onClick={() => handleAddSubCpmk(cpmk.id)}
-                                      className="p-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                                      className="flex-1 sm:flex-none p-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center justify-center gap-1"
                                       title="Simpan"
                                     >
-                                      <Save className="w-4 h-4" />
+                                      <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                      <span className="sm:hidden text-xs">Simpan</span>
                                     </button>
                                     <button
                                       onClick={() => {
                                         setShowAddSubCpmk(null);
                                         setNewSubCpmkForm({ description: '' });
                                       }}
-                                      className="p-1.5 bg-gray-400 text-white rounded hover:bg-gray-500 transition-colors"
+                                      className="flex-1 sm:flex-none p-1.5 bg-gray-400 text-white rounded hover:bg-gray-500 transition-colors flex items-center justify-center gap-1"
                                       title="Batal"
                                     >
-                                      <X className="w-4 h-4" />
+                                      <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                      <span className="sm:hidden text-xs">Batal</span>
                                     </button>
                                   </div>
                                 </div>
@@ -1391,7 +1520,7 @@ export default function CPMKManagement() {
                                 {cpmk.sub_cpmks.map((sub) => (
                                   <div
                                     key={sub.id}
-                                    className="bg-white rounded-lg p-3 border border-gray-200 hover:border-blue-300 transition-colors"
+                                    className="bg-white rounded-lg p-2.5 sm:p-3 border border-gray-200 hover:border-blue-300 transition-colors"
                                   >
                                     {editingSubCpmk?.id === sub.id ? (
                                       // Edit Mode
@@ -1421,18 +1550,18 @@ export default function CPMKManagement() {
                                       </div>
                                     ) : (
                                       // View Mode
-                                      <div className="flex items-start gap-3">
-                                        <span className="flex-shrink-0 w-6 h-6 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-semibold">
+                                      <div className="flex items-start gap-2 sm:gap-3">
+                                        <span className="flex-shrink-0 w-5 h-5 sm:w-6 sm:h-6 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-semibold">
                                           {sub.sub_cpmk_number}
                                         </span>
-                                        <div className="flex-1">
-                                          <p className="text-sm text-gray-700 leading-relaxed">{sub.description}</p>
-                                          <span className="inline-block mt-1 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded">
-                                            Bobot: {(sub.bobot || (100/14)).toFixed(6)}%
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">{sub.description}</p>
+                                          <span className="inline-block mt-1 px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium bg-green-100 text-green-800 rounded">
+                                            Bobot: {(sub.bobot || (100/14)).toFixed(2)}%
                                           </span>
                                         </div>
                                         {!isAdminRoute && (
-                                          <div className="flex items-center gap-1 flex-shrink-0">
+                                          <div className="flex items-center gap-0.5 flex-shrink-0">
                                             <button
                                               onClick={() => setEditingSubCpmk({ id: sub.id, description: sub.description })}
                                               className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -1473,28 +1602,28 @@ export default function CPMKManagement() {
 
       {/* Import Progress Modal */}
       {importing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-4 sm:p-6">
             <div className="text-center">
-              <div className="relative w-20 h-20 mx-auto mb-4">
+              <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-3 sm:mb-4">
                 <div className="absolute inset-0 border-4 border-blue-200 rounded-full"></div>
                 <div className="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <Upload className="w-8 h-8 text-blue-600" />
+                  <Upload className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
                 </div>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Mengimpor CPMK...</h3>
-              <p className="text-gray-600 mb-4">{importProgress.currentCourse}</p>
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">Mengimpor CPMK...</h3>
+              <p className="text-sm sm:text-base text-gray-600 mb-3 sm:mb-4 truncate px-2">{importProgress.currentCourse}</p>
               
               {importProgress.total > 0 && (
                 <div className="space-y-2">
-                  <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div className="w-full bg-gray-200 rounded-full h-2.5 sm:h-3">
                     <div 
-                      className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-300"
+                      className="bg-gradient-to-r from-blue-500 to-blue-600 h-2.5 sm:h-3 rounded-full transition-all duration-300"
                       style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
                     ></div>
                   </div>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-xs sm:text-sm text-gray-500">
                     {importProgress.current} dari {importProgress.total} mata kuliah
                   </p>
                 </div>
@@ -1506,54 +1635,54 @@ export default function CPMKManagement() {
 
       {/* Import Result Modal */}
       {showImportResult && importResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[80vh] overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-hidden">
             {/* Header */}
-            <div className={`px-6 py-4 ${importResult.failed.length === 0 ? 'bg-gradient-to-r from-green-500 to-green-600' : 'bg-gradient-to-r from-yellow-500 to-orange-500'}`}>
+            <div className={`px-4 sm:px-6 py-3 sm:py-4 ${importResult.failed.length === 0 ? 'bg-gradient-to-r from-green-500 to-green-600' : 'bg-gradient-to-r from-yellow-500 to-orange-500'}`}>
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3">
                   {importResult.failed.length === 0 ? (
-                    <CheckCircle className="w-8 h-8 text-white" />
+                    <CheckCircle className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
                   ) : (
-                    <AlertCircle className="w-8 h-8 text-white" />
+                    <AlertCircle className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
                   )}
-                  <h3 className="text-xl font-bold text-white">Hasil Import CPMK</h3>
+                  <h3 className="text-lg sm:text-xl font-bold text-white">Hasil Import CPMK</h3>
                 </div>
                 <button
                   onClick={() => setShowImportResult(false)}
                   className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-1"
                 >
-                  <X className="w-6 h-6" />
+                  <X className="w-5 h-5 sm:w-6 sm:h-6" />
                 </button>
               </div>
             </div>
 
             {/* Summary */}
-            <div className="p-6 border-b border-gray-200">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-green-50 rounded-lg p-4 text-center">
-                  <p className="text-3xl font-bold text-green-600">{importResult.totalCpmk}</p>
-                  <p className="text-sm text-green-700">CPMK Berhasil</p>
+            <div className="p-4 sm:p-6 border-b border-gray-200">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                <div className="bg-green-50 rounded-lg p-3 sm:p-4 text-center">
+                  <p className="text-2xl sm:text-3xl font-bold text-green-600">{importResult.totalCpmk}</p>
+                  <p className="text-xs sm:text-sm text-green-700">CPMK Berhasil</p>
                 </div>
-                <div className="bg-blue-50 rounded-lg p-4 text-center">
-                  <p className="text-3xl font-bold text-blue-600">{importResult.totalCourses}</p>
-                  <p className="text-sm text-blue-700">Mata Kuliah</p>
+                <div className="bg-blue-50 rounded-lg p-3 sm:p-4 text-center">
+                  <p className="text-2xl sm:text-3xl font-bold text-blue-600">{importResult.totalCourses}</p>
+                  <p className="text-xs sm:text-sm text-blue-700">Mata Kuliah</p>
                 </div>
               </div>
             </div>
 
             {/* Details */}
-            <div className="overflow-y-auto max-h-60">
+            <div className="overflow-y-auto max-h-48 sm:max-h-60">
               {/* Success List */}
               {importResult.success.length > 0 && (
-                <div className="p-4 border-b border-gray-100">
-                  <h4 className="font-semibold text-green-700 mb-2 flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4" />
+                <div className="p-3 sm:p-4 border-b border-gray-100">
+                  <h4 className="font-semibold text-green-700 mb-2 flex items-center gap-2 text-sm sm:text-base">
+                    <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     Berhasil ({importResult.success.length})
                   </h4>
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                  <div className="space-y-1 max-h-28 sm:max-h-32 overflow-y-auto">
                     {importResult.success.map((item, idx) => (
-                      <div key={idx} className="flex justify-between text-sm py-1 px-2 bg-green-50 rounded">
+                      <div key={idx} className="flex justify-between text-xs sm:text-sm py-1 px-2 bg-green-50 rounded">
                         <span className="text-gray-700 truncate">{item.course}</span>
                         <span className="text-green-600 font-medium flex-shrink-0 ml-2">{item.count} CPMK</span>
                       </div>
@@ -1564,16 +1693,16 @@ export default function CPMKManagement() {
 
               {/* Failed List */}
               {importResult.failed.length > 0 && (
-                <div className="p-4">
-                  <h4 className="font-semibold text-red-700 mb-2 flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4" />
+                <div className="p-3 sm:p-4">
+                  <h4 className="font-semibold text-red-700 mb-2 flex items-center gap-2 text-sm sm:text-base">
+                    <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     Gagal ({importResult.failed.length})
                   </h4>
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                  <div className="space-y-1 max-h-28 sm:max-h-32 overflow-y-auto">
                     {importResult.failed.map((item, idx) => (
-                      <div key={idx} className="text-sm py-1 px-2 bg-red-50 rounded">
+                      <div key={idx} className="text-xs sm:text-sm py-1 px-2 bg-red-50 rounded">
                         <span className="font-medium text-gray-700">{item.course}</span>
-                        <span className="text-red-600 block text-xs">{item.reason}</span>
+                        <span className="text-red-600 block text-[10px] sm:text-xs">{item.reason}</span>
                       </div>
                     ))}
                   </div>
@@ -1582,10 +1711,10 @@ export default function CPMKManagement() {
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gray-50 border-t border-gray-200">
               <button
                 onClick={() => setShowImportResult(false)}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm sm:text-base"
               >
                 Tutup
               </button>

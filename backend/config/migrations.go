@@ -227,6 +227,25 @@ func RunMigrations(db *gorm.DB) error {
 	db.Exec(`ALTER TABLE cpmk ADD COLUMN IF NOT EXISTS matched_cpl TEXT`)
 	log.Println("✓ matched_cpl column added")
 
+	// Add is_common column to courses table for common courses feature
+	log.Println("Adding is_common column to courses...")
+	db.Exec(`ALTER TABLE courses ADD COLUMN IF NOT EXISTS is_common BOOLEAN DEFAULT false`)
+	log.Println("✓ is_common column added")
+
+	// Create course_prodi_assigns table for assigning common courses to prodis
+	log.Println("Creating course_prodi_assigns table...")
+	db.Exec(`CREATE TABLE IF NOT EXISTS course_prodi_assigns (
+		id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+		course_id uuid NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+		prodi_id uuid NOT NULL REFERENCES prodis(id) ON DELETE CASCADE,
+		created_at timestamp DEFAULT CURRENT_TIMESTAMP,
+		deleted_at timestamp,
+		UNIQUE(course_id, prodi_id)
+	)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_course_prodi_assigns_course_id ON course_prodi_assigns(course_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_course_prodi_assigns_prodi_id ON course_prodi_assigns(prodi_id)`)
+	log.Println("✓ course_prodi_assigns table created")
+
 	log.Println("✓ Database migrations completed")
 	return nil
 }
