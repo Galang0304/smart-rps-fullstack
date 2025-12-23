@@ -220,4 +220,11 @@ export const userAPI = {
   delete: (id) => apiClient.delete(`/users/${id}`),
 };
 
+// === MAPPING APIs ===
+export const mappingAPI = {
+  getByProdi: (prodiId) => apiClient.get(`/mapping/prodi/${prodiId}`),
+  getByCourse: (courseId) => apiClient.get(`/mapping/course/${courseId}`),
+  exportExcel: (params) => apiClient.get('/mapping/export/excel', { params, responseType: 'blob' }),
+};
+
 export default apiClient;

@@ -32,6 +32,8 @@ import ProgramManagement from './pages/Admin/ProgramManagement';
 import CPMKManagement from './pages/Admin/CPMKManagement';
 import CPLManagement from './pages/Admin/CPLManagement';
 
+// Kaprodi Pages
+
 // Dosen Pages  
 import DosenDashboard from './pages/Dosen/Dashboard';
 import DosenRPSList from './pages/Dosen/RPSList';
