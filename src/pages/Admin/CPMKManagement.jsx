@@ -1247,9 +1247,16 @@ export default function CPMKManagement() {
                                   <div className="flex items-start justify-between gap-2">
                                     <div className="flex-1">
                                       <p className="text-gray-900 leading-relaxed">{cpmk.description}</p>
-                                      <span className="inline-block mt-2 px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded">
-                                        Bobot: {parseFloat(cpmk.bobot || 0).toFixed(2)}%
-                                      </span>
+                                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                                        <span className="inline-block px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded">
+                                          Bobot: {parseFloat(cpmk.bobot || 0).toFixed(2)}%
+                                        </span>
+                                        {cpmk.matched_cpl && cpmk.matched_cpl !== '' && (
+                                          <span className="inline-block px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">
+                                            CPL: {cpmk.matched_cpl}
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
                                     {!isAdminRoute && (
                                       <div className="flex items-center gap-1 flex-shrink-0">
