@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Bot, Loader2, CheckCircle, AlertCircle, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { aiHelperAPI, cplAPI } from '../services/api';
 
-export default function CPMKWithCPLMapping({ cpmk, cpmkIndex, course, onChange, cpmkBobot = 0, totalCpmk = 0 }) {
+export default function CPMKWithCPLMapping({ cpmk, cpmkIndex, course, onChange, cpmkBobot = 0, subCpmkCount = 0 }) {
   const [allCPLs, setAllCPLs] = useState([]);
   const [loadingCPLs, setLoadingCPLs] = useState(false);
   const [matching, setMatching] = useState(false);
@@ -12,6 +12,21 @@ export default function CPMKWithCPLMapping({ cpmk, cpmkIndex, course, onChange, 
   const [recommendation, setRecommendation] = useState('');
 
   const prodiId = localStorage.getItem('prodi_id');
+
+  // KONSTANTA: Bobot Sub-CPMK = 100/14 (presisi penuh, tanpa pembulatan)
+  const SUB_CPMK_BOBOT = 100 / 14; // 7.142857142857143...
+
+  // Helper: Format bobot untuk tampilan (gunakan koma sebagai desimal, tanpa pembulatan)
+  const formatBobotDisplay = (value) => {
+    return value.toString().replace('.', ',');
+  };
+
+  // Calculate Bobot CPMK = jumlah Sub-CPMK × bobot Sub-CPMK
+  const calculateCpmkBobot = () => {
+    if (cpmkBobot > 0) return cpmkBobot;
+    if (subCpmkCount > 0) return subCpmkCount * SUB_CPMK_BOBOT;
+    return 0;
+  };
 
   // Sync selectedCPLs when cpmk.selected_cpls changes from parent
   useEffect(() => {
@@ -119,14 +134,16 @@ export default function CPMKWithCPLMapping({ cpmk, cpmkIndex, course, onChange, 
         <span className="inline-block px-3 py-1 bg-blue-600 text-white font-semibold rounded-lg text-sm flex-shrink-0">
           {cpmk.code}
         </span>
-        {/* Show bobot from database OR calculate from total CPMK for RPS */}
-        <span className="inline-block px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded whitespace-nowrap">
-          Bobot: {cpmkBobot > 0 
-            ? parseFloat(cpmkBobot).toFixed(2) 
-            : totalCpmk > 0 
-              ? (100 / totalCpmk).toFixed(2) 
-              : '0.00'}%
-        </span>
+        {/* Show bobot CPMK hanya jika sudah ada Sub-CPMK */}
+        {(subCpmkCount > 0 || cpmkBobot > 0) ? (
+          <span className="inline-block px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded whitespace-nowrap">
+            Bobot: {formatBobotDisplay(calculateCpmkBobot())}%
+          </span>
+        ) : (
+          <span className="inline-block px-2 py-1 bg-gray-100 text-gray-500 text-xs font-medium rounded whitespace-nowrap">
+            Bobot: -
+          </span>
+        )}
         <textarea
           value={cpmk.description}
           onChange={(e) => onChange({ ...cpmk, description: e.target.value })}

@@ -47,6 +47,7 @@ func (cc *CPMKController) Create(c *gin.Context) {
 		CPMKNumber  int      `json:"cpmk_number" binding:"required"`
 		Description string   `json:"description" binding:"required"`
 		Bobot       *float64 `json:"bobot"`
+		MatchedCPL  string   `json:"matched_cpl"` // Added: CPL yang di-match
 		SubCPMKs    []struct {
 			SubCPMKNumber int    `json:"sub_cpmk_number" binding:"required"`
 			Description   string `json:"description" binding:"required"`
@@ -78,6 +79,7 @@ func (cc *CPMKController) Create(c *gin.Context) {
 		CPMKNumber:  req.CPMKNumber,
 		Description: req.Description,
 		Bobot:       req.Bobot,
+		MatchedCPL:  req.MatchedCPL, // Added: save matched CPL
 	}
 
 	if err := cc.db.Create(&cpmk).Error; err != nil {

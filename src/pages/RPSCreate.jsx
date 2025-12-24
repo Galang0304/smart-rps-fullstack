@@ -54,10 +54,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Bot, Save, Loader2, X, Plus, BookOpen, Eye, EyeOff, Database, PenLine, FileText, List, Calendar, Book } from 'lucide-react';
+import { Bot, Save, Loader2, X, Plus, BookOpen, Eye, EyeOff, Database, PenLine, FileText, List, Calendar, Book, CheckCircle, AlertCircle, Sparkles } from 'lucide-react';
 import { courseAPI, aiHelperAPI, generatedRPSAPI, cpmkAPI } from '../services/api';
 import apiClient from '../services/api';
 import CPMKWithCPLMapping from '../components/CPMKWithCPLMapping';
+import CPMKIntegrated from '../components/CPMKIntegrated';
 
 export default function RPSCreate() {
   const { courseId } = useParams();
@@ -76,6 +77,9 @@ export default function RPSCreate() {
   const [currentStep, setCurrentStep] = useState(1);
   const [savedRpsId, setSavedRpsId] = useState(editRpsId || null);
   const isLoadingRPS = useRef(false); // Gunakan useRef untuk track loading tanpa trigger re-render
+  const [useIntegratedView, setUseIntegratedView] = useState(true); // Mode tampilan CPMK terintegrasi
+  const [autoCompleting, setAutoCompleting] = useState(false); // State untuk Auto Complete All
+  const [autoCompleteProgress, setAutoCompleteProgress] = useState({ step: '', current: 0, total: 0 });
 
   // Form Data State - Struktur Baru yang Lebih Kompleks
   const [formData, setFormData] = useState({
@@ -93,7 +97,8 @@ export default function RPSCreate() {
     subCpmk: Array.from({ length: 14 }, (_, i) => ({
       code: `Sub-CPMK-${i + 1}`,
       description: '',
-      relatedCpmk: '' // Link ke CPMK mana
+      cpmk_id: '', // Link ke CPMK mana (format: 'CPMK-1', 'CPMK-2', dll)
+      relatedCpmk: '' // Link ke CPMK mana (deprecated, pakai cpmk_id)
     })),
     
     // Step 4: Bahan Kajian
@@ -242,16 +247,46 @@ export default function RPSCreate() {
                 { code: 'CPMK-2', description: '', selected_cpls: [] },
                 { code: 'CPMK-3', description: '', selected_cpls: [] },
               ],
-              subCpmk: result.subCpmk && result.subCpmk.length > 0 ? result.subCpmk.map(s => ({
-                code: s.code || '',
-                description: s.description || '',
-                relatedCpmk: s.related_cpmk || ''
-              })) : Array.from({ length: 14 }, (_, i) => ({
-                code: `Sub-CPMK-${i + 1}`,
-                description: '',
-                relatedCpmk: ''
-              })),
-              bahanKajian: result.bahanKajian && result.bahanKajian.length > 0 ? result.bahanKajian : ['', '', ''],
+              // Support both subCpmk and sub_cpmk formats, and handle both relatedCpmk and cpmk_id
+              subCpmk: (result.subCpmk || result.sub_cpmk) && (result.subCpmk || result.sub_cpmk).length > 0 
+                ? (result.subCpmk || result.sub_cpmk).map(s => {
+                    // Parse cpmk_id from various possible sources
+                    const cpmkId = s.cpmk_id || s.relatedCpmk || s.related_cpmk || '';
+                    // Extract cpmkNumber and subNumber from code if not present
+                    let cpmkNumber = s.cpmkNumber;
+                    let subNumber = s.subNumber;
+                    if (!cpmkNumber && cpmkId) {
+                      // cpmkId could be "CPMK-1", "CPMK 1", etc.
+                      const match = cpmkId.match(/(\d+)/);
+                      cpmkNumber = match ? parseInt(match[1]) : null;
+                    }
+                    if (!subNumber && s.code) {
+                      // code could be "Sub-CPMK-1.2" or "Sub-CPMK-1"
+                      const subMatch = s.code.match(/\.(\d+)$/) || s.code.match(/(\d+)$/);
+                      subNumber = subMatch ? parseInt(subMatch[1]) : null;
+                    }
+                    return {
+                      code: s.code || '',
+                      description: s.description || '',
+                      relatedCpmk: cpmkId,
+                      cpmk_id: cpmkId,
+                      cpmkNumber: cpmkNumber,
+                      subNumber: subNumber,
+                      fromDB: s.fromDB || false
+                    };
+                  }) 
+                : Array.from({ length: 14 }, (_, i) => ({
+                    code: `Sub-CPMK-${i + 1}`,
+                    description: '',
+                    relatedCpmk: '',
+                    cpmk_id: ''
+                  })),
+              // Support both bahanKajian and bahan_kajian formats
+              bahanKajian: (result.bahanKajian || result.bahan_kajian) 
+                ? (Array.isArray(result.bahanKajian || result.bahan_kajian) 
+                    ? (result.bahanKajian || result.bahan_kajian) 
+                    : (result.bahanKajian || result.bahan_kajian).split('\n').filter(b => b.trim()))
+                : ['', '', ''],
               rencanaMingguan: result.rencanaMingguan && result.rencanaMingguan.length > 0 
                 ? result.rencanaMingguan.map(m => ({
                     minggu: m.minggu,
@@ -458,9 +493,9 @@ export default function RPSCreate() {
       
       console.log('🗺️ Existing Sub-CPMK:', existingSubCpmk);
       
-      // FIXED bobot: 100% / 14 (standar RPS)
-      const subCpmkBobot = 100 / 14; // 7.142857142857143%
-      console.log(`💯 Sub-CPMK Bobot: ${subCpmkBobot.toFixed(6)}% (standar 14 Sub-CPMK)`);
+      // Bobot Sub-CPMK: 100% / 14 (presisi penuh tanpa pembulatan)
+      const subCpmkBobot = 100 / 14; // 7.142857142857143...
+      console.log(`💯 Sub-CPMK Bobot: ${subCpmkBobot}% (standar 14 Sub-CPMK)`);
       
       // Step 5: Add Sub-CPMK for each CPMK
       let subCpmkSaved = 0;
@@ -581,7 +616,10 @@ export default function RPSCreate() {
         subCpmk: formData.subCpmk.filter(s => s.description && s.description.trim()).map((s, idx) => ({
           code: s.code,
           description: s.description,
-          related_cpmk: s.relatedCpmk || '',
+          cpmk_id: s.cpmk_id || s.relatedCpmk || '',
+          related_cpmk: s.cpmk_id || s.relatedCpmk || '',
+          cpmkNumber: s.cpmkNumber || null,
+          subNumber: s.subNumber || null,
           order: idx + 1
         })),
         bahanKajian: formData.bahanKajian.filter(b => b && b.trim()),
@@ -689,12 +727,11 @@ export default function RPSCreate() {
 
   const steps = [
     { id: 1, title: 'Deskripsi MK', icon: FileText },
-    { id: 2, title: 'CPMK', icon: List },
-    { id: 3, title: 'Sub-CPMK', icon: List },
-    { id: 4, title: 'Bahan Kajian', icon: Book },
-    { id: 5, title: 'Rencana 14 Minggu', icon: Calendar },
-    { id: 6, title: 'Rencana Tugas', icon: PenLine },
-    { id: 7, title: 'Referensi', icon: BookOpen },
+    { id: 2, title: 'CPMK & Sub-CPMK', icon: List },
+    { id: 3, title: 'Bahan Kajian', icon: Book },
+    { id: 4, title: 'Rencana 14 Minggu', icon: Calendar },
+    { id: 5, title: 'Rencana Tugas', icon: PenLine },
+    { id: 6, title: 'Referensi', icon: BookOpen },
   ];
 
   return (
@@ -812,12 +849,22 @@ export default function RPSCreate() {
         <>
           <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 lg:p-8 mb-4 sm:mb-6">
             {currentStep === 1 && <DeskripsiStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
-            {currentStep === 2 && <CPMKStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
-            {currentStep === 3 && <SubCPMKStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
-            {currentStep === 4 && <BahanKajianStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
-            {currentStep === 5 && <RencanaMingguanStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
-            {currentStep === 6 && <RencanaTugasStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
-            {currentStep === 7 && <ReferensiStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
+            {currentStep === 2 && <CPMKStep 
+              formData={formData} 
+              setFormData={setFormData} 
+              course={course} 
+              viewMode={viewMode} 
+              useIntegratedView={useIntegratedView} 
+              setUseIntegratedView={setUseIntegratedView}
+              autoCompleting={autoCompleting}
+              setAutoCompleting={setAutoCompleting}
+              autoCompleteProgress={autoCompleteProgress}
+              setAutoCompleteProgress={setAutoCompleteProgress}
+            />}
+            {currentStep === 3 && <BahanKajianStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
+            {currentStep === 4 && <RencanaMingguanStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
+            {currentStep === 5 && <RencanaTugasStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
+            {currentStep === 6 && <ReferensiStep formData={formData} setFormData={setFormData} course={course} viewMode={viewMode} />}
           </div>
 
           {/* Navigation Buttons */}
@@ -839,6 +886,26 @@ export default function RPSCreate() {
             {currentStep < steps.length ? (
               <button
                 onClick={async () => {
+                  // � Validasi Step 2: CPMK & Sub-CPMK harus lengkap
+                  if (currentStep === 2 && useIntegratedView) {
+                    // Check if all CPMK are complete
+                    const incompleteCpmk = formData.cpmk.filter(c => {
+                      const hasDeskripsi = c.description && c.description.trim();
+                      const hasCpl = c.selected_cpls && c.selected_cpls.length > 0;
+                      const cpmkCode = c.code;
+                      const subCpmks = formData.subCpmk?.filter(s => s.cpmk_id === cpmkCode) || [];
+                      const filledSubs = subCpmks.filter(s => s.description && s.description.trim()).length;
+                      const isComplete = hasDeskripsi && hasCpl && subCpmks.length > 0 && filledSubs === subCpmks.length;
+                      return !isComplete;
+                    });
+
+                    if (incompleteCpmk.length > 0) {
+                      const incompleteList = incompleteCpmk.map(c => c.code).join(', ');
+                      alert(`⚠️ Tidak bisa lanjut!\n\nCPMK yang belum lengkap:\n${incompleteList}\n\nPastikan setiap CPMK memiliki:\n✓ Deskripsi CPMK\n✓ Mapping CPL\n✓ Sub-CPMK ditambahkan\n✓ Semua Sub-CPMK terisi`);
+                      return;
+                    }
+                  }
+
                   // 🔗 Jika di step CPMK (step 2), save CPL matching dulu
                   if (currentStep === 2 && course?.id) {
                     console.log('🔗 Saving CPL matching before next step...');
@@ -856,10 +923,40 @@ export default function RPSCreate() {
                   
                   setCurrentStep(currentStep + 1);
                 }}
-                disabled={!selectedCourseId}
+                disabled={!selectedCourseId || (() => {
+                  // Disable button jika step 2 dan ada CPMK yang belum lengkap
+                  if (currentStep === 2 && useIntegratedView) {
+                    const incompleteCpmk = formData.cpmk.filter(c => {
+                      const hasDeskripsi = c.description && c.description.trim();
+                      const hasCpl = c.selected_cpls && c.selected_cpls.length > 0;
+                      const cpmkCode = c.code;
+                      const subCpmks = formData.subCpmk?.filter(s => s.cpmk_id === cpmkCode) || [];
+                      const filledSubs = subCpmks.filter(s => s.description && s.description.trim()).length;
+                      return !(hasDeskripsi && hasCpl && subCpmks.length > 0 && filledSubs === subCpmks.length);
+                    });
+                    return incompleteCpmk.length > 0;
+                  }
+                  return false;
+                })()}
                 className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all"
               >
-                Lanjut →
+                {(() => {
+                  // Tampilkan label berbeda jika step 2 belum lengkap
+                  if (currentStep === 2 && useIntegratedView) {
+                    const incompleteCpmk = formData.cpmk.filter(c => {
+                      const hasDeskripsi = c.description && c.description.trim();
+                      const hasCpl = c.selected_cpls && c.selected_cpls.length > 0;
+                      const cpmkCode = c.code;
+                      const subCpmks = formData.subCpmk?.filter(s => s.cpmk_id === cpmkCode) || [];
+                      const filledSubs = subCpmks.filter(s => s.description && s.description.trim()).length;
+                      return !(hasDeskripsi && hasCpl && subCpmks.length > 0 && filledSubs === subCpmks.length);
+                    });
+                    if (incompleteCpmk.length > 0) {
+                      return `⚠️ ${incompleteCpmk.length} CPMK Belum Lengkap`;
+                    }
+                  }
+                  return 'Lanjut →';
+                })()}
               </button>
             ) : viewMode ? (
               <button
@@ -973,7 +1070,17 @@ function DeskripsiStep({ formData, setFormData, course, viewMode = false }) {
 }
 
 // Step 2: CPMK
-function CPMKStep({ formData, setFormData, course }) {
+function CPMKStep({ 
+  formData, 
+  setFormData, 
+  course, 
+  useIntegratedView, 
+  setUseIntegratedView,
+  autoCompleting,
+  setAutoCompleting,
+  autoCompleteProgress,
+  setAutoCompleteProgress
+}) {
   const [generating, setGenerating] = useState(false);
   const [generatingIndex, setGeneratingIndex] = useState(null);
   const [cpmkVersion, setCpmkVersion] = useState(null); // 'generated' or 'matched'
@@ -984,12 +1091,75 @@ function CPMKStep({ formData, setFormData, course }) {
   const [matchingProgress, setMatchingProgress] = useState({ current: 0, total: 0 });
   const [cpmkFromDB, setCpmkFromDB] = useState([]); // Data CPMK dari database (dengan bobot)
 
-  // Helper: Get CPMK bobot by code
-  const getCpmkBobot = (cpmkCode) => {
-    const cpmkNumber = parseInt(cpmkCode.match(/\d+/)?.[0] || '0');
-    const cpmk = cpmkFromDB.find(c => c.cpmk_number === cpmkNumber);
-    return cpmk?.bobot || 0;
+  // KONSTANTA: Bobot Sub-CPMK = 100/14 (presisi penuh, tanpa pembulatan)
+  const SUB_CPMK_BOBOT = 100 / 14; // 7.142857142857143...
+
+  // Helper: Format bobot untuk tampilan (gunakan koma sebagai desimal)
+  const formatBobotDisplay = (value) => {
+    // Handle floating point precision untuk total 100%
+    if (Math.abs(value - 100) < 0.0001) {
+      return '100';
+    }
+    // Bulatkan ke 2 desimal untuk tampilan yang bersih
+    const rounded = Math.round(value * 100) / 100;
+    return rounded.toString().replace('.', ',');
   };
+
+  // Helper: Get Sub-CPMK count per CPMK
+  const getSubCpmkCount = (cpmkCode) => {
+    const cpmkNumber = parseInt(cpmkCode.match(/\d+/)?.[0] || '0');
+    return formData.subCpmk?.filter(s => s.cpmk_id === `CPMK-${cpmkNumber}`)?.length || 0;
+  };
+
+  // Helper: Get total Sub-CPMK count
+  const getTotalSubCpmkCount = () => {
+    return formData.subCpmk?.length || 0;
+  };
+
+  // Helper: Get CPMK bobot = jumlah Sub-CPMK × (100/14)
+  const getCpmkBobot = (cpmkCode) => {
+    const subCount = getSubCpmkCount(cpmkCode);
+    return subCount * SUB_CPMK_BOBOT;
+  };
+
+  // Handler untuk update Sub-CPMK dari komponen terintegrasi
+  const handleSubCpmkChange = (newSubCpmks) => {
+    setFormData({ ...formData, subCpmk: newSubCpmks });
+  };
+
+  // Auto-initialize Sub-CPMK saat mode terintegrasi aktif dan belum ada Sub-CPMK
+  useEffect(() => {
+    if (useIntegratedView && formData.cpmk.length > 0 && (!formData.subCpmk || formData.subCpmk.length === 0)) {
+      console.log('[RPSCreate] Auto-init Sub-CPMK untuk mode terintegrasi');
+      
+      const totalCpmk = formData.cpmk.length;
+      const totalSubCpmks = 14;
+      const subPerCpmk = Math.floor(totalSubCpmks / totalCpmk);
+      const remainder = totalSubCpmks % totalCpmk;
+      
+      const newSubCpmks = [];
+      
+      for (let cpmkIdx = 0; cpmkIdx < totalCpmk; cpmkIdx++) {
+        const cpmkNumber = cpmkIdx + 1;
+        const cpmkCode = `CPMK-${cpmkNumber}`;
+        const subCountForThisCpmk = subPerCpmk + (cpmkIdx < remainder ? 1 : 0);
+        
+        for (let subIdx = 0; subIdx < subCountForThisCpmk; subIdx++) {
+          newSubCpmks.push({
+            code: `Sub-CPMK-${cpmkNumber}.${subIdx + 1}`,
+            description: '',
+            cpmk_id: cpmkCode,
+            cpmkNumber: cpmkNumber,
+            subNumber: subIdx + 1,
+            fromDB: false
+          });
+        }
+      }
+      
+      console.log(`[RPSCreate] Created ${newSubCpmks.length} Sub-CPMK for ${totalCpmk} CPMK`, newSubCpmks);
+      setFormData(prev => ({ ...prev, subCpmk: newSubCpmks }));
+    }
+  }, [useIntegratedView, formData.cpmk.length]);
 
   // Check if course has CPMK in database
   useEffect(() => {
@@ -1007,6 +1177,334 @@ function CPMKStep({ formData, setFormData, course }) {
     } catch (error) {
       setHasCpmkInDB(false);
       setCpmkFromDB([]);
+    }
+  };
+
+  // =====================================================
+  // AUTO COMPLETE ALL - Load dari DB & Generate dengan AI
+  // =====================================================
+  const handleAutoCompleteAll = async () => {
+    if (!course?.id) {
+      alert('⚠️ Pilih mata kuliah terlebih dahulu!');
+      return;
+    }
+
+    setAutoCompleting(true);
+    const results = {
+      cpmk: { loaded: 0, generated: 0 },
+      subCpmk: { loaded: 0, generated: 0 },
+      cpl: { loaded: 0, matched: 0 }
+    };
+
+    try {
+      // ==== STEP 1: Load CPMK dari Database ====
+      setAutoCompleteProgress({ step: 'Memuat CPMK dari database...', current: 1, total: 5 });
+      
+      const cpmkRes = await cpmkAPI.getByCourseId(course.id);
+      const cpmkFromDatabase = cpmkRes.data?.data || [];
+      
+      let currentCpmk = [...formData.cpmk];
+      let currentSubCpmk = [...(formData.subCpmk || [])];
+      
+      if (cpmkFromDatabase.length > 0) {
+        // Ada CPMK di database - load semua
+        currentCpmk = cpmkFromDatabase.map((item, idx) => {
+          // Parse MatchedCPL dari database (format: "CPL-01, CPL-02" atau "CPL-01")
+          const matchedCplArray = item.matched_cpl 
+            ? item.matched_cpl.split(',').map(s => s.trim()).filter(s => s)
+            : [];
+          
+          return {
+            code: `CPMK-${item.cpmk_number || idx + 1}`,
+            description: item.description || '',
+            selected_cpls: matchedCplArray,
+            matched_cpl: item.matched_cpl || null,
+            bobot: item.bobot || 0,
+            db_id: item.id // simpan ID database untuk referensi
+          };
+        });
+        results.cpmk.loaded = cpmkFromDatabase.length;
+        
+        // Load Sub-CPMK dari database (sudah di-preload di backend)
+        // Buat map untuk menyimpan Sub-CPMK dari DB berdasarkan cpmk_id
+        const subCpmkFromDB = new Map();
+        cpmkFromDatabase.forEach((cpmk, idx) => {
+          const cpmkCode = `CPMK-${cpmk.cpmk_number || idx + 1}`;
+          const subCpmks = cpmk.sub_cpmks || cpmk.SubCPMKs || [];
+          if (subCpmks.length > 0) {
+            subCpmkFromDB.set(cpmkCode, subCpmks.map(sub => ({
+              code: `Sub-CPMK-${sub.sub_cpmk_number || sub.SubCPMKNumber}`,
+              description: sub.description || '',
+              cpmk_id: cpmkCode,
+              db_id: sub.id
+            })));
+            results.subCpmk.loaded += subCpmks.length;
+          }
+        });
+        
+        console.log('[AutoComplete] Sub-CPMK dari DB:', subCpmkFromDB);
+        
+        // Count loaded CPL mappings
+        results.cpl.loaded = currentCpmk.filter(c => c.selected_cpls && c.selected_cpls.length > 0).length;
+      }
+      
+      // ==== STEP 2: Generate CPMK dengan AI jika belum ada ====
+      setAutoCompleteProgress({ step: 'Generate CPMK dengan AI...', current: 2, total: 5 });
+      
+      // Cek apakah ada CPMK yang kosong (belum ada deskripsi)
+      const emptyCpmk = currentCpmk.filter(c => !c.description || c.description.trim() === '');
+      
+      if (currentCpmk.length === 0 || emptyCpmk.length === currentCpmk.length) {
+        // Tidak ada CPMK sama sekali atau semua kosong - generate dengan AI
+        const prodiId = localStorage.getItem('prodi_id');
+        
+        try {
+          const aiRes = await aiHelperAPI.generateCPMK({
+            course_id: course.id,
+            course_code: course.code,
+            course_title: course.title,
+            credits: course.credits,
+            prodi_id: prodiId,
+          });
+          
+          if (aiRes.data.data?.items && aiRes.data.data.items.length > 0) {
+            currentCpmk = aiRes.data.data.items.map((item, idx) => ({
+              code: item.code || `CPMK-${idx + 1}`,
+              description: item.description,
+              matched_cpl: item.matched_cpl || null,
+              selected_cpls: item.matched_cpl ? [item.matched_cpl] : [],
+              reason: item.reason || null
+            }));
+            results.cpmk.generated = currentCpmk.length;
+          }
+        } catch (aiError) {
+          console.error('AI CPMK generation failed:', aiError);
+        }
+      }
+      
+      // ==== STEP 3: Match CPL dengan AI untuk CPMK yang belum punya CPL ====
+      setAutoCompleteProgress({ step: 'Matching CPL dengan AI...', current: 3, total: 5 });
+      
+      const prodiId = localStorage.getItem('prodi_id');
+      const cpmkWithoutCpl = currentCpmk.filter(c => 
+        c.description && c.description.trim() !== '' && 
+        (!c.selected_cpls || c.selected_cpls.length === 0)
+      );
+      
+      if (cpmkWithoutCpl.length > 0) {
+        for (let i = 0; i < currentCpmk.length; i++) {
+          const cpmk = currentCpmk[i];
+          
+          // Skip jika sudah punya CPL atau tidak ada deskripsi
+          if ((cpmk.selected_cpls && cpmk.selected_cpls.length > 0) || !cpmk.description?.trim()) {
+            continue;
+          }
+          
+          setAutoCompleteProgress({ 
+            step: `Matching CPL untuk ${cpmk.code}...`, 
+            current: 3, 
+            total: 5 
+          });
+          
+          try {
+            const matchRes = await aiHelperAPI.matchCPMKWithCPL({
+              prodi_id: prodiId,
+              cpmk_code: cpmk.code,
+              cpmk_description: cpmk.description,
+            });
+            
+            if (matchRes.data.success && matchRes.data.matches) {
+              const autoSelected = matchRes.data.matches
+                .filter(m => m.recommended)
+                .map(m => m.kode_cpl);
+              
+              currentCpmk[i] = {
+                ...cpmk,
+                selected_cpls: autoSelected,
+                ai_matches: matchRes.data.matches,
+                matched_cpl: matchRes.data.matched_cpl,
+                recommendation: matchRes.data.recommendation,
+              };
+              results.cpl.matched++;
+            }
+          } catch (matchError) {
+            console.error(`CPL matching failed for ${cpmk.code}:`, matchError);
+          }
+          
+          // Small delay to prevent rate limiting
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+      }
+      
+      // ==== STEP 4: Initialize/Generate Sub-CPMK ====
+      setAutoCompleteProgress({ step: 'Menyiapkan Sub-CPMK...', current: 4, total: 5 });
+      
+      // SELALU buat 14 Sub-CPMK dan distribusikan ke semua CPMK
+      const totalCpmk = currentCpmk.length;
+      const totalSubCpmks = 14;
+      
+      if (totalCpmk > 0) {
+        const subPerCpmk = Math.floor(totalSubCpmks / totalCpmk);
+        const remainder = totalSubCpmks % totalCpmk;
+        
+        // Reset currentSubCpmk dan buat ulang dengan distribusi yang benar
+        currentSubCpmk = [];
+        let subCounter = 1;
+        
+        currentCpmk.forEach((cpmk, idx) => {
+          const count = subPerCpmk + (idx < remainder ? 1 : 0);
+          for (let j = 0; j < count; j++) {
+            currentSubCpmk.push({
+              code: `Sub-CPMK-${subCounter}`,
+              description: '', // Akan diisi AI nanti
+              cpmk_id: cpmk.code
+            });
+            subCounter++;
+          }
+        });
+        
+        console.log(`[AutoComplete] Distribusi Sub-CPMK: ${totalSubCpmks} total ke ${totalCpmk} CPMK`);
+        console.log('[AutoComplete] Sub-CPMK created:', currentSubCpmk);
+      }
+      
+      // Generate Sub-CPMK dengan AI untuk yang kosong
+      const emptySubCpmk = currentSubCpmk.filter(s => !s.description || s.description.trim() === '');
+      
+      if (emptySubCpmk.length > 0 && currentCpmk.some(c => c.description?.trim())) {
+        setAutoCompleteProgress({ step: 'Generate Sub-CPMK dengan AI...', current: 4, total: 5 });
+        
+        // Group empty Sub-CPMK by CPMK
+        const subCpmkByCpmk = {};
+        emptySubCpmk.forEach(sub => {
+          if (!subCpmkByCpmk[sub.cpmk_id]) {
+            subCpmkByCpmk[sub.cpmk_id] = [];
+          }
+          subCpmkByCpmk[sub.cpmk_id].push(sub);
+        });
+        
+        console.log('[AutoComplete] Sub-CPMK grouped by CPMK:', subCpmkByCpmk);
+        
+        // Generate for each CPMK that has empty Sub-CPMKs
+        for (const [cpmkId, emptySubs] of Object.entries(subCpmkByCpmk)) {
+          const cpmk = currentCpmk.find(c => c.code === cpmkId);
+          if (!cpmk || !cpmk.description?.trim()) continue;
+          
+          setAutoCompleteProgress({ 
+            step: `Generate Sub-CPMK untuk ${cpmkId}...`, 
+            current: 4, 
+            total: 5 
+          });
+          
+          try {
+            // Backend expects: cpmk (string), course_title (string), course_id (optional)
+            const subRes = await aiHelperAPI.generateSubCPMK({
+              cpmk: `${cpmk.code}: ${cpmk.description}`,
+              course_title: course.title,
+              course_id: course.id
+            });
+            
+            console.log(`[AutoComplete] AI response for ${cpmkId}:`, subRes.data);
+            
+            if (subRes.data.data?.items && subRes.data.data.items.length > 0) {
+              // Update the empty Sub-CPMKs with AI-generated descriptions
+              let aiIndex = 0;
+              for (let i = 0; i < currentSubCpmk.length && aiIndex < subRes.data.data.items.length; i++) {
+                if (currentSubCpmk[i].cpmk_id === cpmkId && (!currentSubCpmk[i].description || currentSubCpmk[i].description.trim() === '')) {
+                  currentSubCpmk[i] = {
+                    ...currentSubCpmk[i],
+                    description: subRes.data.data.items[aiIndex].description || subRes.data.data.items[aiIndex].sub_cpmk || ''
+                  };
+                  results.subCpmk.generated++;
+                  aiIndex++;
+                }
+              }
+              console.log(`[AutoComplete] Updated ${aiIndex} Sub-CPMK for ${cpmkId}`);
+            }
+          } catch (subError) {
+            console.error(`Sub-CPMK generation failed for ${cpmkId}:`, subError);
+            // Jika AI gagal, biarkan deskripsi kosong - user bisa isi manual
+          }
+          
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      }
+      
+      // ==== STEP 5: Update State ====
+      setAutoCompleteProgress({ step: 'Menyimpan hasil...', current: 5, total: 5 });
+      
+      console.log('[AutoComplete] Final CPMK:', currentCpmk);
+      console.log('[AutoComplete] Final Sub-CPMK:', currentSubCpmk);
+      
+      setFormData({
+        ...formData,
+        cpmk: currentCpmk,
+        subCpmk: currentSubCpmk
+      });
+      
+      setCpmkFromDB(cpmkFromDatabase);
+      setHasCpmkInDB(cpmkFromDatabase.length > 0);
+      
+      // Show summary alert
+      const summaryLines = [];
+      summaryLines.push('═══════════════════════════════════');
+      summaryLines.push('       AUTO COMPLETE SELESAI!      ');
+      summaryLines.push('═══════════════════════════════════');
+      summaryLines.push('');
+      
+      // CPMK summary
+      summaryLines.push('📋 CPMK:');
+      if (results.cpmk.loaded > 0) {
+        summaryLines.push(`   ✅ ${results.cpmk.loaded} dimuat dari database`);
+      }
+      if (results.cpmk.generated > 0) {
+        summaryLines.push(`   🤖 ${results.cpmk.generated} di-generate AI`);
+      }
+      if (results.cpmk.loaded === 0 && results.cpmk.generated === 0) {
+        summaryLines.push('   ⚠️ Tidak ada CPMK');
+      }
+      summaryLines.push('');
+      
+      // CPL Mapping summary
+      summaryLines.push('🔗 CPL Mapping:');
+      if (results.cpl.loaded > 0) {
+        summaryLines.push(`   ✅ ${results.cpl.loaded} dimuat dari database`);
+      }
+      if (results.cpl.matched > 0) {
+        summaryLines.push(`   🤖 ${results.cpl.matched} di-match AI`);
+      }
+      if (results.cpl.loaded === 0 && results.cpl.matched === 0) {
+        summaryLines.push('   ⚠️ Belum ada mapping');
+      }
+      summaryLines.push('');
+      
+      // Sub-CPMK summary
+      summaryLines.push('📝 Sub-CPMK:');
+      const totalSub = currentSubCpmk.length;
+      const filledSub = currentSubCpmk.filter(s => s.description?.trim()).length;
+      summaryLines.push(`   📊 Total: ${totalSub} Sub-CPMK didistribusikan`);
+      
+      // Show distribution per CPMK
+      currentCpmk.forEach(cpmk => {
+        const subsForCpmk = currentSubCpmk.filter(s => s.cpmk_id === cpmk.code);
+        const filledCount = subsForCpmk.filter(s => s.description?.trim()).length;
+        summaryLines.push(`   • ${cpmk.code}: ${filledCount}/${subsForCpmk.length} terisi`);
+      });
+      
+      if (results.subCpmk.generated > 0) {
+        summaryLines.push(`   🤖 ${results.subCpmk.generated} deskripsi di-generate AI`);
+      }
+      
+      summaryLines.push('');
+      summaryLines.push('═══════════════════════════════════');
+      
+      alert(summaryLines.join('\n'));
+      
+    } catch (error) {
+      console.error('Auto complete failed:', error);
+      alert('❌ Auto complete gagal: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setAutoCompleting(false);
+      setAutoCompleteProgress({ step: '', current: 0, total: 0 });
     }
   };
 
@@ -1092,19 +1590,94 @@ function CPMKStep({ formData, setFormData, course }) {
         return;
       }
 
-      // Transform database CPMK to form format
-      const loadedCpmk = cpmkData.map((item, idx) => ({
-        code: `CPMK-${item.cpmk_number || idx + 1}`,
-        description: item.description || '',
-        selected_cpls: [],
-        sub_cpmk: item.sub_cpmk || [], // Include sub-CPMK if available
-        bobot: item.bobot || 0 // Include bobot
-      }));
+      console.log('[handleLoadFromDatabase] Raw CPMK data:', cpmkData);
 
-      setFormData({ ...formData, cpmk: loadedCpmk });
-      setCpmkFromDB(cpmkData); // Update cpmkFromDB state
+      // Transform database CPMK to form format
+      const loadedCpmk = cpmkData.map((item, idx) => {
+        // Parse MatchedCPL dari database (format: "CPL-01, CPL-02" atau "CPL-01")
+        const matchedCplArray = item.matched_cpl 
+          ? item.matched_cpl.split(',').map(s => s.trim()).filter(s => s)
+          : [];
+        
+        return {
+          code: `CPMK-${item.cpmk_number || idx + 1}`,
+          description: item.description || '',
+          selected_cpls: matchedCplArray,
+          matched_cpl: item.matched_cpl || null,
+          bobot: item.bobot || 0,
+          db_id: item.id
+        };
+      });
+
+      // Load Sub-CPMK dari database (sudah di-preload)
+      const loadedSubCpmk = [];
+      cpmkData.forEach((cpmk, idx) => {
+        const subCpmks = cpmk.sub_cpmks || cpmk.SubCPMKs || [];
+        const cpmkNumber = cpmk.cpmk_number || idx + 1;
+        
+        console.log(`[handleLoadFromDatabase] CPMK-${cpmkNumber} has ${subCpmks.length} Sub-CPMK`);
+        
+        subCpmks.forEach((sub, subIdx) => {
+          loadedSubCpmk.push({
+            code: `Sub-CPMK-${cpmkNumber}.${sub.sub_cpmk_number || subIdx + 1}`,
+            description: sub.description || '',
+            cpmk_id: `CPMK-${cpmkNumber}`,
+            cpmkNumber: cpmkNumber,
+            subNumber: sub.sub_cpmk_number || subIdx + 1,
+            db_id: sub.id,
+            fromDB: true
+          });
+        });
+      });
+
+      console.log('[handleLoadFromDatabase] Loaded CPMK:', loadedCpmk);
+      console.log('[handleLoadFromDatabase] Loaded Sub-CPMK:', loadedSubCpmk);
+
+      // Update formData dengan CPMK dan Sub-CPMK yang dimuat
+      // Jika tidak ada Sub-CPMK di database, buat distribusi default
+      let finalSubCpmk = loadedSubCpmk;
+      
+      if (loadedSubCpmk.length === 0 && loadedCpmk.length > 0) {
+        console.log('[handleLoadFromDatabase] No Sub-CPMK in DB, creating default distribution');
+        
+        const totalCpmk = loadedCpmk.length;
+        const totalSubCpmks = 14;
+        const subPerCpmk = Math.floor(totalSubCpmks / totalCpmk);
+        const remainder = totalSubCpmks % totalCpmk;
+        
+        let subCounter = 1;
+        loadedCpmk.forEach((cpmk, idx) => {
+          const count = subPerCpmk + (idx < remainder ? 1 : 0);
+          const cpmkNumber = idx + 1;
+          
+          for (let j = 0; j < count; j++) {
+            finalSubCpmk.push({
+              code: `Sub-CPMK-${cpmkNumber}.${j + 1}`,
+              description: '',
+              cpmk_id: cpmk.code,
+              cpmkNumber: cpmkNumber,
+              subNumber: j + 1,
+              fromDB: false
+            });
+            subCounter++;
+          }
+        });
+        
+        console.log('[handleLoadFromDatabase] Created default Sub-CPMK:', finalSubCpmk);
+      }
+
+      setFormData({ 
+        ...formData, 
+        cpmk: loadedCpmk,
+        subCpmk: finalSubCpmk
+      });
+      setCpmkFromDB(cpmkData);
       setCpmkVersion('database');
-      alert(`✅ Berhasil memuat ${loadedCpmk.length} CPMK dari database!`);
+      
+      const subCpmkMsg = finalSubCpmk.length > 0 
+        ? `\n📝 ${loadedSubCpmk.length > 0 ? 'Dimuat' : 'Dibuat'} ${finalSubCpmk.length} Sub-CPMK`
+        : '';
+      alert(`✅ Berhasil memuat ${loadedCpmk.length} CPMK dari database!${subCpmkMsg}`);
     } catch (error) {
       console.error('Failed to load CPMK from database:', error);
       alert('❌ Gagal memuat CPMK dari database: ' + (error.response?.data?.error || error.message));
@@ -1285,7 +1858,50 @@ function CPMKStep({ formData, setFormData, course }) {
   };
 
   return (
-    <div>
+    <div className="relative">
+      {/* Auto Complete Loading Overlay */}
+      {autoCompleting && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 transform animate-pulse">
+            <div className="flex flex-col items-center gap-4">
+              {/* Animated Icon */}
+              <div className="relative">
+                <div className="w-20 h-20 rounded-full bg-gradient-to-r from-purple-600 to-blue-600 flex items-center justify-center animate-spin-slow">
+                  <Sparkles className="w-10 h-10 text-white" />
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-green-500 flex items-center justify-center animate-bounce">
+                  <Bot className="w-5 h-5 text-white" />
+                </div>
+              </div>
+              
+              {/* Progress Info */}
+              <div className="text-center">
+                <h3 className="text-xl font-bold text-gray-800 mb-2">
+                  🚀 Auto Lengkapi Semua
+                </h3>
+                <p className="text-gray-600 mb-3">
+                  {autoCompleteProgress?.step || 'Memproses...'}
+                </p>
+                
+                {/* Progress Bar */}
+                {autoCompleteProgress?.total > 0 && (
+                  <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
+                    <div 
+                      className="bg-gradient-to-r from-purple-600 to-blue-600 h-3 rounded-full transition-all duration-500"
+                      style={{ width: `${(autoCompleteProgress.current / autoCompleteProgress.total) * 100}%` }}
+                    />
+                  </div>
+                )}
+                
+                <p className="text-sm text-gray-500">
+                  Step {autoCompleteProgress?.current || 0} / {autoCompleteProgress?.total || 5}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">🎯 Capaian Pembelajaran Mata Kuliah (CPMK)</h2>
         <p className="text-gray-600">
@@ -1324,12 +1940,39 @@ function CPMKStep({ formData, setFormData, course }) {
 
         {/* Action Buttons */}
         <div className="mt-4 space-y-3">
+          {/* ⚡ AUTO LENGKAPI SEMUA - Tombol Utama */}
+          <button
+            onClick={handleAutoCompleteAll}
+            disabled={autoCompleting || !course}
+            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white rounded-xl hover:from-emerald-700 hover:via-teal-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-lg shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] border-2 border-emerald-400/30"
+          >
+            {autoCompleting ? (
+              <>
+                <Loader2 className="w-6 h-6 animate-spin" />
+                <span>Sedang Memproses...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-6 h-6" />
+                <span>⚡ Auto Lengkapi Semua</span>
+                <span className="text-xs bg-white/20 px-2 py-1 rounded-full">CPMK + CPL + Sub-CPMK</span>
+              </>
+            )}
+          </button>
+
+          {/* Info tentang Auto Lengkapi */}
+          <div className="p-3 bg-gradient-to-r from-emerald-50 to-cyan-50 rounded-lg border border-emerald-200">
+            <p className="text-xs text-emerald-700 text-center">
+              <strong>💡 Auto Lengkapi:</strong> Load dari database jika ada, generate dengan AI jika belum ada (CPMK, CPL Mapping, Sub-CPMK)
+            </p>
+          </div>
+
           {/* Top row: Load DB and Generate AI */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* Load from Database Button */}
             <button
               onClick={handleLoadFromDatabase}
-              disabled={loadingFromDB || !course || !hasCpmkInDB}
+              disabled={loadingFromDB || !course || !hasCpmkInDB || autoCompleting}
               className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
               title={!hasCpmkInDB ? 'Mata kuliah ini belum memiliki CPMK di database' : 'Load CPMK dari database'}
             >
@@ -1349,7 +1992,7 @@ function CPMKStep({ formData, setFormData, course }) {
             {/* Generate All Button */}
             <button
               onClick={handleGenerateAll}
-              disabled={generating || !course}
+              disabled={generating || !course || autoCompleting}
               className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 font-semibold"
             >
               {generating ? (
@@ -1385,24 +2028,176 @@ function CPMKStep({ formData, setFormData, course }) {
             )}
           </button>
         </div>
+
+        {/* Toggle View Mode - Enhanced UI */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 bg-gradient-to-r from-slate-100 to-gray-100 rounded-xl border">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <span className="text-sm font-semibold text-gray-700">Mode:</span>
+            <div className="flex rounded-xl overflow-hidden border-2 border-gray-200 shadow-sm">
+              <button
+                onClick={() => setUseIntegratedView(true)}
+                className={`px-4 py-2.5 text-sm font-medium transition-all flex items-center gap-2 ${
+                  useIntegratedView 
+                    ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-inner' 
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <span>✨</span>
+                <span>Terintegrasi</span>
+              </button>
+              <button
+                onClick={() => setUseIntegratedView(false)}
+                className={`px-4 py-2.5 text-sm font-medium transition-all flex items-center gap-2 ${
+                  !useIntegratedView 
+                    ? 'bg-gradient-to-r from-gray-600 to-slate-600 text-white shadow-inner' 
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <span>📝</span>
+                <span>Klasik</span>
+              </button>
+            </div>
+          </div>
+          
+          {/* Sub-CPMK Counter with Progress */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl border shadow-sm">
+              <span className="text-sm text-gray-600">Total Sub-CPMK:</span>
+              <div className="flex items-center gap-2">
+                <span className={`text-lg font-bold ${getTotalSubCpmkCount() === 14 ? 'text-green-600' : 'text-orange-600'}`}>
+                  {getTotalSubCpmkCount()}
+                </span>
+                <span className="text-gray-400">/</span>
+                <span className="text-lg font-bold text-gray-400">14</span>
+              </div>
+              {getTotalSubCpmkCount() === 14 && (
+                <span className="text-green-500 ml-1">✓</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Progress Summary Bar */}
+        {useIntegratedView && (
+          <div className="p-4 bg-white rounded-xl border-2 border-gray-200 shadow-sm">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
+              <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                📊 Progress Keseluruhan
+              </h4>
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const completedCpmk = formData.cpmk.filter(c => {
+                    const hasDeskripsi = c.description && c.description.trim();
+                    const hasCpl = c.selected_cpls && c.selected_cpls.length > 0;
+                    const cpmkCode = c.code;
+                    const subCpmks = formData.subCpmk?.filter(s => s.cpmk_id === cpmkCode) || [];
+                    const filledSubs = subCpmks.filter(s => s.description && s.description.trim()).length;
+                    return hasDeskripsi && hasCpl && subCpmks.length > 0 && filledSubs === subCpmks.length;
+                  }).length;
+                  const isAllComplete = completedCpmk === formData.cpmk.length;
+                  
+                  return (
+                    <>
+                      <span className={`px-3 py-1.5 rounded-full text-sm font-bold ${
+                        isAllComplete 
+                          ? 'bg-green-500 text-white' 
+                          : 'bg-orange-500 text-white'
+                      }`}>
+                        {completedCpmk}/{formData.cpmk.length} CPMK Lengkap
+                      </span>
+                      {isAllComplete && (
+                        <span className="text-2xl">🎉</span>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+            
+            {/* CPMK Status Chips */}
+            <div className="flex flex-wrap gap-2">
+              {formData.cpmk.map((c, idx) => {
+                const hasDeskripsi = c.description && c.description.trim();
+                const hasCpl = c.selected_cpls && c.selected_cpls.length > 0;
+                const cpmkCode = c.code;
+                const subCpmks = formData.subCpmk?.filter(s => s.cpmk_id === cpmkCode) || [];
+                const filledSubs = subCpmks.filter(s => s.description && s.description.trim()).length;
+                const isComplete = hasDeskripsi && hasCpl && subCpmks.length > 0 && filledSubs === subCpmks.length;
+                
+                return (
+                  <div 
+                    key={idx}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 ${
+                      isComplete 
+                        ? 'bg-green-100 text-green-700 border border-green-300' 
+                        : 'bg-orange-100 text-orange-700 border border-orange-300'
+                    }`}
+                    title={isComplete ? 'Lengkap' : `Belum lengkap: ${!hasDeskripsi ? 'Deskripsi, ' : ''}${!hasCpl ? 'CPL, ' : ''}${subCpmks.length === 0 ? 'Sub-CPMK belum ditambah, ' : filledSubs < subCpmks.length ? 'Sub-CPMK belum terisi semua' : ''}`}
+                  >
+                    {isComplete ? (
+                      <CheckCircle className="w-3.5 h-3.5" />
+                    ) : (
+                      <AlertCircle className="w-3.5 h-3.5" />
+                    )}
+                    {c.code}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="space-y-4">
-        {Array.isArray(formData.cpmk) && formData.cpmk.map((item, index) => (
-          <div key={index} className="border-2 border-gray-200 rounded-lg hover:border-blue-300 transition-colors">
-            {/* Header dengan kode CPMK dan action buttons */}
-            <div className="p-4 bg-gray-50 flex items-center gap-3">
-              <div className="flex-shrink-0">
-                <span className="inline-block px-3 py-1 bg-blue-600 text-white font-semibold rounded-lg">
-                  {item.code}
-                </span>
+      {/* CPMK List - Integrated or Classic View */}
+      <div className="space-y-6">
+        {useIntegratedView ? (
+          // Mode Terintegrasi: CPMK + CPL Mapping + Sub-CPMK dalam satu card
+          <>
+            {Array.isArray(formData.cpmk) && formData.cpmk.map((item, index) => (
+              <div key={index} className="relative">
+                <CPMKIntegrated
+                  cpmk={item}
+                  cpmkIndex={index}
+                  course={course}
+                  formData={formData}
+                  totalCpmk={formData.cpmk.length}
+                  onChange={(updatedCpmk) => {
+                    const newCpmk = [...formData.cpmk];
+                    newCpmk[index] = updatedCpmk;
+                    setFormData({ ...formData, cpmk: newCpmk });
+                  }}
+                  onSubCpmkChange={handleSubCpmkChange}
+                />
+                {formData.cpmk.length > 1 && (
+                  <button
+                    onClick={() => handleRemove(index)}
+                    className="absolute -top-2 -right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-md z-20"
+                    title="Hapus CPMK"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-              <div className="flex-1">
-                <p className="text-sm text-gray-600">Capaian Pembelajaran Mata Kuliah {index + 1}</p>
-              </div>
-              <button
-                onClick={() => handleGenerateOne(index)}
-                disabled={generating && generatingIndex === index}
+            ))}
+          </>
+        ) : (
+          // Mode Klasik: CPMK saja dengan CPL Mapping
+          <>
+            {Array.isArray(formData.cpmk) && formData.cpmk.map((item, index) => (
+              <div key={index} className="border-2 border-gray-200 rounded-lg hover:border-blue-300 transition-colors">
+                {/* Header dengan kode CPMK dan action buttons */}
+                <div className="p-4 bg-gray-50 flex items-center gap-3">
+                  <div className="flex-shrink-0">
+                    <span className="inline-block px-3 py-1 bg-blue-600 text-white font-semibold rounded-lg">
+                      {item.code}
+                    </span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-600">Capaian Pembelajaran Mata Kuliah {index + 1}</p>
+                  </div>
+                  <button
+                    onClick={() => handleGenerateOne(index)}
+                    disabled={generating && generatingIndex === index}
                 className="flex-shrink-0 flex items-center gap-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
                 title="Generate individual CPMK"
               >
@@ -1429,7 +2224,7 @@ function CPMKStep({ formData, setFormData, course }) {
                 cpmkIndex={index}
                 course={course}
                 cpmkBobot={getCpmkBobot(item.code)}
-                totalCpmk={formData.cpmk.length}
+                subCpmkCount={getSubCpmkCount(item.code)}
                 onChange={(updatedCpmk) => {
                   const newCpmk = [...formData.cpmk];
                   newCpmk[index] = updatedCpmk;
@@ -1438,7 +2233,9 @@ function CPMKStep({ formData, setFormData, course }) {
               />
             </div>
           </div>
-        ))}
+            ))}
+          </>
+        )}
         
         <button
           onClick={handleAdd}
@@ -1460,6 +2257,20 @@ function SubCPMKStep({ formData, setFormData, course, viewMode = false }) {
   const [savingToDb, setSavingToDb] = useState(false);
   const [cpmkFromDB, setCpmkFromDB] = useState([]); // Data CPMK dari database (dengan bobot)
 
+  // KONSTANTA: Bobot Sub-CPMK = 100/14 (presisi penuh, tanpa pembulatan)
+  const SUB_CPMK_BOBOT = 100 / 14; // 7.142857142857143...
+
+  // Helper: Format bobot untuk tampilan (gunakan koma sebagai desimal)
+  const formatBobotDisplay = (value) => {
+    // Handle floating point precision untuk total 100%
+    if (Math.abs(value - 100) < 0.0001) {
+      return '100';
+    }
+    // Bulatkan ke 2 desimal untuk tampilan yang bersih
+    const rounded = Math.round(value * 100) / 100;
+    return rounded.toString().replace('.', ',');
+  };
+
   // Load CPMK from database when course changes
   useEffect(() => {
     if (course?.id) {
@@ -1479,9 +2290,9 @@ function SubCPMKStep({ formData, setFormData, course, viewMode = false }) {
   };
 
   // Helper: Calculate Sub-CPMK bobot
-  // FIXED: RPS standar membutuhkan 14 Sub-CPMK, bobot selalu 100/14
+  // Standar RPS = 14 Sub-CPMK, bobot = 100/14 (presisi penuh tanpa pembulatan)
   const calculateSubCpmkBobot = () => {
-    return 100 / 14; // 7.142857142857143%
+    return SUB_CPMK_BOBOT; // 7.142857142857143%
   };
 
   // Simple change handler without auto-save (will be saved when RPS is saved)
@@ -1549,19 +2360,21 @@ function SubCPMKStep({ formData, setFormData, course, viewMode = false }) {
       console.log('🗺️ CPMK code to ID map:', cpmkCodeToId);
       console.log('🗺️ SubCpmk list:', validSubCpmk);
       
-      // FIXED bobot: 100% / 14 (standar RPS)
-      const subCpmkBobot = 100 / 14; // 7.142857142857143%
-      console.log(`💯 Sub-CPMK Bobot: ${subCpmkBobot.toFixed(6)}% (standar 14 Sub-CPMK)`);
+      // Bobot Sub-CPMK: 100% / 14 (presisi penuh tanpa pembulatan)
+      const subCpmkBobot = 100 / 14; // 7.142857142857143...
+      console.log(`💯 Sub-CPMK Bobot: ${subCpmkBobot}% (standar 14 Sub-CPMK)`);
       
       // Step 3: Save Sub-CPMK
       let subCpmkSaved = 0;
       for (const subCpmk of validSubCpmk) {
-        console.log('🔍 Processing Sub-CPMK:', subCpmk.code, 'Related to:', subCpmk.relatedCpmk);
+        // Support both cpmk_id and relatedCpmk fields
+        const relatedCpmkValue = subCpmk.cpmk_id || subCpmk.relatedCpmk || '';
+        console.log('🔍 Processing Sub-CPMK:', subCpmk.code, 'Related to:', relatedCpmkValue);
         
         // Try to find CPMK ID
-        const cpmkId = cpmkCodeToId[subCpmk.relatedCpmk];
+        const cpmkId = cpmkCodeToId[relatedCpmkValue];
         if (!cpmkId) {
-          console.warn('⚠️ CPMK not found for:', subCpmk.relatedCpmk);
+          console.warn('⚠️ CPMK not found for:', relatedCpmkValue);
           console.warn('⚠️ Available keys:', Object.keys(cpmkCodeToId));
           continue;
         }
@@ -1577,7 +2390,7 @@ function SubCPMKStep({ formData, setFormData, course, viewMode = false }) {
           });
           
           subCpmkSaved++;
-          console.log(`✅ Sub-CPMK ${subCpmkNumber} saved for ${subCpmk.relatedCpmk}`);
+          console.log(`✅ Sub-CPMK ${subCpmkNumber} saved for ${relatedCpmkValue}`);
         } catch (error) {
           if (error.response?.status === 409) {
             console.log(`ℹ️ Sub-CPMK already exists, skipping`);
@@ -1833,7 +2646,7 @@ function SubCPMKStep({ formData, setFormData, course, viewMode = false }) {
                 ))}
               </select>
               <span className="inline-block px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded whitespace-nowrap self-start">
-                Bobot: {calculateSubCpmkBobot().toFixed(6)}%
+                Bobot: {formatBobotDisplay(calculateSubCpmkBobot())}%
               </span>
               {!viewMode && (
                 <button

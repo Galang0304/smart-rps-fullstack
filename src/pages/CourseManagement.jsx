@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Upload, Plus, Search, Loader2, CheckCircle, AlertCircle, FileText, BookOpen, CheckCircle2, Trash2, Edit, Settings, Filter, X } from 'lucide-react';
-import { courseAPI, programAPI, prodiAPI, generatedRPSAPI } from '../services/api';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Upload, Plus, Search, Loader2, CheckCircle, AlertCircle, FileText, BookOpen, CheckCircle2, Trash2, Edit, Settings, Filter, X, Sparkles, Flame, XCircle, Clock, Zap } from 'lucide-react';
+import { courseAPI, programAPI, prodiAPI, generatedRPSAPI, cpmkAPI, aiHelperAPI } from '../services/api';
 
 export default function CourseManagement() {
   const location = useLocation();
+  const navigate = useNavigate();
   const isAdminRoute = location.pathname.startsWith('/admin/');
   
   const [courses, setCourses] = useState([]);
@@ -28,6 +29,21 @@ export default function CourseManagement() {
   const [filterSemester, setFilterSemester] = useState('all');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterRPSStatus, setFilterRPSStatus] = useState('all');
+  
+  // === BATCH RPS GENERATION STATES ===
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchGenerating, setBatchGenerating] = useState(false);
+  const [batchProgress, setBatchProgress] = useState({
+    current: 0,
+    total: 0,
+    currentCourse: '',
+    currentStep: '',
+    results: [], // { courseId, courseTitle, status: 'success'|'error'|'skipped', message }
+  });
+  const [batchMode, setBatchMode] = useState('all'); // 'all' | 'without-rps'
+  const [selectedCourses, setSelectedCourses] = useState(new Set()); // Set of course IDs for batch selection
+  const [selectionMode, setSelectionMode] = useState(false); // Toggle selection mode
+  
   const [formData, setFormData] = useState({
     code: '',
     title: '',
@@ -168,8 +184,8 @@ export default function CourseManagement() {
 
   const loadRPSStatus = async (courseList) => {
     try {
-      // Get all RPS
-      const rpsRes = await generatedRPSAPI.getAll();
+      // Get all RPS - set large page_size to get all
+      const rpsRes = await generatedRPSAPI.getAll({ page: 1, page_size: 1000 });
       console.log('RPS response:', rpsRes);
       
       // Handle nested response structure
@@ -197,6 +213,598 @@ export default function CourseManagement() {
       console.error('Failed to load RPS status:', error);
       setCoursesWithRPS(new Map());
     }
+  };
+
+  // =====================================================
+  // BATCH RPS GENERATION
+  // =====================================================
+  
+  // Toggle course selection
+  const toggleCourseSelection = (courseId) => {
+    setSelectedCourses(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(courseId)) {
+        newSet.delete(courseId);
+      } else {
+        newSet.add(courseId);
+      }
+      return newSet;
+    });
+  };
+  
+  // Select all filtered courses
+  const selectAllCourses = () => {
+    const coursesWithoutRPS = filteredCourses.filter(c => !coursesWithRPS.has(c.id));
+    setSelectedCourses(new Set(coursesWithoutRPS.map(c => c.id)));
+  };
+  
+  // Deselect all
+  const deselectAllCourses = () => {
+    setSelectedCourses(new Set());
+  };
+  
+  // Toggle all selection
+  const toggleSelectAll = () => {
+    const coursesWithoutRPS = filteredCourses.filter(c => !coursesWithRPS.has(c.id));
+    if (selectedCourses.size === coursesWithoutRPS.length) {
+      deselectAllCourses();
+    } else {
+      selectAllCourses();
+    }
+  };
+  
+  const handleBatchGenerateRPS = async () => {
+    // Determine which courses to process based on selection
+    let coursesToProcess = [];
+    
+    if (selectionMode && selectedCourses.size > 0) {
+      // Use selected courses
+      coursesToProcess = filteredCourses.filter(c => selectedCourses.has(c.id));
+    } else if (batchMode === 'all') {
+      coursesToProcess = [...filteredCourses];
+    } else if (batchMode === 'without-rps') {
+      coursesToProcess = filteredCourses.filter(c => !coursesWithRPS.has(c.id));
+    }
+    
+    if (coursesToProcess.length === 0) {
+      alert('⚠️ Tidak ada mata kuliah yang perlu di-generate RPS-nya!');
+      return;
+    }
+    
+    const confirmMsg = `🚀 Generate RPS untuk ${coursesToProcess.length} mata kuliah?\n\nProses ini akan:\n1. Load CPMK dari database (atau generate AI jika belum ada)\n2. Load CPL mapping (atau match AI jika belum ada)\n3. Load Sub-CPMK dari database (atau generate AI jika belum ada)\n4. Generate Bahan Kajian dengan AI\n5. Generate Rencana Pembelajaran dengan AI\n6. Generate Referensi dengan AI\n\nData yang sudah ada di database akan digunakan langsung.\n\nLanjutkan?`;
+    
+    if (!confirm(confirmMsg)) return;
+    
+    setBatchGenerating(true);
+    setBatchProgress({
+      current: 0,
+      total: coursesToProcess.length,
+      currentCourse: '',
+      currentStep: 'Memulai...',
+      results: [],
+    });
+    
+    const results = [];
+    
+    for (let i = 0; i < coursesToProcess.length; i++) {
+      const course = coursesToProcess[i];
+      
+      setBatchProgress(prev => ({
+        ...prev,
+        current: i + 1,
+        currentCourse: course.title,
+        currentStep: 'Mempersiapkan data...',
+      }));
+      
+      try {
+        // Check if RPS already exists
+        if (coursesWithRPS.has(course.id)) {
+          results.push({
+            courseId: course.id,
+            courseCode: course.code,
+            courseTitle: course.title,
+            status: 'skipped',
+            message: 'RPS sudah ada',
+          });
+          setBatchProgress(prev => ({ ...prev, results: [...results] }));
+          continue;
+        }
+        
+        // === STEP 0: Generate Deskripsi Mata Kuliah (jika belum ada) ===
+        let courseDescription = course.description || '';
+        if (!courseDescription || courseDescription.trim() === '') {
+          setBatchProgress(prev => ({ ...prev, currentStep: '📝 Generate Deskripsi Mata Kuliah...' }));
+          try {
+            const descRes = await aiHelperAPI.generateCourseDescription({
+              course_code: course.code,
+              course_title: course.title,
+              credits: course.credits,
+              semester: course.semester,
+            });
+            if (descRes.data?.data?.description) {
+              courseDescription = descRes.data.data.description;
+              console.log(`[Batch] Generated description for ${course.code}`);
+            }
+          } catch (descError) {
+            console.error('Description generation failed:', descError);
+            courseDescription = `Mata kuliah ${course.title} dengan bobot ${course.credits} SKS.`;
+          }
+        }
+        
+        // === STEP 1: Load or Generate CPMK ===
+        setBatchProgress(prev => ({ ...prev, currentStep: '📋 Menyiapkan CPMK...' }));
+        
+        let cpmkData = [];
+        let cpmkFromDB = false;
+        
+        try {
+          // Try to load from database first
+          const cpmkRes = await cpmkAPI.getByCourseId(course.id);
+          const dbCpmk = cpmkRes.data?.data || [];
+          
+          if (dbCpmk.length > 0) {
+            cpmkFromDB = true;
+            cpmkData = dbCpmk.map((item, idx) => ({
+              id: item.id, // UUID dari database - penting untuk save Sub-CPMK
+              cpmk_number: item.cpmk_number || idx + 1,
+              code: `CPMK-${item.cpmk_number || idx + 1}`,
+              description: item.description || '',
+              matched_cpl: item.matched_cpl || null,
+              selected_cpls: item.matched_cpl ? item.matched_cpl.split(',').map(s => s.trim()) : [],
+              // Keep sub_cpmks for later use
+              sub_cpmks: item.sub_cpmks || item.SubCPMKs || [],
+            }));
+            console.log(`[Batch] Loaded ${cpmkData.length} CPMK from DB for ${course.code}`);
+          }
+        } catch (e) {
+          console.log('No CPMK in DB for', course.code);
+        }
+        
+        // If no CPMK, generate with AI
+        if (cpmkData.length === 0) {
+          setBatchProgress(prev => ({ ...prev, currentStep: '🤖 Generate CPMK dengan AI...' }));
+          try {
+            const aiRes = await aiHelperAPI.generateCPMK({
+              course_id: course.id,
+              course_code: course.code,
+              course_title: course.title,
+              credits: course.credits,
+              prodi_id: prodiId,
+            });
+            if (aiRes.data?.data?.items) {
+              cpmkData = aiRes.data.data.items.map((item, idx) => ({
+                cpmk_number: idx + 1,
+                code: item.code || `CPMK-${idx + 1}`,
+                description: item.description,
+                matched_cpl: item.matched_cpl || null,
+                sub_cpmks: [],
+              }));
+              console.log(`[Batch] Generated ${cpmkData.length} CPMK with AI for ${course.code}`);
+            }
+          } catch (aiError) {
+            console.error('AI CPMK generation failed:', aiError);
+          }
+        }
+        
+        // === STEP 2: Match CPL (only for CPMK without CPL) ===
+        const cpmkNeedCPL = cpmkData.filter(c => !c.matched_cpl && c.description);
+        
+        if (cpmkNeedCPL.length > 0) {
+          setBatchProgress(prev => ({ ...prev, currentStep: `🔗 Matching CPL (${cpmkNeedCPL.length} CPMK)...` }));
+          
+          for (let j = 0; j < cpmkData.length; j++) {
+            const cpmk = cpmkData[j];
+            if (!cpmk.matched_cpl && cpmk.description) {
+              try {
+                const matchRes = await aiHelperAPI.matchCPMKWithCPL({
+                  prodi_id: prodiId,
+                  cpmk_code: cpmk.code,
+                  cpmk_description: cpmk.description,
+                });
+                if (matchRes.data?.matches) {
+                  const recommended = matchRes.data.matches.filter(m => m.recommended);
+                  if (recommended.length > 0) {
+                    cpmkData[j].matched_cpl = recommended.map(m => m.kode_cpl).join(', ');
+                    cpmkData[j].selected_cpls = recommended.map(m => m.kode_cpl);
+                  }
+                }
+              } catch (matchError) {
+                console.error('CPL matching failed:', matchError);
+              }
+              await new Promise(r => setTimeout(r, 200)); // Rate limiting
+            }
+          }
+        } else {
+          console.log(`[Batch] All CPMK already have CPL mapping for ${course.code}`);
+        }
+        
+        // === STEP 3: Load or Generate Sub-CPMK ===
+        setBatchProgress(prev => ({ ...prev, currentStep: '📝 Menyiapkan Sub-CPMK...' }));
+        
+        const MAX_SUB_CPMK = 14; // Maksimal 14 Sub-CPMK
+        let subCpmkData = [];
+        let subCpmkFromDB = false;
+        
+        // Try to load Sub-CPMK from database (already preloaded with CPMK)
+        // PENTING: Batasi maksimal 14 Sub-CPMK total
+        if (cpmkData.length > 0) {
+          let subCounter = 1;
+          cpmkData.forEach((cpmk, idx) => {
+            const subs = cpmk.sub_cpmks || cpmk.SubCPMKs || [];
+            if (subs.length > 0) {
+              subs.forEach(sub => {
+                // Hanya ambil sampai maksimal 14 Sub-CPMK
+                if (subCpmkData.length < MAX_SUB_CPMK) {
+                  subCpmkData.push({
+                    code: `Sub-CPMK-${subCounter}`,
+                    description: sub.description || '',
+                    cpmk_id: cpmk.code || `CPMK-${idx + 1}`,
+                  });
+                  subCounter++;
+                }
+              });
+              subCpmkFromDB = true;
+            }
+          });
+        }
+        
+        console.log(`[Batch] Sub-CPMK loaded from DB: ${subCpmkData.length} (max ${MAX_SUB_CPMK})`);
+        
+        // If no Sub-CPMK from database OR less than 14, generate with AI
+        if (subCpmkData.length === 0) {
+          setBatchProgress(prev => ({ ...prev, currentStep: '🤖 Generate Sub-CPMK dengan AI...' }));
+          
+          const totalSubCpmk = MAX_SUB_CPMK;
+          const subPerCpmk = Math.floor(totalSubCpmk / cpmkData.length);
+          const remainder = totalSubCpmk % cpmkData.length;
+          
+          let subCounter = 1;
+          for (let j = 0; j < cpmkData.length; j++) {
+            const cpmk = cpmkData[j];
+            const count = subPerCpmk + (j < remainder ? 1 : 0);
+            
+            // STOP jika sudah mencapai 14 Sub-CPMK
+            if (subCpmkData.length >= MAX_SUB_CPMK) {
+              console.log(`[Batch] Reached max ${MAX_SUB_CPMK} Sub-CPMK, stopping generation`);
+              break;
+            }
+            
+            // Hitung berapa yang masih bisa ditambahkan
+            const remainingSlots = MAX_SUB_CPMK - subCpmkData.length;
+            const actualCount = Math.min(count, remainingSlots);
+            
+            if (actualCount <= 0) break;
+            
+            try {
+              const subRes = await aiHelperAPI.generateSubCPMK({
+                cpmk: cpmk.description,
+                course_title: course.title,
+                count: actualCount,
+              });
+              
+              if (subRes.data?.data?.items) {
+                // PENTING: Batasi jumlah yang diambil dari response AI
+                const itemsToTake = subRes.data.data.items.slice(0, actualCount);
+                itemsToTake.forEach((item) => {
+                  if (subCpmkData.length < MAX_SUB_CPMK) {
+                    subCpmkData.push({
+                      code: `Sub-CPMK-${subCounter}`,
+                      description: item.description,
+                      cpmk_id: cpmk.code,
+                    });
+                    subCounter++;
+                  }
+                });
+              } else {
+                // Create empty placeholders (tetap batasi)
+                for (let k = 0; k < actualCount && subCpmkData.length < MAX_SUB_CPMK; k++) {
+                  subCpmkData.push({
+                    code: `Sub-CPMK-${subCounter}`,
+                    description: '',
+                    cpmk_id: cpmk.code,
+                  });
+                  subCounter++;
+                }
+              }
+            } catch (subError) {
+              console.error('Sub-CPMK generation failed:', subError);
+              for (let k = 0; k < actualCount && subCpmkData.length < MAX_SUB_CPMK; k++) {
+                subCpmkData.push({
+                  code: `Sub-CPMK-${subCounter}`,
+                  description: '',
+                  cpmk_id: cpmk.code,
+                });
+                subCounter++;
+              }
+            }
+            await new Promise(r => setTimeout(r, 200));
+          }
+        }
+        
+        // FINAL CHECK: Pastikan tidak lebih dari 14 Sub-CPMK
+        if (subCpmkData.length > MAX_SUB_CPMK) {
+          console.warn(`[Batch] WARNING: Sub-CPMK count (${subCpmkData.length}) exceeded max (${MAX_SUB_CPMK}), trimming...`);
+          subCpmkData = subCpmkData.slice(0, MAX_SUB_CPMK);
+          // Re-number codes
+          subCpmkData.forEach((sub, idx) => {
+            sub.code = `Sub-CPMK-${idx + 1}`;
+          });
+        }
+        
+        console.log(`[Batch] Final Sub-CPMK count: ${subCpmkData.length}`);
+        
+        // === STEP 4: Generate Bahan Kajian ===
+        setBatchProgress(prev => ({ ...prev, currentStep: '📚 Generate Bahan Kajian...' }));
+        
+        let bahanKajian = '';
+        try {
+          const bkRes = await aiHelperAPI.generateBahanKajian({
+            course_title: course.title,
+            course_description: course.description || '',
+            cpmk: cpmkData.map(c => c.description).filter(Boolean),
+          });
+          bahanKajian = bkRes.data?.data?.bahan_kajian || bkRes.data?.bahan_kajian || '';
+        } catch (bkError) {
+          console.error('Bahan kajian generation failed:', bkError);
+        }
+        
+        // === STEP 5: Generate Rencana Pembelajaran ===
+        setBatchProgress(prev => ({ ...prev, currentStep: '📅 Generate Rencana Pembelajaran...' }));
+        
+        let rencana = [];
+        try {
+          const rpRes = await aiHelperAPI.generateRencanaPembelajaran({
+            course_title: course.title,
+            credits: course.credits,
+            cpmk: cpmkData.map(c => ({ code: c.code, description: c.description })),
+            sub_cpmk: subCpmkData.map(s => ({ code: s.code, description: s.description, cpmk_id: s.cpmk_id })),
+          });
+          rencana = rpRes.data?.data?.rencana || rpRes.data?.rencana || [];
+        } catch (rpError) {
+          console.error('Rencana pembelajaran generation failed:', rpError);
+        }
+        
+        // === STEP 6: Generate Referensi ===
+        setBatchProgress(prev => ({ ...prev, currentStep: '📖 Generate Referensi...' }));
+        
+        let referensi = { utama: [], pendukung: [] };
+        try {
+          const refRes = await aiHelperAPI.generateReferensi({
+            course_code: course.code,
+            course_title: course.title,
+            description: course.description || '',
+            cpmk_list: cpmkData.map(c => c.description).filter(Boolean),
+            bahan_kajian: bahanKajian ? bahanKajian.split('\n').filter(Boolean) : [],
+          });
+          
+          // Parse response - bisa berupa array langsung atau object dengan utama/pendukung
+          const refData = refRes.data?.data || refRes.data || [];
+          if (Array.isArray(refData)) {
+            // Pisahkan book dan journal
+            referensi.utama = refData.filter(r => r.type === 'book').map(r => 
+              `${r.author} (${r.year}). ${r.title}. ${r.publisher}.`
+            );
+            referensi.pendukung = refData.filter(r => r.type === 'journal').map(r => 
+              `${r.author} (${r.year}). ${r.title}. ${r.publisher}.`
+            );
+          } else if (refData.utama || refData.pendukung) {
+            referensi = refData;
+          }
+        } catch (refError) {
+          console.error('Referensi generation failed:', refError);
+        }
+        
+        // === STEP 7: Save RPS ===
+        setBatchProgress(prev => ({ ...prev, currentStep: '💾 Menyimpan RPS...' }));
+        
+        // Format data sesuai struktur yang diharapkan RPSCreate (camelCase)
+        // Transform subCpmkData ke format dengan relatedCpmk (bukan cpmk_id)
+        const formattedSubCpmk = subCpmkData.map(s => ({
+          code: s.code,
+          description: s.description,
+          relatedCpmk: s.cpmk_id || '', // RPSCreate expects 'relatedCpmk'
+          cpmk_id: s.cpmk_id // Keep cpmk_id for compatibility
+        }));
+        
+        // Transform rencana pembelajaran ke format rencanaMingguan
+        const formattedRencana = Array.isArray(rencana) && rencana.length > 0 
+          ? rencana.map((r, idx) => ({
+              minggu: r.minggu || idx + 1,
+              subCpmk: r.sub_cpmk || r.subCpmk || '',
+              materi: r.materi || r.topic || '',
+              metode: r.metode || r.method || '',
+              penilaian: r.penilaian || r.assessment || ''
+            }))
+          : Array.from({ length: 16 }, (_, i) => {
+              if (i === 7) {
+                return { minggu: 8, subCpmk: 'UTS', materi: 'Ujian Tengah Semester', metode: 'Ujian Tertulis/Online', penilaian: 'Ujian' };
+              } else if (i === 15) {
+                return { minggu: 16, subCpmk: 'UAS', materi: 'Ujian Akhir Semester', metode: 'Ujian Tertulis/Online', penilaian: 'Ujian' };
+              }
+              const subCpmkForWeek = formattedSubCpmk[i] ? formattedSubCpmk[i].code : '';
+              return { minggu: i + 1, subCpmk: subCpmkForWeek, materi: '', metode: '', penilaian: '' };
+            });
+        
+        // Transform bahan kajian ke array
+        const formattedBahanKajian = bahanKajian 
+          ? (typeof bahanKajian === 'string' 
+              ? bahanKajian.split('\n').filter(b => b.trim()) 
+              : bahanKajian)
+          : ['', '', ''];
+        
+        // Transform referensi ke format gabungan
+        const formattedReferensi = [
+          ...(Array.isArray(referensi.utama) ? referensi.utama : []),
+          ...(Array.isArray(referensi.pendukung) ? referensi.pendukung : [])
+        ];
+        
+        // Generate tugas placeholder
+        const formattedTugas = Array.from({ length: 14 }, (_, i) => ({
+          tugasKe: i + 1,
+          subCpmk: formattedSubCpmk[i] ? formattedSubCpmk[i].code : '',
+          indikator: '',
+          judulTugas: '',
+          batasWaktu: '',
+          petunjukPengerjaan: '',
+          luaranTugas: '',
+          kriteriaPenilaian: '',
+          teknikPenilaian: '',
+          bobotPersen: ''
+        }));
+        
+        const rpsResult = {
+          // Course info for reference
+          course: {
+            id: course.id,
+            code: course.code,
+            title: course.title,
+            credits: course.credits,
+            semester: course.semester
+          },
+          semester: course.semester?.toString() || '1',
+          tahun_akademik: course.tahun || `${new Date().getFullYear()}1`,
+          // Deskripsi mata kuliah (gunakan yang di-generate atau dari database)
+          deskripsi: courseDescription,
+          description: courseDescription,
+          // CPMK dengan format yang benar
+          cpmk: cpmkData.map(c => ({
+            code: c.code,
+            description: c.description,
+            selected_cpls: c.selected_cpls || (c.matched_cpl ? c.matched_cpl.split(',').map(s => s.trim()) : []),
+          })),
+          // Sub-CPMK dengan format camelCase
+          subCpmk: formattedSubCpmk,
+          sub_cpmk: formattedSubCpmk, // Keep snake_case for compatibility
+          // Bahan Kajian
+          bahanKajian: formattedBahanKajian,
+          bahan_kajian: bahanKajian,
+          // Rencana Mingguan (camelCase)
+          rencanaMingguan: formattedRencana,
+          rencana_pembelajaran: rencana,
+          // Rencana Tugas
+          rencanaTugas: formattedTugas,
+          // Referensi
+          referensi: formattedReferensi,
+          referensi_utama: Array.isArray(referensi.utama) ? referensi.utama : [],
+          referensi_pendukung: Array.isArray(referensi.pendukung) ? referensi.pendukung : [],
+        };
+        
+        const rpsData = {
+          course_id: course.id,
+          result: rpsResult,
+          status: 'draft',
+        };
+        
+        // === STEP 7.5: Save CPMK & Sub-CPMK to Database ===
+        setBatchProgress(prev => ({ ...prev, currentStep: '💾 Menyimpan CPMK & Sub-CPMK ke Database...' }));
+        
+        // Save CPMK yang belum ada di database
+        if (!cpmkFromDB && cpmkData.length > 0) {
+          for (const cpmk of cpmkData) {
+            try {
+              // Get Sub-CPMK untuk CPMK ini (hanya yang punya description)
+              const subCpmksForThis = subCpmkData.filter(s => s.cpmk_id === cpmk.code && s.description && s.description.trim());
+              
+              // Create CPMK dengan Sub-CPMK
+              await cpmkAPI.create({
+                course_id: course.id,
+                cpmk_number: cpmk.cpmk_number,
+                description: cpmk.description,
+                bobot: subCpmksForThis.length * (100 / 14), // Bobot = jumlah sub × 7.14%
+                matched_cpl: cpmk.matched_cpl || '',
+                sub_cpmks: subCpmksForThis.map((sub, idx) => ({
+                  sub_cpmk_number: parseInt(sub.code.match(/\d+/)?.[0] || idx + 1),
+                  description: sub.description,
+                })),
+              });
+              console.log(`[Batch] Saved CPMK ${cpmk.code} with ${subCpmksForThis.length} Sub-CPMK to DB`);
+            } catch (saveError) {
+              // Mungkin sudah ada, skip
+              console.log(`[Batch] CPMK ${cpmk.code} mungkin sudah ada:`, saveError.message);
+            }
+          }
+        } else if (cpmkFromDB) {
+          // CPMK sudah ada, cek apakah Sub-CPMK perlu ditambahkan
+          for (const cpmk of cpmkData) {
+            const existingSubCount = (cpmk.sub_cpmks || []).length;
+            
+            // Jika belum ada Sub-CPMK di DB tapi kita punya yang baru (dengan description), tambahkan
+            if (existingSubCount === 0 && cpmk.id) {
+              // Filter hanya Sub-CPMK yang punya description
+              const newSubCpmks = subCpmkData.filter(s => s.cpmk_id === cpmk.code && s.description && s.description.trim());
+              
+              if (newSubCpmks.length > 0) {
+                console.log(`[Batch] Adding ${newSubCpmks.length} Sub-CPMK to CPMK ${cpmk.code} (${cpmk.id})`);
+                
+                for (const sub of newSubCpmks) {
+                  try {
+                    // Create Sub-CPMK dengan API
+                    await cpmkAPI.createSubCpmk({
+                      cpmk_id: cpmk.id, // UUID dari database
+                      sub_cpmk_number: parseInt(sub.code.match(/\d+/)?.[0] || 1),
+                      description: sub.description,
+                    });
+                    console.log(`[Batch] Saved Sub-CPMK ${sub.code} to CPMK ${cpmk.code}`);
+                  } catch (subError) {
+                    console.log(`[Batch] Failed to save Sub-CPMK ${sub.code}:`, subError.message);
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        // === STEP 8: Save RPS ===
+        setBatchProgress(prev => ({ ...prev, currentStep: '💾 Menyimpan RPS...' }));
+        
+        console.log(`[Batch] Saving RPS for ${course.code}:`, rpsData);
+        
+        // Use create instead of createDraft
+        const rpsResponse = await generatedRPSAPI.create(rpsData);
+        console.log(`[Batch] RPS saved response:`, rpsResponse);
+        
+        results.push({
+          courseId: course.id,
+          courseCode: course.code,
+          courseTitle: course.title,
+          status: 'success',
+          message: 'RPS berhasil dibuat',
+        });
+        
+      } catch (error) {
+        console.error(`Failed to generate RPS for ${course.code}:`, error);
+        results.push({
+          courseId: course.id,
+          courseCode: course.code,
+          courseTitle: course.title,
+          status: 'error',
+          message: error.response?.data?.error || error.message,
+        });
+      }
+      
+      setBatchProgress(prev => ({ ...prev, results: [...results] }));
+      
+      // Delay between courses
+      await new Promise(r => setTimeout(r, 500));
+    }
+    
+    // Finished
+    setBatchProgress(prev => ({
+      ...prev,
+      currentStep: '✅ Selesai!',
+      currentCourse: '',
+    }));
+    setBatchGenerating(false);
+    
+    // Reload RPS status
+    await loadRPSStatus(courses);
+    
+    // Show summary
+    const successCount = results.filter(r => r.status === 'success').length;
+    const errorCount = results.filter(r => r.status === 'error').length;
+    const skippedCount = results.filter(r => r.status === 'skipped').length;
+    
+    alert(`🎉 Batch Generate Selesai!\n\n✅ Berhasil: ${successCount}\n⏭️ Dilewati: ${skippedCount}\n❌ Gagal: ${errorCount}`);
   };
 
   useEffect(() => {
@@ -556,8 +1164,318 @@ export default function CourseManagement() {
             <Upload className="w-4 h-4 md:w-5 md:h-5" />
             <span className="hidden sm:inline">Import CSV</span>
           </button>
+          
+          {/* BATCH GENERATE RPS BUTTON */}
+          {!isAdminRoute && (
+            <div className="flex items-center gap-2">
+              {/* Toggle Selection Mode */}
+              <button
+                onClick={() => {
+                  setSelectionMode(!selectionMode);
+                  if (selectionMode) {
+                    setSelectedCourses(new Set());
+                  }
+                }}
+                className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-lg transition-all text-sm md:text-base ${
+                  selectionMode 
+                    ? 'bg-purple-100 text-purple-700 ring-2 ring-purple-500' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                title="Mode pilih mata kuliah"
+              >
+                <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" />
+                <span className="hidden sm:inline">{selectionMode ? 'Batal Pilih' : 'Pilih MK'}</span>
+              </button>
+              
+              {/* Batch Generate Button */}
+              <button
+                onClick={() => setShowBatchModal(true)}
+                className="flex items-center gap-2 px-3 md:px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all shadow-lg text-sm md:text-base"
+                title="Generate RPS untuk mata kuliah yang dipilih"
+              >
+                <Zap className="w-4 h-4 md:w-5 md:h-5" />
+                <span className="hidden sm:inline">
+                  {selectionMode && selectedCourses.size > 0 
+                    ? `Generate ${selectedCourses.size} RPS` 
+                    : 'Batch Generate RPS'}
+                </span>
+                <span className="sm:hidden">
+                  {selectionMode && selectedCourses.size > 0 
+                    ? `${selectedCourses.size} RPS` 
+                    : 'Batch'}
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* BATCH GENERATE RPS MODAL */}
+      {showBatchModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                    <Zap className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Batch Generate RPS</h2>
+                    <p className="text-purple-100 text-sm">Generate RPS otomatis dengan AI</p>
+                  </div>
+                </div>
+                {!batchGenerating && (
+                  <button
+                    onClick={() => {
+                      setShowBatchModal(false);
+                      setBatchProgress({ current: 0, total: 0, currentCourse: '', currentStep: '', results: [] });
+                    }}
+                    className="text-white/80 hover:text-white transition-colors"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                )}
+              </div>
+            </div>
+            
+            {/* Content */}
+            <div className="p-6 max-h-[60vh] overflow-y-auto">
+              {!batchGenerating && batchProgress.results.length === 0 ? (
+                <>
+                  {/* Statistics */}
+                  <div className="grid grid-cols-3 gap-4 mb-6">
+                    <div className="bg-blue-50 rounded-xl p-4 text-center">
+                      <p className="text-3xl font-bold text-blue-600">{filteredCourses.length}</p>
+                      <p className="text-sm text-blue-600">Total MK</p>
+                    </div>
+                    <div className="bg-green-50 rounded-xl p-4 text-center">
+                      <p className="text-3xl font-bold text-green-600">
+                        {filteredCourses.filter(c => coursesWithRPS.has(c.id)).length}
+                      </p>
+                      <p className="text-sm text-green-600">Sudah RPS</p>
+                    </div>
+                    <div className={`rounded-xl p-4 text-center ${selectionMode && selectedCourses.size > 0 ? 'bg-purple-50' : 'bg-orange-50'}`}>
+                      <p className={`text-3xl font-bold ${selectionMode && selectedCourses.size > 0 ? 'text-purple-600' : 'text-orange-600'}`}>
+                        {selectionMode && selectedCourses.size > 0 
+                          ? selectedCourses.size 
+                          : filteredCourses.filter(c => !coursesWithRPS.has(c.id)).length}
+                      </p>
+                      <p className={`text-sm ${selectionMode && selectedCourses.size > 0 ? 'text-purple-600' : 'text-orange-600'}`}>
+                        {selectionMode && selectedCourses.size > 0 ? 'Dipilih' : 'Belum RPS'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Selected Courses Info */}
+                  {selectionMode && selectedCourses.size > 0 && (
+                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="font-medium text-purple-800">
+                          ✨ {selectedCourses.size} Mata Kuliah Dipilih
+                        </p>
+                        <button
+                          onClick={() => {
+                            setSelectedCourses(new Set());
+                            setSelectionMode(false);
+                          }}
+                          className="text-xs text-purple-600 hover:text-purple-800"
+                        >
+                          Hapus Pilihan
+                        </button>
+                      </div>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {filteredCourses.filter(c => selectedCourses.has(c.id)).map(course => (
+                          <div key={course.id} className="text-sm text-purple-700 flex items-center gap-2">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>{course.code} - {course.title}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Mode Selection - Only show if no courses selected */}
+                  {(!selectionMode || selectedCourses.size === 0) && (
+                    <div className="mb-6">
+                      <label className="block text-sm font-medium text-gray-700 mb-3">
+                        Pilih mata kuliah yang akan di-generate:
+                      </label>
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                          <input
+                            type="radio"
+                            name="batchMode"
+                            value="without-rps"
+                            checked={batchMode === 'without-rps'}
+                            onChange={(e) => setBatchMode(e.target.value)}
+                            className="w-4 h-4 text-purple-600"
+                          />
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              Hanya yang belum punya RPS ({filteredCourses.filter(c => !coursesWithRPS.has(c.id)).length} MK)
+                            </p>
+                            <p className="text-sm text-gray-500">Rekomendasi - Skip mata kuliah yang sudah ada RPS</p>
+                          </div>
+                        </label>
+                        <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                          <input
+                            type="radio"
+                            name="batchMode"
+                            value="all"
+                            checked={batchMode === 'all'}
+                            onChange={(e) => setBatchMode(e.target.value)}
+                            className="w-4 h-4 text-purple-600"
+                          />
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              Semua mata kuliah ({filteredCourses.length} MK)
+                            </p>
+                            <p className="text-sm text-gray-500">Generate untuk semua, skip yang sudah ada</p>
+                          </div>
+                        </label>
+                      </div>
+                      
+                      {/* Hint to use selection mode */}
+                      <div className="mt-4 text-center">
+                        <p className="text-sm text-gray-500">
+                          Atau klik tombol <strong>"Pilih MK"</strong> di atas untuk memilih mata kuliah tertentu
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Info */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+                    <div className="flex items-start gap-3">
+                      <Flame className="w-5 h-5 text-amber-600 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-amber-800">Proses AI akan memakan waktu</p>
+                        <p className="text-sm text-amber-700 mt-1">
+                          Setiap mata kuliah membutuhkan ~30-60 detik untuk generate CPMK, Sub-CPMK, Bahan Kajian, Rencana Pembelajaran, dan Referensi.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Progress */}
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700">
+                        Progress: {batchProgress.current} / {batchProgress.total}
+                      </span>
+                      <span className="text-sm text-gray-500">
+                        {Math.round((batchProgress.current / batchProgress.total) * 100)}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-500"
+                        style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Current Status */}
+                  {batchGenerating && (
+                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-6">
+                      <div className="flex items-center gap-3">
+                        <Loader2 className="w-6 h-6 text-purple-600 animate-spin" />
+                        <div>
+                          <p className="font-medium text-purple-900">{batchProgress.currentCourse}</p>
+                          <p className="text-sm text-purple-700">{batchProgress.currentStep}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Results List */}
+                  {batchProgress.results.length > 0 && (
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      <p className="text-sm font-medium text-gray-700 mb-2">Hasil:</p>
+                      {batchProgress.results.map((result, idx) => (
+                        <div
+                          key={idx}
+                          className={`flex items-center gap-3 p-3 rounded-lg text-sm ${
+                            result.status === 'success' ? 'bg-green-50 text-green-800' :
+                            result.status === 'skipped' ? 'bg-gray-50 text-gray-600' :
+                            'bg-red-50 text-red-800'
+                          }`}
+                        >
+                          {result.status === 'success' ? (
+                            <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                          ) : result.status === 'skipped' ? (
+                            <Clock className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                          ) : (
+                            <XCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{result.courseCode} - {result.courseTitle}</p>
+                            <p className="text-xs opacity-75">{result.message}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            
+            {/* Footer */}
+            <div className="border-t px-6 py-4 bg-gray-50 flex justify-end gap-3">
+              {!batchGenerating && batchProgress.results.length === 0 ? (
+                <>
+                  <button
+                    onClick={() => setShowBatchModal(false)}
+                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    onClick={handleBatchGenerateRPS}
+                    disabled={
+                      (selectionMode && selectedCourses.size === 0) ||
+                      (!selectionMode && batchMode === 'without-rps' && filteredCourses.filter(c => !coursesWithRPS.has(c.id)).length === 0) ||
+                      filteredCourses.length === 0
+                    }
+                    className="px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Sparkles className="w-5 h-5" />
+                    {selectionMode && selectedCourses.size > 0 
+                      ? `Generate ${selectedCourses.size} RPS`
+                      : batchMode === 'without-rps'
+                        ? `Generate ${filteredCourses.filter(c => !coursesWithRPS.has(c.id)).length} RPS`
+                        : `Generate ${filteredCourses.length} RPS`
+                    }
+                  </button>
+                </>
+              ) : batchGenerating ? (
+                <button
+                  disabled
+                  className="px-6 py-2 bg-gray-400 text-white rounded-lg flex items-center gap-2 cursor-not-allowed"
+                >
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Sedang Generate...
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    setShowBatchModal(false);
+                    setBatchProgress({ current: 0, total: 0, currentCourse: '', currentStep: '', results: [] });
+                  }}
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                >
+                  <CheckCircle className="w-5 h-5" />
+                  Selesai
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CSV Upload Section */}
       {showUpload && (
@@ -839,6 +1757,18 @@ export default function CourseManagement() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  {/* Checkbox column for selection mode */}
+                  {selectionMode && (
+                    <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedCourses.size > 0 && selectedCourses.size === filteredCourses.filter(c => !coursesWithRPS.has(c.id)).length}
+                        onChange={toggleSelectAll}
+                        className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                        title="Pilih Semua"
+                      />
+                    </th>
+                  )}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Kode</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Mata Kuliah</th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">SKS</th>
@@ -851,9 +1781,30 @@ export default function CourseManagement() {
               {filteredCourses.map((course) => {
                 const hasRPS = coursesWithRPS.has(course.id);
                 const rpsId = coursesWithRPS.get(course.id);
+                const isSelected = selectedCourses.has(course.id);
                 
                 return (
-                  <tr key={course.id} className={`hover:bg-gray-50 transition-colors ${hasRPS ? 'bg-green-50' : ''}`}>
+                  <tr 
+                    key={course.id} 
+                    className={`hover:bg-gray-50 transition-colors ${hasRPS ? 'bg-green-50' : ''} ${isSelected ? 'bg-purple-50 ring-1 ring-purple-200' : ''}`}
+                    onClick={selectionMode && !hasRPS ? () => toggleCourseSelection(course.id) : undefined}
+                    style={selectionMode && !hasRPS ? { cursor: 'pointer' } : {}}
+                  >
+                    {/* Checkbox for selection mode */}
+                    {selectionMode && (
+                      <td className="px-3 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                        {hasRPS ? (
+                          <span className="text-xs text-green-600">✓ RPS</span>
+                        ) : (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleCourseSelection(course.id)}
+                            className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                          />
+                        )}
+                      </td>
+                    )}
                     <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         {hasRPS && <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />}

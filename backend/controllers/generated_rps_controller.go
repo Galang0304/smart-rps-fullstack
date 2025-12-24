@@ -87,6 +87,24 @@ func (gc *GeneratedRPSController) GetByID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": rps})
 }
 
+// GetByCourseId - Get RPS by Course ID
+func (gc *GeneratedRPSController) GetByCourseId(c *gin.Context) {
+	courseId := c.Param("courseId")
+	courseUUID, err := uuid.Parse(courseId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid course ID format"})
+		return
+	}
+
+	var rps models.GeneratedRPS
+	if err := gc.db.Preload("Course").Where("course_id = ?", courseUUID).First(&rps).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "RPS not found for this course"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": rps})
+}
+
 // GetAll - Get all RPS
 func (gc *GeneratedRPSController) GetAll(c *gin.Context) {
 	var rpsList []models.GeneratedRPS

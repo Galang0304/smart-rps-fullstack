@@ -459,8 +459,8 @@ func prepareTemplateData(db *gorm.DB, rps *models.GeneratedRPS, dosens []models.
 					Materi:    getStringOrDefault(itemMap, "materi", ""),
 					Metode:    getStringOrDefault(itemMap, "metode", ""),
 					Penilaian: getStringOrDefault(itemMap, "penilaian", ""),
-					Waktu:     "150", // default waktu per minggu
-					Bobot:     "7%",  // default bobot
+					Waktu:     "150",                // default waktu per minggu
+					Bobot:     "7,142857142857143%", // default bobot: 100/14 presisi penuh
 				})
 			}
 		}
@@ -490,7 +490,7 @@ func prepareTemplateData(db *gorm.DB, rps *models.GeneratedRPS, dosens []models.
 			Metode:    "Ceramah, Diskusi",
 			Penilaian: "Tugas",
 			Waktu:     "150",
-			Bobot:     "7%",
+			Bobot:     "7,142857142857143%",
 		})
 		log.Printf("[DEBUG] Added week 15 with Sub-CPMK-14")
 	}
@@ -519,7 +519,7 @@ func prepareTemplateData(db *gorm.DB, rps *models.GeneratedRPS, dosens []models.
 					LuaranTugas:        getStringOrDefault(itemMap, "luaranTugas", ""),
 					KriteriaPenilaian:  getStringOrDefault(itemMap, "kriteriaPenilaian", ""),
 					TeknikPenilaian:    getStringOrDefault(itemMap, "teknikPenilaian", ""),
-					BobotPersen:        getStringOrDefault(itemMap, "bobotPersen", "7%"),
+					BobotPersen:        getStringOrDefault(itemMap, "bobotPersen", "7,142857142857143%"),
 					DaftarRujukan:      getStringOrDefault(itemMap, "daftarRujukan", ""),
 				})
 			}
@@ -581,7 +581,7 @@ func prepareTemplateData(db *gorm.DB, rps *models.GeneratedRPS, dosens []models.
 
 			// Get assessment info from corresponding rencanaTugas (by index)
 			jenisAssessmen := ""
-			bobot := "7,14%" // default: 100/14
+			bobot := "7,142857142857143%" // default: 100/14 (presisi penuh)
 			if i < len(data.RencanaTugas) {
 				jenisAssessmen = data.RencanaTugas[i].TeknikPenilaian
 				if data.RencanaTugas[i].BobotPersen != "" {

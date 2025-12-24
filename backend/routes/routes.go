@@ -150,6 +150,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 		{
 			generated.GET("", generatedRPSController.GetAll)
 			generated.GET("/:id", generatedRPSController.GetByID)
+			generated.GET("/course/:courseId", generatedRPSController.GetByCourseId)
 			generated.POST("", generatedRPSController.Create)
 			generated.PUT("/:id", generatedRPSController.Update)
 			generated.DELETE("/:id", generatedRPSController.Delete)

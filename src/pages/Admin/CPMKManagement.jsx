@@ -65,17 +65,48 @@ export default function CPMKManagement() {
     setToast({ show: true, message, type });
   };
 
-  // Calculate total bobot CPMK
-  const calculateTotalBobot = () => {
-    return cpmkList.reduce((sum, cpmk) => sum + (parseFloat(cpmk.bobot) || 0), 0);
+  // KONSTANTA: Bobot Sub-CPMK = 100/14 (presisi penuh, tanpa pembulatan)
+  const SUB_CPMK_BOBOT = 100 / 14; // 7.142857142857143...
+
+  // Helper: Format bobot untuk tampilan (gunakan koma sebagai desimal)
+  const formatBobotDisplay = (value) => {
+    // Handle floating point precision untuk total 100%
+    // Jika nilai sangat dekat dengan 100, tampilkan sebagai 100
+    if (Math.abs(value - 100) < 0.0001) {
+      return '100';
+    }
+    // Untuk nilai lain, bulatkan ke 2 desimal untuk tampilan yang bersih
+    // tapi tetap simpan presisi penuh di data
+    const rounded = Math.round(value * 100) / 100;
+    const str = rounded.toString();
+    // Ganti titik dengan koma untuk format Indonesia
+    return str.replace('.', ',');
   };
 
-  // Calculate bobot per Sub-CPMK
+  // Calculate total bobot CPMK
+  const calculateTotalBobot = () => {
+    const total = cpmkList.reduce((sum, cpmk) => sum + (parseFloat(cpmk.bobot) || 0), 0);
+    // Handle floating point precision - jika sangat dekat dengan 100, kembalikan 100
+    if (Math.abs(total - 100) < 0.1) {
+      return 100;
+    }
+    // Bulatkan ke 2 desimal untuk menghindari floating point errors
+    return Math.round(total * 100) / 100;
+  };
+
+  // Calculate bobot CPMK berdasarkan jumlah Sub-CPMK
+  // Rumus: Bobot CPMK = jumlah Sub-CPMK × bobot Sub-CPMK (100/14)
+  const calculateCpmkBobot = (subCpmkCount) => {
+    return subCpmkCount * SUB_CPMK_BOBOT;
+  };
+
+  // Calculate bobot per Sub-CPMK (legacy, untuk kompatibilitas)
   const calculateSubCpmkBobot = (cpmkBobot, subCpmkCount) => {
     if (!subCpmkCount || subCpmkCount === 0) return 0;
     return (parseFloat(cpmkBobot) || 0) / subCpmkCount;
   };
-  // Auto-redistribute bobot equally to all CPMK (100% / count)
+  // Auto-redistribute bobot CPMK berdasarkan jumlah Sub-CPMK
+  // Rumus: Bobot CPMK = jumlah Sub-CPMK × (100/14)
   const autoRedistributeBobot = async (courseId) => {
     try {
       const res = await cpmkAPI.getByCourseId(courseId);
@@ -83,14 +114,10 @@ export default function CPMKManagement() {
       
       if (cpmks.length === 0) return;
       
-      // Calculate base bobot for each CPMK
-      const baseBobot = Math.floor((100 / cpmks.length) * 100) / 100; // Round down to 2 decimals
-      const totalBase = baseBobot * (cpmks.length - 1);
-      const lastBobot = 100 - totalBase; // Give remainder to last CPMK
-      
-      // Update all CPMK with calculated bobot
-      const updatePromises = cpmks.map((cpmk, index) => {
-        const bobot = index === cpmks.length - 1 ? lastBobot : baseBobot;
+      // Calculate bobot for each CPMK based on Sub-CPMK count
+      const updatePromises = cpmks.map((cpmk) => {
+        const subCpmkCount = (cpmk.sub_cpmks || []).length;
+        const bobot = subCpmkCount * SUB_CPMK_BOBOT; // presisi penuh tanpa pembulatan
         return cpmkAPI.update(cpmk.id, {
           description: cpmk.description,
           bobot: bobot
@@ -98,7 +125,7 @@ export default function CPMKManagement() {
       });
       
       await Promise.all(updatePromises);
-      showToast(`Bobot otomatis dibagi rata: ${baseBobot.toFixed(2)}% per CPMK`, 'success');
+      showToast(`Bobot CPMK dihitung: jumlah Sub-CPMK × ${formatBobotDisplay(SUB_CPMK_BOBOT)}%`, 'success');
     } catch (error) {
       console.error('Failed to redistribute bobot:', error);
       showToast('Gagal mendistribusikan bobot', 'error');
@@ -400,7 +427,7 @@ export default function CPMKManagement() {
   };
 
   // Auto-redistribute bobot to ALL Sub-CPMK in the course
-  // FIXED: RPS standar = 14 Sub-CPMK, bobot selalu 100/14 = 7.142857%
+  // Standar RPS = 14 Sub-CPMK, bobot selalu 100/14 (presisi penuh)
   const autoRedistributeSubCpmkBobot = async (courseId) => {
     try {
       const res = await cpmkAPI.getByCourseId(courseId);
@@ -417,19 +444,16 @@ export default function CPMKManagement() {
       
       if (allSubCpmks.length === 0) return;
       
-      // FIXED bobot: 100% / 14 (standar RPS)
-      const fixedBobot = 100 / 14; // 7.142857142857143%
-      
-      // Update ALL Sub-CPMK with fixed bobot
+      // Update ALL Sub-CPMK with fixed bobot (presisi penuh tanpa pembulatan)
       const updatePromises = allSubCpmks.map(sub => 
         cpmkAPI.updateSubCpmk(sub.id, {
           description: sub.description,
-          bobot: fixedBobot
+          bobot: SUB_CPMK_BOBOT
         })
       );
       
       await Promise.all(updatePromises);
-      showToast(`Bobot Sub-CPMK: ${fixedBobot.toFixed(6)}% (standar 14 Sub-CPMK)`, 'success');
+      showToast(`Bobot Sub-CPMK: ${formatBobotDisplay(SUB_CPMK_BOBOT)}% (standar 14 Sub-CPMK)`, 'success');
     } catch (error) {
       console.error('Failed to redistribute Sub-CPMK bobot:', error);
       showToast('Gagal mendistribusikan bobot Sub-CPMK', 'error');
@@ -645,16 +669,19 @@ export default function CPMKManagement() {
           ]);
           
           // Add CPMK and Sub-CPMK data - only existing Sub-CPMK
+          // Bobot dihitung: CPMK = jumlah Sub-CPMK × (100/14), Sub-CPMK = 100/14
+          const subCpmkBobot = 100 / 14; // presisi penuh
           cpmks.forEach(cpmk => {
-            const cpmkBobot = parseFloat(cpmk.bobot || 0).toFixed(2);
             const subCpmks = cpmk.sub_cpmks || [];
+            // Bobot CPMK = jumlah Sub-CPMK × bobot Sub-CPMK
+            const cpmkBobot = (subCpmks.length * subCpmkBobot).toString().replace('.', ',');
             
             if (subCpmks.length === 0) {
-              // If no Sub-CPMK, show CPMK only
+              // If no Sub-CPMK, show CPMK only with 0 bobot
               data.push([
                 cpmk.cpmk_number,
                 cpmk.description,
-                cpmkBobot,
+                '0',
                 '',
                 '',
                 ''
@@ -662,14 +689,14 @@ export default function CPMKManagement() {
             } else {
               // Show only existing Sub-CPMK
               subCpmks.forEach((sub, idx) => {
-                const subBobot = parseFloat(sub.bobot || (100/14)).toFixed(2);
+                const subBobotDisplay = subCpmkBobot.toString().replace('.', ',');
                 data.push([
                   idx === 0 ? cpmk.cpmk_number : '',
                   idx === 0 ? cpmk.description : '',
                   idx === 0 ? cpmkBobot : '',
                   sub.sub_cpmk_number,
                   sub.description,
-                  subBobot
+                  subBobotDisplay
                 ]);
               });
             }
@@ -1271,9 +1298,9 @@ export default function CPMKManagement() {
                         <span className="text-xs sm:text-sm text-gray-500">
                           Semester <span className="font-medium">{selectedCourse.semester}</span>
                         </span>
-                        <span className={`text-xs sm:text-sm font-medium ${calculateTotalBobot() === 100 ? 'text-green-600' : 'text-red-600'}`}>
-                          Total Bobot: {calculateTotalBobot().toFixed(2)}%
-                          {calculateTotalBobot() === 100 ? ' ✓' : ` (harus 100%)`}
+                        <span className={`text-xs sm:text-sm font-medium ${Math.abs(calculateTotalBobot() - 100) < 0.01 ? 'text-green-600' : 'text-red-600'}`}>
+                          Total Bobot: {formatBobotDisplay(calculateTotalBobot())}%
+                          {Math.abs(calculateTotalBobot() - 100) < 0.01 ? ' ✓' : ` (harus 100%)`}
                         </span>
                       </div>
                     </div>
@@ -1450,7 +1477,7 @@ export default function CPMKManagement() {
                                       <p className="text-sm sm:text-base text-gray-900 leading-relaxed">{cpmk.description}</p>
                                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-2">
                                         <span className="inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs font-medium bg-purple-100 text-purple-800 rounded">
-                                          Bobot: {parseFloat(cpmk.bobot || 0).toFixed(2)}%
+                                          Bobot: {formatBobotDisplay((cpmk.sub_cpmks?.length || 0) * SUB_CPMK_BOBOT)}%
                                         </span>
                                         {cpmk.matched_cpl && cpmk.matched_cpl !== '' && (
                                           <span className="inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs font-medium bg-green-100 text-green-800 rounded">
@@ -1604,7 +1631,7 @@ export default function CPMKManagement() {
                                         <div className="flex-1 min-w-0">
                                           <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">{sub.description}</p>
                                           <span className="inline-block mt-1 px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium bg-green-100 text-green-800 rounded">
-                                            Bobot: {(sub.bobot || (100/14)).toFixed(2)}%
+                                            Bobot: {formatBobotDisplay(SUB_CPMK_BOBOT)}%
                                           </span>
                                         </div>
                                         {canEdit && (
