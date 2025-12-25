@@ -15,10 +15,11 @@ import {
   FileText,
   Download,
   Upload,
-  Loader
+  Loader,
+  ListChecks
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { commonCourseAPI, prodiAPI } from '../../services/api';
+import { commonCourseAPI, prodiAPI, cpmkAPI } from '../../services/api';
 import Toast from '../../components/Toast';
 
 export default function CommonCourseManagement() {
@@ -53,6 +54,10 @@ export default function CommonCourseManagement() {
   // Import states
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, message: '' });
+  
+  // Import CPMK states
+  const [importingCpmk, setImportingCpmk] = useState(false);
+  const [importCpmkProgress, setImportCpmkProgress] = useState({ current: 0, total: 0, message: '' });
   
   // Toast
   const [toast, setToast] = useState({ show: false, message: '', type: 'info' });
@@ -528,6 +533,278 @@ export default function CommonCourseManagement() {
     }
   };
 
+  // Download CPMK Template
+  const handleDownloadCpmkTemplate = () => {
+    try {
+      const wb = XLSX.utils.book_new();
+      
+      // Data template - Format horizontal: NO, NAMA MK, SKS, CPMK 1, CPMK 2, ...
+      const data = [];
+      
+      // Header row
+      const headers = ['NO', 'NAMA MATA KULIAH', 'SKS'];
+      for (let i = 1; i <= 11; i++) {
+        headers.push(`CPMK ${i}`);
+      }
+      data.push(headers);
+      
+      // Example data rows
+      data.push([
+        1,
+        'Pendidikan Agama Islam',
+        2,
+        'Memahami nilai-nilai dasar ajaran Islam',
+        'Mengaplikasikan nilai Islam dalam kehidupan sehari-hari',
+        'Menjelaskan sejarah perkembangan Islam',
+        '', '', '', '', '', '', '', ''
+      ]);
+      
+      data.push([
+        2,
+        'Pendidikan Pancasila',
+        2,
+        'Memahami sejarah dan nilai Pancasila',
+        'Menganalisis implementasi Pancasila dalam kehidupan berbangsa',
+        'Menerapkan nilai Pancasila dalam perilaku sehari-hari',
+        '', '', '', '', '', '', '', ''
+      ]);
+      
+      data.push([
+        3,
+        'Bahasa Indonesia',
+        2,
+        'Memahami kaidah bahasa Indonesia yang baik dan benar',
+        'Mampu menulis karya ilmiah',
+        'Mampu berkomunikasi secara efektif',
+        '', '', '', '', '', '', '', ''
+      ]);
+      
+      // Create worksheet
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 5 },   // NO
+        { wch: 35 },  // NAMA MK
+        { wch: 5 }    // SKS
+      ];
+      // CPMK columns (11 columns)
+      for (let i = 0; i < 11; i++) {
+        ws['!cols'].push({ wch: 45 });
+      }
+      
+      // Style header row
+      const headerRange = XLSX.utils.decode_range(ws['!ref']);
+      for (let col = 0; col <= headerRange.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+        if (ws[cellAddress]) {
+          ws[cellAddress].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" }, sz: 12 },
+            fill: { fgColor: { rgb: "7C3AED" } },
+            alignment: { horizontal: "center", vertical: "center", wrapText: true },
+            border: {
+              top: { style: "thin" },
+              bottom: { style: "thin" },
+              left: { style: "thin" },
+              right: { style: "thin" }
+            }
+          };
+        }
+      }
+      
+      // Add instruction sheet
+      const instrData = [];
+      instrData.push(['PETUNJUK PENGGUNAAN TEMPLATE CPMK MATA KULIAH UMUM']);
+      instrData.push(['']);
+      instrData.push(['1. Isi NAMA MATA KULIAH sesuai dengan nama matkul umum yang sudah ada di sistem']);
+      instrData.push(['2. Isi deskripsi CPMK pada kolom CPMK 1, CPMK 2, dst']);
+      instrData.push(['3. Jika CPMK lebih dari 11, tambahkan kolom baru dengan header "CPMK 12", "CPMK 13", dst']);
+      instrData.push(['4. Kosongkan kolom CPMK yang tidak digunakan']);
+      instrData.push(['5. Bobot CPMK akan otomatis dihitung sistem berdasarkan jumlah Sub-CPMK']);
+      instrData.push(['']);
+      instrData.push(['PENTING: Nama mata kuliah harus sama persis dengan yang ada di sistem']);
+      
+      const instrWs = XLSX.utils.aoa_to_sheet(instrData);
+      instrWs['!cols'] = [{ wch: 80 }];
+      
+      if (instrWs['A1']) {
+        instrWs['A1'].s = {
+          font: { bold: true, sz: 14, color: { rgb: "7C3AED" } },
+          alignment: { horizontal: "left", vertical: "center" }
+        };
+      }
+      
+      // Add sheets
+      XLSX.utils.book_append_sheet(wb, ws, 'CPMK Template');
+      XLSX.utils.book_append_sheet(wb, instrWs, 'Instruksi');
+      
+      // Generate file
+      XLSX.writeFile(wb, `Template_CPMK_Matkul_Umum_${new Date().toISOString().split('T')[0]}.xlsx`);
+      showToast('Template CPMK berhasil diunduh', 'success');
+    } catch (error) {
+      console.error('Template download error:', error);
+      showToast('Gagal mengunduh template', 'error');
+    }
+  };
+
+  // Import CPMK from Excel
+  const handleImportCpmk = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImportingCpmk(true);
+    setImportCpmkProgress({ current: 0, total: 0, message: 'Membaca file...' });
+    
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      
+      // Find the right sheet
+      let worksheet = null;
+      if (workbook.Sheets['CPMK Template']) {
+        worksheet = workbook.Sheets['CPMK Template'];
+      } else {
+        for (const sheetName of workbook.SheetNames) {
+          if (!sheetName.toLowerCase().includes('instruksi')) {
+            worksheet = workbook.Sheets[sheetName];
+            break;
+          }
+        }
+      }
+      
+      if (!worksheet) {
+        worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      }
+      
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+      
+      if (jsonData.length < 2) {
+        showToast('File Excel kosong atau tidak valid', 'error');
+        return;
+      }
+      
+      const headers = jsonData[0];
+      
+      // Find CPMK column indexes (columns starting with "CPMK")
+      const cpmkColumns = [];
+      headers.forEach((header, idx) => {
+        if (header?.toString().toUpperCase().startsWith('CPMK')) {
+          cpmkColumns.push(idx);
+        }
+      });
+      
+      if (cpmkColumns.length === 0) {
+        showToast('Tidak ditemukan kolom CPMK di file Excel', 'error');
+        return;
+      }
+      
+      // Find column for course name
+      let courseNameColIdx = 1; // Default to column B
+      headers.forEach((header, idx) => {
+        const h = header?.toString().toLowerCase().trim() || '';
+        if (h.includes('nama') || h.includes('mata kuliah')) {
+          courseNameColIdx = idx;
+        }
+      });
+      
+      // Count valid rows
+      const validRows = jsonData.slice(1).filter(row => row && row[courseNameColIdx]?.toString().trim());
+      const totalRows = validRows.length;
+      
+      if (totalRows === 0) {
+        showToast('Tidak ada data valid untuk diimport', 'error');
+        return;
+      }
+      
+      setImportCpmkProgress({ current: 0, total: totalRows, message: 'Memulai import...' });
+      
+      let successCount = 0;
+      let failedCount = 0;
+      const errors = [];
+      
+      // Process each row
+      for (let i = 0; i < validRows.length; i++) {
+        const row = validRows[i];
+        const courseName = row[courseNameColIdx]?.toString().trim();
+        
+        setImportCpmkProgress({ 
+          current: i + 1, 
+          total: totalRows, 
+          message: `Processing: ${courseName}` 
+        });
+        
+        // Find course by name (case insensitive)
+        const course = courses.find(c => 
+          c.title?.toLowerCase() === courseName?.toLowerCase()
+        );
+        
+        if (!course) {
+          failedCount++;
+          errors.push(`"${courseName}": Mata kuliah tidak ditemukan`);
+          continue;
+        }
+        
+        // Collect CPMK descriptions from the row
+        const cpmkDescriptions = [];
+        for (const colIdx of cpmkColumns) {
+          const desc = row[colIdx]?.toString().trim();
+          if (desc) {
+            cpmkDescriptions.push(desc);
+          }
+        }
+        
+        if (cpmkDescriptions.length === 0) {
+          failedCount++;
+          errors.push(`"${courseName}": Tidak ada CPMK ditemukan`);
+          continue;
+        }
+        
+        // Create CPMK for this course
+        try {
+          // First, get existing CPMK to determine next number
+          const existingRes = await cpmkAPI.getByCourseId(course.id);
+          const existingCpmk = existingRes.data?.data || [];
+          let nextNumber = existingCpmk.length + 1;
+          
+          // Create each CPMK
+          for (const desc of cpmkDescriptions) {
+            await cpmkAPI.create({
+              course_id: course.id,
+              cpmk_number: nextNumber,
+              description: desc,
+              bobot: 0 // Will be auto-calculated
+            });
+            nextNumber++;
+          }
+          
+          successCount++;
+        } catch (error) {
+          failedCount++;
+          const errorMsg = error.response?.data?.error || error.message;
+          errors.push(`"${courseName}": ${errorMsg}`);
+        }
+      }
+      
+      // Show result
+      if (failedCount === 0) {
+        showToast(`Berhasil import CPMK untuk ${successCount} mata kuliah`, 'success');
+      } else {
+        showToast(
+          `Import selesai: ${successCount} berhasil, ${failedCount} gagal. ${errors.slice(0, 2).join('; ')}`,
+          failedCount > successCount ? 'error' : 'warning'
+        );
+      }
+      
+    } catch (error) {
+      console.error('Import CPMK error:', error);
+      showToast('Gagal mengimpor CPMK: ' + error.message, 'error');
+    } finally {
+      setImportingCpmk(false);
+      setImportCpmkProgress({ current: 0, total: 0, message: '' });
+      event.target.value = '';
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -603,6 +880,47 @@ export default function CommonCourseManagement() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
+        {/* CPMK Import Section */}
+        <div className="mb-6 bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <ListChecks className="w-6 h-6 text-purple-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-semibold text-purple-900">Import CPMK Matkul Umum</h3>
+                <p className="text-sm text-purple-700 mt-1">
+                  Import CPMK untuk beberapa mata kuliah umum sekaligus dari file Excel
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleDownloadCpmkTemplate}
+                className="flex items-center gap-1.5 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                title="Download Template CPMK"
+              >
+                <Download className="w-4 h-4" />
+                Template CPMK
+              </button>
+              
+              <label className={`flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm cursor-pointer ${importingCpmk ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                {importingCpmk ? (
+                  <Loader className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4" />
+                )}
+                {importingCpmk ? 'Importing...' : 'Import CPMK'}
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleImportCpmk}
+                  disabled={importingCpmk}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+
         {/* Info Card */}
         <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex items-start gap-3">
@@ -1016,6 +1334,39 @@ export default function CommonCourseManagement() {
                   </div>
                   <p className="text-sm text-gray-500">
                     {importProgress.current} dari {importProgress.total} mata kuliah
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import CPMK Progress Modal */}
+      {importingCpmk && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div className="text-center">
+              <div className="relative w-20 h-20 mx-auto mb-4">
+                <div className="absolute inset-0 border-4 border-indigo-200 rounded-full"></div>
+                <div className="absolute inset-0 border-4 border-indigo-600 rounded-full border-t-transparent animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <ListChecks className="w-8 h-8 text-indigo-600" />
+                </div>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Mengimpor CPMK...</h3>
+              <p className="text-sm text-gray-600 mb-4 truncate px-2">{importCpmkProgress.message}</p>
+              
+              {importCpmkProgress.total > 0 && (
+                <div className="space-y-2">
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div 
+                      className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-3 rounded-full transition-all duration-300"
+                      style={{ width: `${(importCpmkProgress.current / importCpmkProgress.total) * 100}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-sm text-gray-500">
+                    {importCpmkProgress.current} dari {importCpmkProgress.total} mata kuliah
                   </p>
                 </div>
               )}
