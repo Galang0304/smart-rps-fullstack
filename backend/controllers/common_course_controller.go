@@ -59,6 +59,18 @@ func (cc *CommonCourseController) CreateCommonCourse(c *gin.Context) {
 		return
 	}
 
+	// Check if course with same code already exists
+	var existingCourse models.Course
+	if err := cc.db.Where("code = ?", input.Code).First(&existingCourse).Error; err == nil {
+		// Course already exists - return conflict error with clear message
+		c.JSON(http.StatusConflict, gin.H{
+			"success": false,
+			"message": "Kode mata kuliah sudah digunakan",
+			"error":   "Kode '" + input.Code + "' sudah ada di database. Gunakan kode lain atau hapus mata kuliah yang sudah ada.",
+		})
+		return
+	}
+
 	// Start transaction
 	tx := cc.db.Begin()
 
