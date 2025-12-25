@@ -115,7 +115,7 @@ export default function Dashboard() {
       value: stats.totalRPS,
       icon: FileText,
       color: 'bg-purple-500',
-      link: (userRole === 'prodi' || userRole === 'kaprodi') ? '/kaprodi/rps' : '/rps/list',
+      link: (userRole === 'prodi' || userRole === 'kaprodi') ? '/kaprodi/courses' : '/courses',
     },
     {
       title: 'RPS Selesai',
@@ -203,15 +203,15 @@ export default function Dashboard() {
           </Link>
 
           <Link
-            to={(userRole === 'prodi' || userRole === 'kaprodi') ? '/kaprodi/rps' : '/rps/list'}
+            to={(userRole === 'prodi' || userRole === 'kaprodi') ? '/kaprodi/courses' : '/courses'}
             className="flex items-center gap-3 p-3 md:p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
           >
             <div className="bg-purple-100 p-2 rounded-lg flex-shrink-0">
               <FileText className="w-5 h-5 text-purple-600" />
             </div>
             <div className="min-w-0">
-              <p className="font-medium text-gray-900 text-sm md:text-base">Lihat Daftar RPS</p>
-              <p className="text-xs md:text-sm text-gray-500 truncate">Kelola dan export</p>
+              <p className="font-medium text-gray-900 text-sm md:text-base">Kelola RPS</p>
+              <p className="text-xs md:text-sm text-gray-500 truncate">Edit, export, ubah status</p>
             </div>
           </Link>
 

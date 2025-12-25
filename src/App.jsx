@@ -141,11 +141,6 @@ function Layout({ children }) {
       label: 'CPMK', 
       path: '/kaprodi/cpmk' 
     },
-    { 
-      icon: FileText, 
-      label: 'RPS', 
-      path: '/kaprodi/rps' 
-    },
   ];
 
   // Dosen menu items

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Upload, Plus, Search, Loader2, CheckCircle, AlertCircle, FileText, BookOpen, CheckCircle2, Trash2, Edit, Settings, Filter, X, Sparkles, Flame, XCircle, Clock, Zap } from 'lucide-react';
-import { courseAPI, programAPI, prodiAPI, generatedRPSAPI, cpmkAPI, aiHelperAPI } from '../services/api';
+import { Upload, Plus, Search, Loader2, CheckCircle, AlertCircle, FileText, BookOpen, CheckCircle2, Trash2, Edit, Settings, Filter, X, Sparkles, Flame, XCircle, Clock, Zap, Download, FileDown, FileSpreadsheet } from 'lucide-react';
+import { courseAPI, programAPI, prodiAPI, generatedRPSAPI, cpmkAPI, aiHelperAPI, API_BASE_URL } from '../services/api';
 
 export default function CourseManagement() {
   const location = useLocation();
@@ -16,6 +16,9 @@ export default function CourseManagement() {
   const [showUpload, setShowUpload] = useState(false);
   const [uploadStatus, setUploadStatus] = useState(null);
   const [coursesWithRPS, setCoursesWithRPS] = useState(new Map());
+  const [rpsDataMap, setRpsDataMap] = useState(new Map()); // Full RPS data by course_id
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [selectedRPSForExport, setSelectedRPSForExport] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editingCourse, setEditingCourse] = useState(null);
@@ -209,9 +212,116 @@ export default function CourseManagement() {
       // Create Map of course IDs to RPS IDs
       const rpsMap = new Map(rpsList.map(rps => [rps.course_id, rps.id]));
       setCoursesWithRPS(rpsMap);
+      
+      // Create Map of course IDs to full RPS data
+      const rpsFullMap = new Map(rpsList.map(rps => [rps.course_id, rps]));
+      setRpsDataMap(rpsFullMap);
     } catch (error) {
       console.error('Failed to load RPS status:', error);
       setCoursesWithRPS(new Map());
+      setRpsDataMap(new Map());
+    }
+  };
+
+  // === RPS ACTION FUNCTIONS ===
+  const handleExportRPS = (courseId) => {
+    const rps = rpsDataMap.get(courseId);
+    if (rps) {
+      setSelectedRPSForExport({ id: rps.id, title: rps.course?.title || 'RPS' });
+      setShowExportModal(true);
+    }
+  };
+
+  const handleExportWord = async () => {
+    if (!selectedRPSForExport) return;
+    try {
+      const response = await fetch(`${API_BASE_URL}/generated/${selectedRPSForExport.id}/export-word`);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `RPS_${selectedRPSForExport.title}_${new Date().getTime()}.docx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setShowExportModal(false);
+    } catch (error) {
+      console.error('Export Word failed:', error);
+      alert('Gagal export ke Word');
+    }
+  };
+
+  const handleExportRPSExcel = async () => {
+    if (!selectedRPSForExport) return;
+    try {
+      const response = await fetch(`${API_BASE_URL}/generated/${selectedRPSForExport.id}/export-excel`);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `RPS_${selectedRPSForExport.title}_${new Date().getTime()}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setShowExportModal(false);
+    } catch (error) {
+      console.error('Export Excel failed:', error);
+      alert('Gagal export ke Excel');
+    }
+  };
+
+  const handleExportHTML = async () => {
+    if (!selectedRPSForExport) return;
+    try {
+      const response = await fetch(`${API_BASE_URL}/generated/${selectedRPSForExport.id}/export-html`);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `RPS_${selectedRPSForExport.title}_${new Date().getTime()}.html`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setShowExportModal(false);
+    } catch (error) {
+      console.error('Export HTML failed:', error);
+      alert('Gagal export ke HTML');
+    }
+  };
+
+  const handleChangeRPSStatus = async (courseId, newStatus) => {
+    const rps = rpsDataMap.get(courseId);
+    if (!rps) return;
+    
+    const statusLabel = newStatus === 'completed' ? 'Selesai' : 'Draft';
+    if (!confirm(`Ubah status RPS menjadi "${statusLabel}"?`)) return;
+    
+    try {
+      await generatedRPSAPI.updateStatus(rps.id, newStatus);
+      alert(`Status RPS berhasil diubah menjadi ${statusLabel}`);
+      loadCourses(); // Reload to update status
+    } catch (error) {
+      console.error('Failed to update RPS status:', error);
+      alert('Gagal mengubah status RPS');
+    }
+  };
+
+  const handleDeleteRPS = async (courseId) => {
+    const rps = rpsDataMap.get(courseId);
+    if (!rps) return;
+    
+    if (!confirm(`Hapus RPS untuk mata kuliah ini? Aksi ini tidak dapat dibatalkan.`)) return;
+    
+    try {
+      await generatedRPSAPI.delete(rps.id);
+      alert('RPS berhasil dihapus');
+      loadCourses(); // Reload to update status
+    } catch (error) {
+      console.error('Failed to delete RPS:', error);
+      alert('Gagal menghapus RPS');
     }
   };
 
@@ -1821,7 +1931,7 @@ export default function CourseManagement() {
                 <tr>
                   {/* Checkbox column for selection mode */}
                   {selectionMode && (
-                    <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                    <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       <input
                         type="checkbox"
                         checked={selectedCourses.size > 0 && selectedCourses.size === filteredCourses.filter(c => !coursesWithRPS.has(c.id)).length}
@@ -1831,13 +1941,13 @@ export default function CourseManagement() {
                       />
                     </th>
                   )}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Kode</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Mata Kuliah</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">SKS</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Semester</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Tahun</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">CPMK</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kode</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mata Kuliah</th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">SKS</th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Smt</th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Tahun</th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">CPMK</th>
+                  <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status & Aksi RPS</th>
                 </tr>
               </thead>
             <tbody className="divide-y divide-gray-200">
@@ -1855,9 +1965,9 @@ export default function CourseManagement() {
                   >
                     {/* Checkbox for selection mode */}
                     {selectionMode && (
-                      <td className="px-3 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-2 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                         {hasRPS ? (
-                          <span className="text-xs text-green-600">✓ RPS</span>
+                          <span className="text-xs text-green-600">✓</span>
                         ) : (
                           <input
                             type="checkbox"
@@ -1868,22 +1978,22 @@ export default function CourseManagement() {
                         )}
                       </td>
                     )}
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        {hasRPS && <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />}
-                        <span>{course.code}</span>
+                    <td className="px-3 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
+                      <div className="flex items-center gap-1">
+                        {hasRPS && <CheckCircle2 className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />}
+                        <span className="text-xs">{course.code}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{course.title}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600 text-center whitespace-nowrap">{course.credits || '-'}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600 text-center whitespace-nowrap">{course.semester || '-'}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600 text-center whitespace-nowrap">
-                      <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-purple-50 text-purple-700 rounded">
+                    <td className="px-3 py-3 text-sm text-gray-900 max-w-xs truncate" title={course.title}>{course.title}</td>
+                    <td className="px-2 py-3 text-sm text-gray-600 text-center">{course.credits || '-'}</td>
+                    <td className="px-2 py-3 text-sm text-gray-600 text-center">{course.semester || '-'}</td>
+                    <td className="px-2 py-3 text-sm text-gray-600 text-center">
+                      <span className="inline-flex items-center px-1.5 py-0.5 text-xs font-medium bg-purple-50 text-purple-700 rounded">
                         {course.tahun || '2025'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-center whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-full ${
+                    <td className="px-2 py-3 text-center">
+                      <span className={`inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full ${
                         (course.cpmk_count || 0) > 0 
                           ? 'bg-green-100 text-green-700' 
                           : 'bg-gray-100 text-gray-500'
@@ -1891,57 +2001,101 @@ export default function CourseManagement() {
                         {course.cpmk_count || 0}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-center gap-1.5">
+                    <td className="px-3 py-4">
+                      <div className="flex flex-wrap items-center justify-center gap-1">
                         {hasRPS ? (
                           <>
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-green-700 bg-green-100 rounded font-medium whitespace-nowrap">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              RPS Tersedia
-                            </span>
+                            {/* Status Badge */}
+                            {(() => {
+                              const rps = rpsDataMap.get(course.id);
+                              const status = rps?.status || 'draft';
+                              return (
+                                <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded font-medium whitespace-nowrap ${
+                                  status === 'completed' 
+                                    ? 'text-green-700 bg-green-100' 
+                                    : 'text-yellow-700 bg-yellow-100'
+                                }`}>
+                                  {status === 'completed' ? (
+                                    <><CheckCircle2 className="w-3 h-3" /> Selesai</>
+                                  ) : (
+                                    <><Clock className="w-3 h-3" /> Draft</>
+                                  )}
+                                </span>
+                              );
+                            })()}
                             {!isAdminRoute && (
-                              <Link
-                                to={(userRole === 'prodi' || userRole === 'kaprodi') 
-                                  ? `/kaprodi/rps/create/${course.id}?edit=${rpsId}&view=true`
-                                  : `/rps/create/${course.id}?edit=${rpsId}&view=true`
-                                }
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-green-600 bg-green-50 hover:bg-green-100 rounded transition-colors whitespace-nowrap"
-                                title="Lihat RPS (Read-only)"
-                              >
-                                <BookOpen className="w-3.5 h-3.5" />
-                                Lihat
-                              </Link>
+                              <>
+                                <Link
+                                  to={(userRole === 'prodi' || userRole === 'kaprodi') 
+                                    ? `/kaprodi/rps/create/${course.id}?edit=${rpsId}`
+                                    : `/rps/create/${course.id}?edit=${rpsId}`
+                                  }
+                                  className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors"
+                                  title="Edit RPS"
+                                >
+                                  <Edit className="w-3 h-3" />
+                                </Link>
+                                <button
+                                  onClick={() => handleExportRPS(course.id)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 text-xs text-purple-600 bg-purple-50 hover:bg-purple-100 rounded transition-colors"
+                                  title="Export RPS"
+                                >
+                                  <Download className="w-3 h-3" />
+                                </button>
+                                {(() => {
+                                  const rps = rpsDataMap.get(course.id);
+                                  const status = rps?.status || 'draft';
+                                  return (
+                                    <button
+                                      onClick={() => handleChangeRPSStatus(course.id, status === 'completed' ? 'draft' : 'completed')}
+                                      className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
+                                        status === 'completed' 
+                                          ? 'text-orange-600 bg-orange-50 hover:bg-orange-100' 
+                                          : 'text-green-600 bg-green-50 hover:bg-green-100'
+                                      }`}
+                                      title={status === 'completed' ? 'Ubah ke Draft' : 'Tandai Selesai'}
+                                    >
+                                      {status === 'completed' ? <XCircle className="w-3 h-3" /> : <CheckCircle className="w-3 h-3" />}
+                                    </button>
+                                  );
+                                })()}
+                                <button
+                                  onClick={() => handleDeleteRPS(course.id)}
+                                  className="inline-flex items-center px-2 py-1 text-xs text-red-600 bg-red-50 hover:bg-red-100 rounded transition-colors"
+                                  title="Hapus RPS"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </>
                             )}
                           </>
                         ) : (
                           !isAdminRoute && (
                             <Link
                               to={(userRole === 'prodi' || userRole === 'kaprodi') ? `/kaprodi/rps/create?courseId=${course.id}` : `/rps/create/${course.id}`}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors whitespace-nowrap"
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors whitespace-nowrap"
                               title="Buat RPS"
                             >
-                              <FileText className="w-3.5 h-3.5" />
+                              <FileText className="w-3 h-3" />
                               <span>Buat RPS</span>
                             </Link>
                           )
                         )}
-                        {!isAdminRoute && (
+                        {!isAdminRoute && !hasRPS && (
                           <>
                             <button
                               onClick={() => handleEditCourse(course)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-orange-600 bg-orange-50 hover:bg-orange-100 rounded transition-colors whitespace-nowrap"
-                              title="Edit mata kuliah"
+                              className="inline-flex items-center px-2 py-1 text-xs text-orange-600 bg-orange-50 hover:bg-orange-100 rounded transition-colors"
+                              title="Edit MK"
                             >
-                              <Edit className="w-3.5 h-3.5" />
-                              Edit
+                              <Settings className="w-3 h-3" />
                             </button>
                             <button
                               onClick={() => handleDeleteCourse(course.id, course.title)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-red-600 bg-red-50 hover:bg-red-100 rounded transition-colors whitespace-nowrap"
-                              title="Hapus mata kuliah"
+                              className="inline-flex items-center px-2 py-1 text-xs text-red-600 bg-red-50 hover:bg-red-100 rounded transition-colors"
+                              title="Hapus MK"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              Hapus
+                              <Trash2 className="w-3 h-3" />
                             </button>
                           </>
                         )}
@@ -2011,9 +2165,48 @@ export default function CourseManagement() {
                         }
                         className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-600 bg-blue-50 rounded"
                       >
-                        <BookOpen className="w-3 h-3" />
-                        Lihat
+                        <Edit className="w-3 h-3" />
+                        Edit
                       </Link>
+                      <button
+                        onClick={() => handleExportRPS(course.id)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs text-purple-600 bg-purple-50 rounded"
+                      >
+                        <Download className="w-3 h-3" />
+                        Export
+                      </button>
+                      {(() => {
+                        const rps = rpsDataMap.get(course.id);
+                        const status = rps?.status || 'draft';
+                        return (
+                          <button
+                            onClick={() => handleChangeRPSStatus(course.id, status === 'completed' ? 'draft' : 'completed')}
+                            className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded ${
+                              status === 'completed' 
+                                ? 'text-orange-600 bg-orange-50' 
+                                : 'text-green-600 bg-green-50'
+                            }`}
+                          >
+                            {status === 'completed' ? (
+                              <>
+                                <Clock className="w-3 h-3" />
+                                Draft
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle className="w-3 h-3" />
+                                Selesai
+                              </>
+                            )}
+                          </button>
+                        );
+                      })()}
+                      <button
+                        onClick={() => handleDeleteRPS(course.id)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs text-red-600 bg-red-50 rounded"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
                     </>
                   ) : (
                     <Link
@@ -2029,14 +2222,14 @@ export default function CourseManagement() {
                     className="inline-flex items-center gap-1 px-2 py-1 text-xs text-orange-600 bg-orange-50 rounded"
                   >
                     <Edit className="w-3 h-3" />
-                    Edit
+                    MK
                   </button>
                   <button
                     onClick={() => handleDeleteCourse(course.id, course.title)}
                     className="inline-flex items-center gap-1 px-2 py-1 text-xs text-red-600 bg-red-50 rounded"
                   >
                     <Trash2 className="w-3 h-3" />
-                    Hapus
+                    MK
                   </button>
                 </div>
               </div>
@@ -2068,6 +2261,54 @@ export default function CourseManagement() {
         onDeleteCategory={handleDeleteCategory}
         programName={programs.find(p => p.id === selectedProgram)?.name || 'Program'}
       />
+
+      {/* Export RPS Modal */}
+      {showExportModal && selectedRPSForExport && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Export RPS</h3>
+            <p className="text-sm text-gray-600 mb-6">
+              Pilih format export untuk <strong>{selectedRPSForExport.title}</strong>
+            </p>
+            
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              <button
+                onClick={handleExportWord}
+                className="flex flex-col items-center gap-2 p-4 border-2 border-blue-200 hover:border-blue-500 hover:bg-blue-50 rounded-lg transition-all"
+              >
+                <FileDown className="w-8 h-8 text-blue-600" />
+                <span className="text-sm font-medium text-blue-700">Word</span>
+                <span className="text-xs text-gray-500">.docx</span>
+              </button>
+              
+              <button
+                onClick={handleExportRPSExcel}
+                className="flex flex-col items-center gap-2 p-4 border-2 border-green-200 hover:border-green-500 hover:bg-green-50 rounded-lg transition-all"
+              >
+                <FileSpreadsheet className="w-8 h-8 text-green-600" />
+                <span className="text-sm font-medium text-green-700">Excel</span>
+                <span className="text-xs text-gray-500">.xlsx</span>
+              </button>
+              
+              <button
+                onClick={handleExportHTML}
+                className="flex flex-col items-center gap-2 p-4 border-2 border-orange-200 hover:border-orange-500 hover:bg-orange-50 rounded-lg transition-all"
+              >
+                <FileText className="w-8 h-8 text-orange-600" />
+                <span className="text-sm font-medium text-orange-700">HTML</span>
+                <span className="text-xs text-gray-500">.html</span>
+              </button>
+            </div>
+            
+            <button
+              onClick={() => setShowExportModal(false)}
+              className="w-full px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              Batal
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

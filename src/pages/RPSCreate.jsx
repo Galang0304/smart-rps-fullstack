@@ -684,14 +684,14 @@ export default function RPSCreate() {
         }
         
         alert('✅ RPS, CPL Matching, dan Sub-CPMK berhasil disimpan!');
-        // Navigate based on role
+        // Navigate based on role - redirect to courses page
         const userRole = localStorage.getItem('role');
-        if (userRole === 'kaprodi') {
-          navigate('/kaprodi/rps');
+        if (userRole === 'kaprodi' || userRole === 'prodi') {
+          navigate('/kaprodi/courses');
         } else if (userRole === 'dosen') {
-          navigate('/dosen/rps');
+          navigate('/dosen/courses');
         } else {
-          navigate('/rps');
+          navigate('/courses');
         }
       }
     } catch (error) {

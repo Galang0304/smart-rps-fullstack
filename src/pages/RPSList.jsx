@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FileText, Download, Loader2, CheckCircle, Clock, AlertCircle, Trash2, Check, Edit, X } from 'lucide-react';
-import { generatedRPSAPI, courseAPI, API_BASE_URL } from '../services/api';
+import { generatedRPSAPI, courseAPI, programAPI, API_BASE_URL } from '../services/api';
 
 export default function RPSList() {
   const navigate = useNavigate();
@@ -39,22 +39,42 @@ export default function RPSList() {
 
       console.log('Parsed RPS data:', rpsData);
 
-      // Jika role prodi, filter RPS berdasarkan courses dalam prodi ini
+      // Jika role prodi/kaprodi, filter RPS berdasarkan courses dalam prodi ini
       if ((userRole === 'prodi' || userRole === 'kaprodi') && prodiId) {
-        const coursesRes = await courseAPI.getByProgramId(prodiId);
-        
-        // Handle nested response for courses too
-        let courses = [];
-        if (coursesRes.data?.data?.data && Array.isArray(coursesRes.data.data.data)) {
-          courses = coursesRes.data.data.data;
-        } else if (coursesRes.data?.data && Array.isArray(coursesRes.data.data)) {
-          courses = coursesRes.data.data;
-        } else if (Array.isArray(coursesRes.data)) {
-          courses = coursesRes.data;
+        // Step 1: Get programs by prodi_id
+        const programsRes = await programAPI.getAll({ prodi_id: prodiId });
+        let programs = [];
+        if (programsRes.data?.data?.data && Array.isArray(programsRes.data.data.data)) {
+          programs = programsRes.data.data.data;
+        } else if (programsRes.data?.data && Array.isArray(programsRes.data.data)) {
+          programs = programsRes.data.data;
+        } else if (Array.isArray(programsRes.data)) {
+          programs = programsRes.data;
         }
         
-        console.log('Courses for filtering:', courses);
-        const courseIds = new Set(courses.map(c => c.id));
+        console.log('Programs for prodi:', programs);
+        
+        // Step 2: Get all courses from all programs in this prodi
+        let allCourses = [];
+        for (const program of programs) {
+          try {
+            const coursesRes = await courseAPI.getByProgramId(program.id);
+            let courses = [];
+            if (coursesRes.data?.data?.data && Array.isArray(coursesRes.data.data.data)) {
+              courses = coursesRes.data.data.data;
+            } else if (coursesRes.data?.data && Array.isArray(coursesRes.data.data)) {
+              courses = coursesRes.data.data;
+            } else if (Array.isArray(coursesRes.data)) {
+              courses = coursesRes.data;
+            }
+            allCourses = allCourses.concat(courses);
+          } catch (err) {
+            console.error('Failed to get courses for program:', program.id, err);
+          }
+        }
+        
+        console.log('All courses for filtering:', allCourses);
+        const courseIds = new Set(allCourses.map(c => c.id));
         rpsData = rpsData.filter(rps => courseIds.has(rps.course_id));
         console.log('Filtered RPS data:', rpsData);
       }
