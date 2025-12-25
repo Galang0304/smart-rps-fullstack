@@ -10,35 +10,41 @@
 
 BEGIN;
 
--- 1. Hapus semua data CPL dan Indikator
+-- 1. Hapus sub_cpmk (child of cpmk)
+DELETE FROM sub_cpmk;
+
+-- 2. Hapus cpmk (child of courses)
+DELETE FROM cpmk;
+
+-- 3. Hapus semua data CPL dan Indikator
 DELETE FROM cpl_indikator;
 DELETE FROM cpl;
 
--- 2. Hapus akses dosen ke RPS
+-- 4. Hapus akses dosen ke RPS
 DELETE FROM dosen_rps_access;
 
--- 3. Hapus generated RPS
+-- 5. Hapus generated RPS
 DELETE FROM generated_rps;
 
--- 4. Hapus template versions
+-- 6. Hapus template versions
 DELETE FROM template_versions;
 
--- 5. Hapus templates
+-- 7. Hapus templates
 DELETE FROM templates;
 
--- 6. Hapus courses
+-- 8. Hapus courses
 DELETE FROM courses;
 
--- 7. Hapus programs
+-- 9. Hapus programs
 DELETE FROM programs;
 
--- 8. Hapus dosens
+-- 10. Hapus dosens
 DELETE FROM dosens;
 
--- 9. Hapus prodis
+-- 11. Hapus prodis
 DELETE FROM prodis;
 
--- 10. Hapus users KECUALI yang role = 'admin'
+-- 12. Hapus users KECUALI yang role = 'admin'
 DELETE FROM users WHERE role != 'admin';
 
 -- Reset sequences (jika ada auto-increment, tapi PostgreSQL pakai UUID jadi tidak perlu)
@@ -55,6 +61,10 @@ UNION ALL
 SELECT 'dosens', COUNT(*) FROM dosens
 UNION ALL
 SELECT 'courses', COUNT(*) FROM courses
+UNION ALL
+SELECT 'cpmk', COUNT(*) FROM cpmk
+UNION ALL
+SELECT 'sub_cpmk', COUNT(*) FROM sub_cpmk
 UNION ALL
 SELECT 'templates', COUNT(*) FROM templates
 UNION ALL

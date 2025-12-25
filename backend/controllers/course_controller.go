@@ -95,10 +95,51 @@ func (cc *CourseController) GetByProgramId(c *gin.Context) {
 		courses = append(courses, commonCourses...)
 	}
 
+	// Get CPMK count for each course
+	type CpmkCount struct {
+		CourseID uuid.UUID `gorm:"column:course_id"`
+		Count    int       `gorm:"column:count"`
+	}
+	var cpmkCounts []CpmkCount
+
+	// Collect all course IDs
+	courseIDs := make([]uuid.UUID, len(courses))
+	for i, course := range courses {
+		courseIDs[i] = course.ID
+	}
+
+	if len(courseIDs) > 0 {
+		cc.db.Model(&models.CPMK{}).
+			Select("course_id, COUNT(*) as count").
+			Where("course_id IN ?", courseIDs).
+			Group("course_id").
+			Find(&cpmkCounts)
+	}
+
+	// Create map for quick lookup
+	cpmkCountMap := make(map[uuid.UUID]int)
+	for _, cc := range cpmkCounts {
+		cpmkCountMap[cc.CourseID] = cc.Count
+	}
+
+	// Build response with cpmk_count
+	type CourseWithCpmkCount struct {
+		models.Course
+		CpmkCount int `json:"cpmk_count"`
+	}
+
+	coursesWithCount := make([]CourseWithCpmkCount, len(courses))
+	for i, course := range courses {
+		coursesWithCount[i] = CourseWithCpmkCount{
+			Course:    course,
+			CpmkCount: cpmkCountMap[course.ID],
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
-			"data": courses,
+			"data": coursesWithCount,
 		},
 	})
 }
