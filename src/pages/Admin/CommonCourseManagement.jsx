@@ -12,8 +12,12 @@ import {
   ChevronDown,
   ChevronUp,
   Users,
-  FileText
+  FileText,
+  Download,
+  Upload,
+  Loader
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { commonCourseAPI, prodiAPI } from '../../services/api';
 import Toast from '../../components/Toast';
 
@@ -45,6 +49,10 @@ export default function CommonCourseManagement() {
   
   // Expanded rows
   const [expandedRows, setExpandedRows] = useState({});
+  
+  // Import states
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0, message: '' });
   
   // Toast
   const [toast, setToast] = useState({ show: false, message: '', type: 'info' });
@@ -200,6 +208,326 @@ export default function CommonCourseManagement() {
     }));
   };
 
+  // Download Import Template
+  const handleDownloadTemplate = () => {
+    try {
+      const wb = XLSX.utils.book_new();
+      
+      // Data template
+      const data = [];
+      
+      // Header row
+      data.push(['NO', 'KODE MK', 'NAMA MATA KULIAH', 'SKS', 'SEMESTER', 'TAHUN']);
+      
+      // Example data rows
+      data.push([1, 'MKU001', 'Pendidikan Agama Islam', 2, 1, 2025]);
+      data.push([2, 'MKU002', 'Pendidikan Pancasila', 2, 1, 2025]);
+      data.push([3, 'MKU003', 'Bahasa Indonesia', 2, 2, 2025]);
+      data.push([4, 'MKU004', 'Bahasa Inggris', 2, 3, 2025]);
+      data.push([5, 'MKU005', 'Kewarganegaraan', 2, 4, 2025]);
+      
+      // Create worksheet
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 5 },   // NO
+        { wch: 12 },  // KODE MK
+        { wch: 40 },  // NAMA MATA KULIAH
+        { wch: 6 },   // SKS
+        { wch: 10 },  // SEMESTER
+        { wch: 8 }    // TAHUN
+      ];
+      
+      // Style header row
+      const headerRange = XLSX.utils.decode_range(ws['!ref']);
+      for (let col = 0; col <= headerRange.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+        if (ws[cellAddress]) {
+          ws[cellAddress].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" }, sz: 12 },
+            fill: { fgColor: { rgb: "7C3AED" } }, // Purple for common courses
+            alignment: { horizontal: "center", vertical: "center" },
+            border: {
+              top: { style: "thin" },
+              bottom: { style: "thin" },
+              left: { style: "thin" },
+              right: { style: "thin" }
+            }
+          };
+        }
+      }
+      
+      // Style data rows
+      for (let row = 1; row <= headerRange.e.r; row++) {
+        for (let col = 0; col <= headerRange.e.c; col++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+          if (!ws[cellAddress]) ws[cellAddress] = { t: 's', v: '' };
+          
+          const fillColor = row % 2 === 1 ? "F3E8FF" : "FFFFFF"; // Light purple alternating
+          
+          ws[cellAddress].s = {
+            fill: { fgColor: { rgb: fillColor } },
+            alignment: { 
+              horizontal: col === 2 ? "left" : "center",
+              vertical: "center"
+            },
+            border: {
+              top: { style: "thin", color: { rgb: "D0D0D0" } },
+              bottom: { style: "thin", color: { rgb: "D0D0D0" } },
+              left: { style: "thin", color: { rgb: "D0D0D0" } },
+              right: { style: "thin", color: { rgb: "D0D0D0" } }
+            }
+          };
+        }
+      }
+      
+      // Add instruction sheet
+      const instrData = [];
+      instrData.push(['PETUNJUK PENGGUNAAN TEMPLATE MATA KULIAH UMUM']);
+      instrData.push(['']);
+      instrData.push(['1. Isi data pada kolom yang tersedia:']);
+      instrData.push(['   - NO: Nomor urut (opsional, diabaikan saat import)']);
+      instrData.push(['   - KODE MK: Kode mata kuliah (wajib, harus unik)']);
+      instrData.push(['   - NAMA MATA KULIAH: Nama lengkap mata kuliah (wajib)']);
+      instrData.push(['   - SKS: Jumlah SKS (1-6)']);
+      instrData.push(['   - SEMESTER: Semester (1-8)']);
+      instrData.push(['   - TAHUN: Tahun kurikulum (default: 2025)']);
+      instrData.push(['']);
+      instrData.push(['2. Pastikan KODE MK tidak duplikat dengan mata kuliah yang sudah ada']);
+      instrData.push(['3. Setelah import, Anda bisa assign mata kuliah ke prodi yang diinginkan']);
+      instrData.push(['']);
+      instrData.push(['Catatan: Mata kuliah umum adalah mata kuliah yang dapat diajarkan di beberapa prodi']);
+      
+      const instrWs = XLSX.utils.aoa_to_sheet(instrData);
+      instrWs['!cols'] = [{ wch: 80 }];
+      
+      // Style instruction title
+      if (instrWs['A1']) {
+        instrWs['A1'].s = {
+          font: { bold: true, sz: 14, color: { rgb: "7C3AED" } },
+          alignment: { horizontal: "left", vertical: "center" }
+        };
+      }
+      
+      // Add sheets
+      XLSX.utils.book_append_sheet(wb, ws, 'Matkul Umum');
+      XLSX.utils.book_append_sheet(wb, instrWs, 'Instruksi');
+      
+      // Generate file
+      XLSX.writeFile(wb, `Template_Matkul_Umum_${new Date().toISOString().split('T')[0]}.xlsx`);
+      showToast('Template Excel berhasil diunduh', 'success');
+    } catch (error) {
+      console.error('Template download error:', error);
+      showToast('Gagal mengunduh template', 'error');
+    }
+  };
+
+  // Import from Excel
+  const handleImportExcel = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    setImportProgress({ current: 0, total: 0, message: 'Membaca file...' });
+    
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      
+      // Find the right sheet
+      let worksheet = null;
+      
+      // Priority: Look for "Matkul Umum" or first non-instruction sheet
+      if (workbook.Sheets['Matkul Umum']) {
+        worksheet = workbook.Sheets['Matkul Umum'];
+      } else {
+        // Use first sheet that's not "Instruksi"
+        for (const sheetName of workbook.SheetNames) {
+          if (!sheetName.toLowerCase().includes('instruksi')) {
+            worksheet = workbook.Sheets[sheetName];
+            break;
+          }
+        }
+      }
+      
+      if (!worksheet) {
+        worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      }
+      
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+      
+      if (jsonData.length < 2) {
+        showToast('File Excel kosong atau tidak valid', 'error');
+        return;
+      }
+      
+      const headers = jsonData[0];
+      
+      // Find column indexes
+      let codeColIdx = -1;
+      let nameColIdx = -1;
+      let sksColIdx = -1;
+      let semesterColIdx = -1;
+      let tahunColIdx = -1;
+      
+      headers.forEach((header, idx) => {
+        const h = header?.toString().toLowerCase().trim() || '';
+        if (h.includes('kode')) codeColIdx = idx;
+        else if (h.includes('nama') || h.includes('mata kuliah')) nameColIdx = idx;
+        else if (h.includes('sks')) sksColIdx = idx;
+        else if (h.includes('semester')) semesterColIdx = idx;
+        else if (h.includes('tahun')) tahunColIdx = idx;
+      });
+      
+      // Fallback to positional columns if headers not found
+      if (codeColIdx === -1) codeColIdx = 1; // Column B
+      if (nameColIdx === -1) nameColIdx = 2; // Column C
+      if (sksColIdx === -1) sksColIdx = 3;   // Column D
+      if (semesterColIdx === -1) semesterColIdx = 4; // Column E
+      if (tahunColIdx === -1) tahunColIdx = 5; // Column F
+      
+      // Count valid rows
+      const validRows = jsonData.slice(1).filter(row => {
+        const code = row[codeColIdx]?.toString().trim();
+        const name = row[nameColIdx]?.toString().trim();
+        return code && name;
+      });
+      
+      if (validRows.length === 0) {
+        showToast('Tidak ada data valid untuk diimport', 'error');
+        return;
+      }
+      
+      setImportProgress({ current: 0, total: validRows.length, message: 'Memulai import...' });
+      
+      let successCount = 0;
+      let failedCount = 0;
+      const errors = [];
+      
+      // Process each row
+      for (let i = 0; i < validRows.length; i++) {
+        const row = validRows[i];
+        const code = row[codeColIdx]?.toString().trim();
+        const name = row[nameColIdx]?.toString().trim();
+        const sks = parseInt(row[sksColIdx]) || 2;
+        const semester = parseInt(row[semesterColIdx]) || 1;
+        const tahun = row[tahunColIdx]?.toString().trim() || '2025';
+        
+        setImportProgress({ 
+          current: i + 1, 
+          total: validRows.length, 
+          message: `Importing: ${code} - ${name}` 
+        });
+        
+        try {
+          await commonCourseAPI.create({
+            code,
+            title: name,
+            credits: sks,
+            semester,
+            tahun,
+            prodi_ids: []
+          });
+          successCount++;
+        } catch (error) {
+          failedCount++;
+          const errorMsg = error.response?.data?.error || error.message;
+          errors.push(`${code}: ${errorMsg}`);
+        }
+      }
+      
+      // Reload data
+      await loadData();
+      
+      // Show result
+      if (failedCount === 0) {
+        showToast(`Berhasil import ${successCount} mata kuliah umum`, 'success');
+      } else {
+        showToast(
+          `Import selesai: ${successCount} berhasil, ${failedCount} gagal. ${errors.slice(0, 2).join('; ')}`,
+          failedCount > successCount ? 'error' : 'warning'
+        );
+      }
+      
+    } catch (error) {
+      console.error('Import error:', error);
+      showToast('Gagal mengimpor data: ' + error.message, 'error');
+    } finally {
+      setImporting(false);
+      setImportProgress({ current: 0, total: 0, message: '' });
+      event.target.value = '';
+    }
+  };
+
+  // Export to Excel
+  const handleExportExcel = () => {
+    try {
+      if (courses.length === 0) {
+        showToast('Tidak ada data untuk di-export', 'warning');
+        return;
+      }
+      
+      const wb = XLSX.utils.book_new();
+      
+      // Prepare data
+      const data = [];
+      data.push(['NO', 'KODE MK', 'NAMA MATA KULIAH', 'SKS', 'SEMESTER', 'TAHUN', 'JUMLAH PRODI']);
+      
+      courses.forEach((course, idx) => {
+        data.push([
+          idx + 1,
+          course.code,
+          course.title,
+          course.credits || 0,
+          course.semester || '-',
+          course.tahun || '2025',
+          course.assigned_prodis?.length || 0
+        ]);
+      });
+      
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 5 },   // NO
+        { wch: 12 },  // KODE MK
+        { wch: 40 },  // NAMA MATA KULIAH
+        { wch: 6 },   // SKS
+        { wch: 10 },  // SEMESTER
+        { wch: 8 },   // TAHUN
+        { wch: 12 }   // JUMLAH PRODI
+      ];
+      
+      // Style header row
+      const headerRange = XLSX.utils.decode_range(ws['!ref']);
+      for (let col = 0; col <= headerRange.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+        if (ws[cellAddress]) {
+          ws[cellAddress].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" }, sz: 12 },
+            fill: { fgColor: { rgb: "7C3AED" } },
+            alignment: { horizontal: "center", vertical: "center" },
+            border: {
+              top: { style: "thin" },
+              bottom: { style: "thin" },
+              left: { style: "thin" },
+              right: { style: "thin" }
+            }
+          };
+        }
+      }
+      
+      XLSX.utils.book_append_sheet(wb, ws, 'Matkul Umum');
+      XLSX.writeFile(wb, `Matkul_Umum_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+      
+      showToast(`Berhasil export ${courses.length} mata kuliah umum`, 'success');
+    } catch (error) {
+      console.error('Export error:', error);
+      showToast('Gagal mengexport data', 'error');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -223,13 +551,53 @@ export default function CommonCourseManagement() {
                 Kelola mata kuliah yang bisa di-assign ke beberapa prodi
               </p>
             </div>
-            <button
-              onClick={() => setShowForm(true)}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-              Tambah Matkul Umum
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Download Template */}
+              <button
+                onClick={handleDownloadTemplate}
+                className="flex items-center gap-1.5 px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm"
+                title="Download Template Excel"
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden sm:inline">Template</span>
+              </button>
+              
+              {/* Import Excel */}
+              <label className={`flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm cursor-pointer ${importing ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                {importing ? (
+                  <Loader className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4" />
+                )}
+                <span className="hidden sm:inline">{importing ? 'Importing...' : 'Import'}</span>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleImportExcel}
+                  disabled={importing}
+                  className="hidden"
+                />
+              </label>
+              
+              {/* Export Excel */}
+              <button
+                onClick={handleExportExcel}
+                className="flex items-center gap-1.5 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                title="Export ke Excel"
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden sm:inline">Export</span>
+              </button>
+              
+              {/* Add Button */}
+              <button
+                onClick={() => setShowForm(true)}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+                <span className="hidden sm:inline">Tambah</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -618,6 +986,39 @@ export default function CommonCourseManagement() {
                   Simpan Assignment
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Progress Modal */}
+      {importing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div className="text-center">
+              <div className="relative w-20 h-20 mx-auto mb-4">
+                <div className="absolute inset-0 border-4 border-purple-200 rounded-full"></div>
+                <div className="absolute inset-0 border-4 border-purple-600 rounded-full border-t-transparent animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Upload className="w-8 h-8 text-purple-600" />
+                </div>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Mengimpor Mata Kuliah Umum...</h3>
+              <p className="text-sm text-gray-600 mb-4 truncate px-2">{importProgress.message}</p>
+              
+              {importProgress.total > 0 && (
+                <div className="space-y-2">
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div 
+                      className="bg-gradient-to-r from-purple-500 to-purple-600 h-3 rounded-full transition-all duration-300"
+                      style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-sm text-gray-500">
+                    {importProgress.current} dari {importProgress.total} mata kuliah
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
