@@ -665,19 +665,54 @@ export default function CourseManagement() {
           ...(Array.isArray(referensi.pendukung) ? referensi.pendukung : [])
         ];
         
-        // Generate tugas placeholder
-        const formattedTugas = Array.from({ length: 14 }, (_, i) => ({
-          tugasKe: i + 1,
-          subCpmk: formattedSubCpmk[i] ? formattedSubCpmk[i].code : '',
-          indikator: '',
-          judulTugas: '',
-          batasWaktu: '',
-          petunjukPengerjaan: '',
-          luaranTugas: '',
-          kriteriaPenilaian: '',
-          teknikPenilaian: '',
-          bobotPersen: ''
-        }));
+        // === STEP 7: Generate Rencana Tugas ===
+        setBatchProgress(prev => ({ ...prev, currentStep: '📝 Generate Rencana Tugas (14 tugas)...' }));
+        
+        let formattedTugas = [];
+        try {
+          const tugasRes = await aiHelperAPI.generateTugasBatch({
+            course_code: course.code,
+            course_title: course.title,
+            cpmk_list: cpmkData.map(c => ({ code: c.code, description: c.description })),
+            sub_cpmk_list: subCpmkData.map(s => ({ code: s.code, description: s.description })),
+          });
+          
+          // Response: { data: { items: [{tugas_ke, sub_cpmk, indikator, ...}, ...] } }
+          const tugasItems = tugasRes.data?.data?.items || [];
+          if (Array.isArray(tugasItems) && tugasItems.length > 0) {
+            formattedTugas = tugasItems.map((t, i) => ({
+              tugasKe: t.tugas_ke || i + 1,
+              subCpmk: t.sub_cpmk || formattedSubCpmk[i]?.code || `Sub-CPMK-${i + 1}`,
+              indikator: t.indikator || '',
+              judulTugas: t.judul_tugas || '',
+              batasWaktu: t.batas_waktu || `Minggu ke-${i + 1}`,
+              petunjukPengerjaan: t.petunjuk_pengerjaan || '',
+              luaranTugas: t.luaran_tugas || '',
+              kriteriaPenilaian: t.kriteria_penilaian || t.kriteria || '',
+              teknikPenilaian: t.teknik_penilaian || '',
+              bobotPersen: t.bobot_persen || t.bobot || '7'
+            }));
+            console.log(`[Batch] Generated ${formattedTugas.length} tugas for ${course.code}`);
+          }
+        } catch (tugasError) {
+          console.error('Tugas batch generation failed:', tugasError);
+        }
+        
+        // Fallback: jika AI gagal, buat placeholder
+        if (formattedTugas.length === 0) {
+          formattedTugas = Array.from({ length: 14 }, (_, i) => ({
+            tugasKe: i + 1,
+            subCpmk: formattedSubCpmk[i] ? formattedSubCpmk[i].code : `Sub-CPMK-${i + 1}`,
+            indikator: '',
+            judulTugas: '',
+            batasWaktu: `Minggu ke-${i + 1}`,
+            petunjukPengerjaan: '',
+            luaranTugas: '',
+            kriteriaPenilaian: '',
+            teknikPenilaian: '',
+            bobotPersen: '7'
+          }));
+        }
         
         const rpsResult = {
           // Course info for reference

@@ -200,6 +200,7 @@ export const aiHelperAPI = {
   generateTopik: (data) => apiClient.post('/ai/generate/topik', data),
   generateReferensi: (data) => apiClient.post('/ai/generate/referensi', data),
   generateTugas: (data) => apiClient.post('/ai/generate/tugas', data),
+  generateTugasBatch: (data) => apiClient.post('/ai/generate/tugas-batch', data), // Generate all 14 tugas at once
   regenerate: (data) => apiClient.post('/ai/regenerate', data),
   matchCPMKWithCPL: (data) => apiClient.post('/ai/match/cpmk-cpl', data), // NEW: AI matching CPMK-CPL
 };

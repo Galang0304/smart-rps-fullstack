@@ -758,6 +758,108 @@ HANYA kembalikan JSON object, tanpa penjelasan tambahan.`, req.TugasNumber, req.
 	})
 }
 
+// GenerateTugasBatch - Generate all 14 assignments at once
+func (ac *AIController) GenerateTugasBatch(c *gin.Context) {
+	var req struct {
+		CourseCode  string                   `json:"course_code"`
+		CourseTitle string                   `json:"course_title" binding:"required"`
+		CPMKList    []map[string]interface{} `json:"cpmk_list"`
+		SubCPMKList []map[string]interface{} `json:"sub_cpmk_list"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Build CPMK context
+	cpmkContext := ""
+	for i, cpmk := range req.CPMKList {
+		if desc, ok := cpmk["description"].(string); ok {
+			code := fmt.Sprintf("CPMK-%d", i+1)
+			if c, ok := cpmk["code"].(string); ok {
+				code = c
+			}
+			cpmkContext += fmt.Sprintf("%s: %s\n", code, desc)
+		}
+	}
+
+	// Build Sub-CPMK context
+	subCpmkContext := ""
+	for i, sub := range req.SubCPMKList {
+		if i >= 14 {
+			break // Max 14 sub-cpmk
+		}
+		if desc, ok := sub["description"].(string); ok {
+			code := fmt.Sprintf("Sub-CPMK-%d", i+1)
+			if c, ok := sub["code"].(string); ok {
+				code = c
+			}
+			subCpmkContext += fmt.Sprintf("%s: %s\n", code, desc)
+		}
+	}
+
+	prompt := fmt.Sprintf(`Buatkan detail untuk 14 tugas mata kuliah "%s" (%s).
+
+CPMK yang harus dicapai:
+%s
+
+Sub-CPMK (14 topik pembelajaran):
+%s
+
+Buatkan 14 tugas yang mencakup semua Sub-CPMK, dengan format JSON array:
+[
+  {
+    "tugas_ke": 1,
+    "sub_cpmk": "Sub-CPMK-1",
+    "indikator": "indikator penilaian yang jelas",
+    "judul_tugas": "judul tugas yang menarik",
+    "batas_waktu": "Minggu ke-1",
+    "petunjuk_pengerjaan": "petunjuk detail untuk mahasiswa",
+    "luaran_tugas": "output yang diharapkan",
+    "kriteria_penilaian": "kriteria penilaian objektif",
+    "teknik_penilaian": "Rubrik/Checklist/dll",
+    "bobot_persen": "7"
+  },
+  ... (sampai tugas ke-14)
+]
+
+PENTING:
+- Buat 14 tugas untuk 14 Sub-CPMK (1 tugas per Sub-CPMK)
+- Tugas harus progresif dari sederhana ke kompleks
+- Variasikan jenis tugas (individu, kelompok, presentasi, proyek)
+- Bobot total harus 100%% (sekitar 7%% per tugas)
+- Petunjuk pengerjaan harus detail dan jelas
+
+HANYA kembalikan JSON array, tanpa penjelasan tambahan.`, req.CourseTitle, req.CourseCode, cpmkContext, subCpmkContext)
+
+	result, err := ac.callOpenAI(prompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate Tugas Batch: " + err.Error()})
+		return
+	}
+
+	// Parse JSON response
+	var tugasItems []map[string]interface{}
+	cleanResult := strings.TrimSpace(result)
+	cleanResult = strings.TrimPrefix(cleanResult, "```json")
+	cleanResult = strings.TrimPrefix(cleanResult, "```")
+	cleanResult = strings.TrimSuffix(cleanResult, "```")
+	cleanResult = strings.TrimSpace(cleanResult)
+
+	if err := json.Unmarshal([]byte(cleanResult), &tugasItems); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse AI response: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"items": tugasItems,
+		},
+	})
+}
+
 // callOpenAI - Helper function to call OpenAI API
 func (ac *AIController) callOpenAI(prompt string) (string, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")

@@ -171,6 +171,7 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 			ai.POST("/generate/rencana-mingguan", aiController.GenerateRencanaMingguan)
 			ai.POST("/generate/topik", aiController.GenerateTopik)
 			ai.POST("/generate/tugas", aiController.GenerateTugas)
+			ai.POST("/generate/tugas-batch", aiController.GenerateTugasBatch) // Generate all 14 tugas at once
 			ai.POST("/generate/referensi", aiController.GenerateReferensi)
 			ai.POST("/match/cpmk-cpl", aiController.MatchCPMKWithCPL) // NEW: AI matching CPMK dengan CPL
 		}
