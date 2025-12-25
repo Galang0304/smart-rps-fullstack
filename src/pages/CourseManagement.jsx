@@ -536,16 +536,20 @@ export default function CourseManagement() {
         // === STEP 4: Generate Bahan Kajian ===
         setBatchProgress(prev => ({ ...prev, currentStep: '📚 Generate Bahan Kajian...' }));
         
-        let bahanKajian = '';
+        let bahanKajian = [];
         try {
           const bkRes = await aiHelperAPI.generateBahanKajian({
+            course_code: course.code,
             course_title: course.title,
-            course_description: course.description || '',
-            cpmk: cpmkData.map(c => c.description).filter(Boolean),
+            cpmk_list: cpmkData.map(c => ({ description: c.description })),
           });
-          bahanKajian = bkRes.data?.data?.bahan_kajian || bkRes.data?.bahan_kajian || '';
+          // Response: { data: { items: ["Topik 1", "Topik 2", ...] } }
+          const bkItems = bkRes.data?.data?.items || bkRes.data?.items || [];
+          bahanKajian = Array.isArray(bkItems) ? bkItems : [];
+          console.log(`[Batch] Generated ${bahanKajian.length} bahan kajian for ${course.code}`);
         } catch (bkError) {
           console.error('Bahan kajian generation failed:', bkError);
+          bahanKajian = [];
         }
         
         // === STEP 5: Generate Rencana Pembelajaran ===
@@ -554,14 +558,18 @@ export default function CourseManagement() {
         let rencana = [];
         try {
           const rpRes = await aiHelperAPI.generateRencanaPembelajaran({
+            course_code: course.code,
             course_title: course.title,
-            credits: course.credits,
-            cpmk: cpmkData.map(c => ({ code: c.code, description: c.description })),
-            sub_cpmk: subCpmkData.map(s => ({ code: s.code, description: s.description, cpmk_id: s.cpmk_id })),
+            cpmk_list: cpmkData.map(c => ({ code: c.code, description: c.description })),
+            sub_cpmk_list: subCpmkData.map(s => ({ code: s.code, description: s.description })),
+            bahan_kajian: bahanKajian,
           });
-          rencana = rpRes.data?.data?.rencana || rpRes.data?.rencana || [];
+          // Response: { data: { weeks: [{minggu, subCpmk, materi, metode, penilaian}, ...] } }
+          rencana = rpRes.data?.data?.weeks || rpRes.data?.weeks || [];
+          console.log(`[Batch] Generated ${rencana.length} weeks rencana for ${course.code}`);
         } catch (rpError) {
           console.error('Rencana pembelajaran generation failed:', rpError);
+          rencana = [];
         }
         
         // === STEP 6: Generate Referensi ===
@@ -572,23 +580,24 @@ export default function CourseManagement() {
           const refRes = await aiHelperAPI.generateReferensi({
             course_code: course.code,
             course_title: course.title,
-            description: course.description || '',
-            cpmk_list: cpmkData.map(c => c.description).filter(Boolean),
-            bahan_kajian: bahanKajian ? bahanKajian.split('\n').filter(Boolean) : [],
+            description: courseDescription || '',
+            cpmk_list: cpmkData.map(c => c.description).filter(Boolean), // Array of strings
+            bahan_kajian: bahanKajian, // Array of strings
           });
           
-          // Parse response - bisa berupa array langsung atau object dengan utama/pendukung
-          const refData = refRes.data?.data || refRes.data || [];
-          if (Array.isArray(refData)) {
+          // Response: { data: { items: [{title, author, year, publisher, type}, ...] } }
+          const refItems = refRes.data?.data?.items || refRes.data?.items || [];
+          if (Array.isArray(refItems) && refItems.length > 0) {
             // Pisahkan book dan journal
-            referensi.utama = refData.filter(r => r.type === 'book').map(r => 
+            referensi.utama = refItems.filter(r => r.type === 'book').map(r => 
               `${r.author} (${r.year}). ${r.title}. ${r.publisher}.`
             );
-            referensi.pendukung = refData.filter(r => r.type === 'journal').map(r => 
+            referensi.pendukung = refItems.filter(r => r.type === 'journal').map(r => 
               `${r.author} (${r.year}). ${r.title}. ${r.publisher}.`
             );
-          } else if (refData.utama || refData.pendukung) {
-            referensi = refData;
+            console.log(`[Batch] Generated ${refItems.length} referensi for ${course.code}`);
+          } else if (refRes.data?.data?.utama || refRes.data?.data?.pendukung) {
+            referensi = refRes.data.data;
           }
         } catch (refError) {
           console.error('Referensi generation failed:', refError);
@@ -606,30 +615,48 @@ export default function CourseManagement() {
           cpmk_id: s.cpmk_id // Keep cpmk_id for compatibility
         }));
         
-        // Transform rencana pembelajaran ke format rencanaMingguan
-        const formattedRencana = Array.isArray(rencana) && rencana.length > 0 
-          ? rencana.map((r, idx) => ({
-              minggu: r.minggu || idx + 1,
-              subCpmk: r.sub_cpmk || r.subCpmk || '',
-              materi: r.materi || r.topic || '',
-              metode: r.metode || r.method || '',
-              penilaian: r.penilaian || r.assessment || ''
-            }))
-          : Array.from({ length: 16 }, (_, i) => {
-              if (i === 7) {
-                return { minggu: 8, subCpmk: 'UTS', materi: 'Ujian Tengah Semester', metode: 'Ujian Tertulis/Online', penilaian: 'Ujian' };
-              } else if (i === 15) {
-                return { minggu: 16, subCpmk: 'UAS', materi: 'Ujian Akhir Semester', metode: 'Ujian Tertulis/Online', penilaian: 'Ujian' };
+        // Transform rencana pembelajaran ke format rencanaMingguan (16 minggu dengan UTS/UAS)
+        const buildRencanaMingguan = () => {
+          // Default template 16 minggu
+          const template = Array.from({ length: 16 }, (_, i) => {
+            const week = i + 1;
+            if (week === 8) {
+              return { minggu: 8, subCpmk: 'UTS', materi: 'Ujian Tengah Semester', metode: 'Ujian Tertulis/Online', penilaian: 'Ujian' };
+            } else if (week === 16) {
+              return { minggu: 16, subCpmk: 'UAS', materi: 'Ujian Akhir Semester', metode: 'Ujian Tertulis/Online', penilaian: 'Ujian' };
+            }
+            // Map sub-cpmk: minggu 1-7 -> Sub-CPMK-1 to 7, minggu 9-15 -> Sub-CPMK-8 to 14
+            const subCpmkIdx = week <= 7 ? week - 1 : week - 2; // Skip minggu 8
+            const subCpmkForWeek = formattedSubCpmk[subCpmkIdx] ? formattedSubCpmk[subCpmkIdx].code : `Sub-CPMK-${subCpmkIdx + 1}`;
+            return { minggu: week, subCpmk: subCpmkForWeek, materi: '', metode: '', penilaian: '' };
+          });
+          
+          // Merge dengan hasil AI jika ada
+          if (Array.isArray(rencana) && rencana.length > 0) {
+            rencana.forEach(r => {
+              const weekNum = r.minggu || 0;
+              if (weekNum >= 1 && weekNum <= 16 && weekNum !== 8 && weekNum !== 16) {
+                const idx = weekNum - 1;
+                template[idx] = {
+                  minggu: weekNum,
+                  subCpmk: r.subCpmk || r.sub_cpmk || template[idx].subCpmk,
+                  materi: r.materi || r.topic || '',
+                  metode: r.metode || r.method || '',
+                  penilaian: r.penilaian || r.assessment || ''
+                };
               }
-              const subCpmkForWeek = formattedSubCpmk[i] ? formattedSubCpmk[i].code : '';
-              return { minggu: i + 1, subCpmk: subCpmkForWeek, materi: '', metode: '', penilaian: '' };
             });
+          }
+          
+          return template;
+        };
         
-        // Transform bahan kajian ke array
-        const formattedBahanKajian = bahanKajian 
-          ? (typeof bahanKajian === 'string' 
-              ? bahanKajian.split('\n').filter(b => b.trim()) 
-              : bahanKajian)
+        const formattedRencana = buildRencanaMingguan();
+        console.log(`[Batch] Formatted ${formattedRencana.length} weeks rencana mingguan`);
+        
+        // Transform bahan kajian ke array (sudah array dari AI)
+        const formattedBahanKajian = Array.isArray(bahanKajian) && bahanKajian.length > 0 
+          ? bahanKajian 
           : ['', '', ''];
         
         // Transform referensi ke format gabungan

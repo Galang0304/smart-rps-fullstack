@@ -199,6 +199,7 @@ export const aiHelperAPI = {
   generateRencanaPembelajaran: (data) => apiClient.post('/ai/generate/rencana-mingguan', data),
   generateTopik: (data) => apiClient.post('/ai/generate/topik', data),
   generateReferensi: (data) => apiClient.post('/ai/generate/referensi', data),
+  generateTugas: (data) => apiClient.post('/ai/generate/tugas', data),
   regenerate: (data) => apiClient.post('/ai/regenerate', data),
   matchCPMKWithCPL: (data) => apiClient.post('/ai/match/cpmk-cpl', data), // NEW: AI matching CPMK-CPL
 };
