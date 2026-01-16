@@ -1,0 +1,1075 @@
+package controllers
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"strings"
+
+	"smart-rps-backend/models"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type AIController struct {
+	db *gorm.DB
+}
+
+func NewAIController(db *gorm.DB) *AIController {
+	return &AIController{db: db}
+}
+
+// HealthCheck - Check AI service status
+func (ac *AIController) HealthCheck(c *gin.Context) {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status":  "unavailable",
+			"message": "OpenAI API key not configured",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "available",
+		"message": "AI service is ready",
+		"model":   "gpt-4o-mini",
+	})
+}
+
+// GenerateDescription - Generate course description using AI
+func (ac *AIController) GenerateDescription(c *gin.Context) {
+	var req struct {
+		CourseTitle string `json:"course_title" binding:"required"`
+		CourseCode  string `json:"course_code" binding:"required"`
+		Credits     int    `json:"credits"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	fmt.Printf("[AI] Generating description for: %s (%s) - %d SKS\n", req.CourseTitle, req.CourseCode, req.Credits)
+
+	prompt := fmt.Sprintf(`Buatkan deskripsi mata kuliah yang formal dan akademis untuk:
+Nama: %s
+Kode: %s
+SKS: %d
+
+Format output dalam JSON object dengan struktur:
+{
+  "description": "deskripsi mata kuliah dalam 1 paragraf yang menjelaskan tujuan, materi, dan manfaat mata kuliah"
+}
+
+Deskripsi harus formal, akademis, dan tidak lebih dari 150 kata.
+HANYA kembalikan JSON object, tanpa penjelasan tambahan.`, req.CourseTitle, req.CourseCode, req.Credits)
+
+	result, err := ac.callOpenAI(prompt)
+	if err != nil {
+		fmt.Printf("[AI] OpenAI error: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate description: " + err.Error()})
+		return
+	}
+
+	// Parse JSON response
+	var descData map[string]interface{}
+	cleanResult := strings.TrimSpace(result)
+	cleanResult = strings.TrimPrefix(cleanResult, "```json")
+	cleanResult = strings.TrimPrefix(cleanResult, "```")
+	cleanResult = strings.TrimSuffix(cleanResult, "```")
+	cleanResult = strings.TrimSpace(cleanResult)
+
+	if err := json.Unmarshal([]byte(cleanResult), &descData); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":        "Failed to parse AI response: " + err.Error(),
+			"raw_response": result,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    descData,
+	})
+}
+
+// GetTypes - Get available AI generation types
+func (ac *AIController) GetTypes(c *gin.Context) {
+	types := []gin.H{
+		{"id": "cpmk", "name": "CPMK", "description": "Generate Capaian Pembelajaran Mata Kuliah"},
+		{"id": "sub-cpmk", "name": "Sub-CPMK", "description": "Generate Sub Capaian Pembelajaran"},
+		{"id": "topik", "name": "Topik", "description": "Generate Topik Pembelajaran per Minggu"},
+		{"id": "referensi", "name": "Referensi", "description": "Generate Daftar Referensi"},
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    types,
+	})
+}
+
+// GenerateCPMK - Generate CPMK using database first, fallback to AI
+// VERSION 1: Generate new CPMK if none exist
+// VERSION 2: Match existing CPMK to CPL if CPMK already exist
+func (ac *AIController) GenerateCPMK(c *gin.Context) {
+	var req struct {
+		CourseTitle string `json:"course_title" binding:"required"`
+		CourseCode  string `json:"course_code" binding:"required"`
+		Credits     int    `json:"credits"`
+		CourseID    string `json:"course_id"` // Optional: untuk lookup database
+		ProdiID     string `json:"prodi_id"`  // Required untuk get CPL
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fmt.Printf("[AI] Bind error: %v\n", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	fmt.Printf("[AI] Generating CPMK for: %s (%s) - %d SKS\n", req.CourseTitle, req.CourseCode, req.Credits)
+
+	// 1. CHECK IF CPMK EXISTS IN DATABASE
+	hasCPMK := false
+	var existingCPMKs []models.CPMK
+	if req.CourseID != "" {
+		courseUUID, err := uuid.Parse(req.CourseID)
+		if err == nil {
+			if err := ac.db.Where("course_id = ?", courseUUID).Order("cpmk_number ASC").Find(&existingCPMKs).Error; err == nil && len(existingCPMKs) > 0 {
+				hasCPMK = true
+				fmt.Printf("[AI] Found %d existing CPMK in database\n", len(existingCPMKs))
+			}
+		}
+	}
+
+	// 2. GET CPL LIST FROM PRODI
+	var cplList []models.CPL
+	if req.ProdiID != "" {
+		prodiUUID, err := uuid.Parse(req.ProdiID)
+		if err == nil {
+			if err := ac.db.Preload("Indikators", func(db *gorm.DB) *gorm.DB {
+				return db.Order("urutan ASC")
+			}).Where("prodi_id = ?", prodiUUID).Order("kode_cpl ASC").Find(&cplList).Error; err != nil {
+				fmt.Printf("[AI] Warning: Failed to load CPL: %v\n", err)
+			} else {
+				fmt.Printf("[AI] Loaded %d CPL for prodi\n", len(cplList))
+			}
+		}
+	}
+
+	// VERSION 2: CPMK exists → Match to CPL
+	if hasCPMK && len(cplList) > 0 {
+		fmt.Printf("[AI] VERSION 2: Matching existing CPMK to CPL using AI\n")
+
+		// Format CPL dengan indikators
+		cplData := make([]map[string]interface{}, len(cplList))
+		for i, cpl := range cplList {
+			indikators := make([]string, len(cpl.Indikators))
+			for j, ind := range cpl.Indikators {
+				indikators[j] = ind.IndikatorKerja
+			}
+			cplData[i] = map[string]interface{}{
+				"kode":       cpl.KodeCPL,
+				"komponen":   cpl.Komponen,
+				"cpl":        cpl.CPL,
+				"indikators": indikators,
+			}
+		}
+
+		// Format existing CPMK
+		cpmkData := make([]map[string]interface{}, len(existingCPMKs))
+		for i, cpmk := range existingCPMKs {
+			cpmkData[i] = map[string]interface{}{
+				"code":        fmt.Sprintf("CPMK-%d", cpmk.CPMKNumber),
+				"description": cpmk.Description,
+			}
+		}
+
+		cplJSON, _ := json.Marshal(cplData)
+		cpmkJSON, _ := json.Marshal(cpmkData)
+
+		prompt := fmt.Sprintf(`Tugasmu adalah mencocokkan CPMK (Capaian Pembelajaran Mata Kuliah) yang sudah ada dengan CPL (Capaian Pembelajaran Lulusan) yang paling sesuai.
+
+Mata Kuliah: %s (%s)
+
+CPMK yang sudah ada:
+%s
+
+CPL Prodi yang tersedia:
+%s
+
+Analisis setiap CPMK dan tentukan CPL mana yang paling sesuai berdasarkan:
+1. Kesesuaian konten dan tema
+2. Level taksonomi Bloom
+3. Komponen kompetensi (Pengetahuan/Keterampilan Umum/Keterampilan Khusus/Sikap)
+4. Indikator kinerja dari CPL
+
+Format output dalam JSON array:
+[
+  {
+    "code": "CPMK-1",
+    "description": "deskripsi CPMK yang sudah ada",
+    "matched_cpl": "CPL-03",
+    "reason": "penjelasan singkat kenapa cocok dengan CPL ini"
+  }
+]
+
+HANYA kembalikan JSON array, tanpa penjelasan tambahan.`, req.CourseTitle, req.CourseCode, string(cpmkJSON), string(cplJSON))
+
+		result, err := ac.callOpenAI(prompt)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to match CPMK to CPL: " + err.Error()})
+			return
+		}
+
+		var matchedItems []map[string]interface{}
+		cleanResult := strings.TrimSpace(result)
+		cleanResult = strings.TrimPrefix(cleanResult, "```json")
+		cleanResult = strings.TrimPrefix(cleanResult, "```")
+		cleanResult = strings.TrimSuffix(cleanResult, "```")
+		cleanResult = strings.TrimSpace(cleanResult)
+
+		if err := json.Unmarshal([]byte(cleanResult), &matchedItems); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":        "Failed to parse AI matching result",
+				"raw_response": result,
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"version": "matched", // VERSION 2
+			"source":  "database_with_cpl_matching",
+			"data": gin.H{
+				"items": matchedItems,
+			},
+		})
+		return
+	}
+
+	// VERSION 1: No CPMK exists → Generate new CPMK
+	fmt.Printf("[AI] VERSION 1: Generating new CPMK with AI\n")
+
+	// VERSION 1: No CPMK exists → Generate new CPMK
+	fmt.Printf("[AI] VERSION 1: Generating new CPMK with AI\n")
+
+	prompt := fmt.Sprintf(`Buatkan 3-5 CPMK (Capaian Pembelajaran Mata Kuliah) untuk mata kuliah:
+Nama: %s
+Kode: %s
+SKS: %d
+
+Format output dalam JSON array dengan struktur:
+[
+  {"code": "CPMK-1", "description": "deskripsi capaian pembelajaran", "matched_cpl": null}
+]
+
+Pastikan CPMK menggunakan Taksonomi Bloom yang sesuai dengan level mata kuliah.
+HANYA kembalikan JSON array, tanpa penjelasan tambahan.`, req.CourseTitle, req.CourseCode, req.Credits)
+
+	result, err := ac.callOpenAI(prompt)
+	if err != nil {
+		fmt.Printf("[AI] OpenAI error: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate CPMK: " + err.Error()})
+		return
+	}
+
+	fmt.Printf("[AI] OpenAI response received, length: %d\n", len(result))
+
+	// Parse JSON response from Gemini
+	var items []map[string]interface{}
+	// Remove markdown code blocks if present
+	cleanResult := strings.TrimSpace(result)
+	cleanResult = strings.TrimPrefix(cleanResult, "```json")
+	cleanResult = strings.TrimPrefix(cleanResult, "```")
+	cleanResult = strings.TrimSuffix(cleanResult, "```")
+	cleanResult = strings.TrimSpace(cleanResult)
+
+	if err := json.Unmarshal([]byte(cleanResult), &items); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":        "Failed to parse AI response: " + err.Error(),
+			"raw_response": result,
+			"cleaned":      cleanResult,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"version": "generated", // VERSION 1
+		"source":  "ai",
+		"data": gin.H{
+			"items": items,
+		},
+	})
+}
+
+// GenerateSubCPMK - Generate Sub-CPMK using database first, fallback to AI
+func (ac *AIController) GenerateSubCPMK(c *gin.Context) {
+	var req struct {
+		CPMK        string `json:"cpmk" binding:"required"`
+		CourseTitle string `json:"course_title" binding:"required"`
+		CourseID    string `json:"course_id"` // Optional: untuk lookup database
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 1. TRY DATABASE FIRST - Check if course_id provided and Sub-CPMK exists in database
+	if req.CourseID != "" {
+		courseUUID, err := uuid.Parse(req.CourseID)
+		if err == nil {
+			// Get all CPMK with their Sub-CPMKs for this course
+			var cpmks []models.CPMK
+			if err := ac.db.Preload("SubCPMKs").Where("course_id = ?", courseUUID).Order("cpmk_number ASC").Find(&cpmks).Error; err == nil && len(cpmks) > 0 {
+				// Collect all Sub-CPMKs from all CPMKs
+				var items []map[string]interface{}
+				for _, cpmk := range cpmks {
+					cpmkCode := fmt.Sprintf("CPMK-%d", cpmk.CPMKNumber)
+					for _, subCpmk := range cpmk.SubCPMKs {
+						items = append(items, map[string]interface{}{
+							"code":        fmt.Sprintf("Sub-CPMK-%d.%d", cpmk.CPMKNumber, subCpmk.SubCPMKNumber),
+							"description": subCpmk.Description,
+							"cpmk_id":     cpmkCode,
+						})
+					}
+				}
+
+				if len(items) > 0 {
+					fmt.Printf("[AI] Found %d Sub-CPMK in database for course %s\n", len(items), req.CourseID)
+					c.JSON(http.StatusOK, gin.H{
+						"success": true,
+						"source":  "database",
+						"data": gin.H{
+							"items": items,
+						},
+					})
+					return
+				}
+			}
+		}
+	}
+
+	// 2. FALLBACK TO AI - If no database Sub-CPMK found, generate with AI
+	fmt.Printf("[AI] No database Sub-CPMK found, generating with AI\n")
+
+	prompt := fmt.Sprintf(`Buatkan 3-5 Sub-CPMK (Sub Capaian Pembelajaran) untuk CPMK berikut:
+CPMK: %s
+Mata Kuliah: %s
+
+Format output dalam JSON array dengan struktur:
+[
+  {"code": "Sub-CPMK-1", "description": "deskripsi sub capaian", "cpmk_id": "CPMK-1"},
+  {"code": "Sub-CPMK-2", "description": "deskripsi sub capaian", "cpmk_id": "CPMK-1"}
+]
+
+Pastikan Sub-CPMK lebih spesifik dan terukur dibanding CPMK induknya.
+HANYA kembalikan JSON array, tanpa penjelasan tambahan.`, req.CPMK, req.CourseTitle)
+
+	result, err := ac.callOpenAI(prompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate Sub-CPMK: " + err.Error()})
+		return
+	}
+
+	// Parse JSON response
+	var items []map[string]interface{}
+	cleanResult := strings.TrimSpace(result)
+	cleanResult = strings.TrimPrefix(cleanResult, "```json")
+	cleanResult = strings.TrimPrefix(cleanResult, "```")
+	cleanResult = strings.TrimSuffix(cleanResult, "```")
+	cleanResult = strings.TrimSpace(cleanResult)
+
+	if err := json.Unmarshal([]byte(cleanResult), &items); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse AI response: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"source":  "ai",
+		"data": gin.H{
+			"items": items,
+		},
+	})
+}
+
+// GenerateBahanKajian - Generate bahan kajian (study materials)
+func (ac *AIController) GenerateBahanKajian(c *gin.Context) {
+	var req struct {
+		CourseCode  string                   `json:"course_code"`
+		CourseTitle string                   `json:"course_title" binding:"required"`
+		CPMKList    []map[string]interface{} `json:"cpmk_list"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Build CPMK context
+	cpmkContext := ""
+	for i, cpmk := range req.CPMKList {
+		if desc, ok := cpmk["description"].(string); ok {
+			cpmkContext += fmt.Sprintf("%d. %s\n", i+1, desc)
+		}
+	}
+
+	prompt := fmt.Sprintf(`Buatkan 5-8 bahan kajian (topik utama) untuk mata kuliah "%s" (%s).
+
+CPMK yang harus dicapai:
+%s
+
+Format output dalam JSON object dengan struktur:
+{
+  "items": ["Topik 1: Deskripsi bahan kajian", "Topik 2: Deskripsi bahan kajian", ...]
+}
+
+Bahan kajian harus mencakup semua aspek CPMK dan tersusun secara logis.
+HANYA kembalikan JSON object, tanpa penjelasan tambahan.`, req.CourseTitle, req.CourseCode, cpmkContext)
+
+	result, err := ac.callOpenAI(prompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate Bahan Kajian: " + err.Error()})
+		return
+	}
+
+	// Parse JSON response
+	var responseData map[string]interface{}
+	cleanResult := strings.TrimSpace(result)
+	cleanResult = strings.TrimPrefix(cleanResult, "```json")
+	cleanResult = strings.TrimPrefix(cleanResult, "```")
+	cleanResult = strings.TrimSuffix(cleanResult, "```")
+	cleanResult = strings.TrimSpace(cleanResult)
+
+	if err := json.Unmarshal([]byte(cleanResult), &responseData); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse AI response: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    responseData,
+	})
+}
+
+// GenerateRencanaMingguan - Generate 16-week learning plan
+func (ac *AIController) GenerateRencanaMingguan(c *gin.Context) {
+	var req struct {
+		CourseCode  string                   `json:"course_code"`
+		CourseTitle string                   `json:"course_title" binding:"required"`
+		CPMKList    []map[string]interface{} `json:"cpmk_list"`
+		SubCPMKList []map[string]interface{} `json:"sub_cpmk_list"`
+		BahanKajian []string                 `json:"bahan_kajian"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Build context
+	cpmkContext := ""
+	for i, cpmk := range req.CPMKList {
+		if desc, ok := cpmk["description"].(string); ok {
+			cpmkContext += fmt.Sprintf("%d. %s\n", i+1, desc)
+		}
+	}
+
+	subCpmkContext := ""
+	for i, subCpmk := range req.SubCPMKList {
+		if desc, ok := subCpmk["description"].(string); ok && i < 14 {
+			subCpmkContext += fmt.Sprintf("%d. %s\n", i+1, desc)
+		}
+	}
+
+	bahanContext := strings.Join(req.BahanKajian, "\n")
+
+	prompt := fmt.Sprintf(`Buatkan rencana pembelajaran untuk mata kuliah "%s" (%s).
+
+CPMK:
+%s
+
+Sub-CPMK (14 minggu pembelajaran):
+%s
+
+Bahan Kajian:
+%s
+
+Format output dalam JSON object dengan struktur:
+{
+  "weeks": [
+    {"minggu": 1, "subCpmk": "Sub-CPMK-1", "materi": "materi minggu 1", "metode": "Ceramah, Diskusi", "penilaian": "Quiz"},
+    {"minggu": 2, "subCpmk": "Sub-CPMK-2", "materi": "materi minggu 2", "metode": "Praktikum", "penilaian": "Tugas"},
+    ...sampai minggu 7
+    {"minggu": 9, "subCpmk": "Sub-CPMK-8", "materi": "materi minggu 9", "metode": "Ceramah", "penilaian": "Quiz"},
+    ...sampai minggu 15
+  ]
+}
+
+PENTING:
+- Buatkan untuk minggu 1-7 (7 minggu sebelum UTS)
+- Buatkan untuk minggu 9-15 (7 minggu setelah UTS, sebelum UAS)
+- Total 14 minggu pembelajaran (SKIP minggu 8 untuk UTS dan minggu 16 untuk UAS)
+- Cocokkan dengan 14 Sub-CPMK yang ada
+- Urutkan materi dari dasar ke kompleks
+- Setiap minggu harus ada: minggu, subCpmk, materi, metode, penilaian
+
+HANYA kembalikan JSON object, tanpa penjelasan tambahan.`, req.CourseTitle, req.CourseCode, cpmkContext, subCpmkContext, bahanContext)
+
+	result, err := ac.callOpenAI(prompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate Rencana Mingguan: " + err.Error()})
+		return
+	}
+
+	// Parse JSON response
+	var responseData map[string]interface{}
+	cleanResult := strings.TrimSpace(result)
+	cleanResult = strings.TrimPrefix(cleanResult, "```json")
+	cleanResult = strings.TrimPrefix(cleanResult, "```")
+	cleanResult = strings.TrimSuffix(cleanResult, "```")
+	cleanResult = strings.TrimSpace(cleanResult)
+
+	if err := json.Unmarshal([]byte(cleanResult), &responseData); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse AI response: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    responseData,
+	})
+}
+
+// GenerateTopik - Generate learning topics using Gemini
+func (ac *AIController) GenerateTopik(c *gin.Context) {
+	var req struct {
+		CourseCode  string `json:"course_code"`
+		CourseTitle string `json:"course_title" binding:"required"`
+		CPMK        string `json:"cpmk"`
+		SubCPMK     string `json:"sub_cpmk"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	weeks := 16
+
+	prompt := fmt.Sprintf(`Buatkan %d topik pembelajaran untuk mata kuliah "%s" (%s).
+
+CPMK yang harus dicapai:
+%s
+
+Sub-CPMK:
+%s
+
+Format output dalam JSON array dengan struktur:
+[
+  {"topic": "judul topik", "description": "deskripsi pembelajaran minggu ini"},
+  {"topic": "judul topik", "description": "deskripsi pembelajaran minggu ini"}
+]
+
+Buatkan topik untuk 16 minggu yang tersusun secara progresif dari dasar ke kompleks.
+HANYA kembalikan JSON array, tanpa penjelasan tambahan.`, weeks, req.CourseTitle, req.CourseCode, req.CPMK, req.SubCPMK)
+
+	result, err := ac.callOpenAI(prompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate Topik: " + err.Error()})
+		return
+	}
+
+	// Parse JSON response
+	var items []map[string]interface{}
+	cleanResult := strings.TrimSpace(result)
+	cleanResult = strings.TrimPrefix(cleanResult, "```json")
+	cleanResult = strings.TrimPrefix(cleanResult, "```")
+	cleanResult = strings.TrimSuffix(cleanResult, "```")
+	cleanResult = strings.TrimSpace(cleanResult)
+
+	if err := json.Unmarshal([]byte(cleanResult), &items); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse AI response: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"items": items,
+		},
+	})
+}
+
+// GenerateReferensi - Generate references using Gemini
+func (ac *AIController) GenerateReferensi(c *gin.Context) {
+	var req struct {
+		CourseCode  string   `json:"course_code"`
+		CourseTitle string   `json:"course_title" binding:"required"`
+		Description string   `json:"description"`
+		CPMKList    []string `json:"cpmk_list"`
+		BahanKajian []string `json:"bahan_kajian"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Build context
+	cpmkContext := ""
+	if len(req.CPMKList) > 0 {
+		cpmkContext = "CPMK yang harus dicapai:\n"
+		for i, cpmk := range req.CPMKList {
+			cpmkContext += fmt.Sprintf("%d. %s\n", i+1, cpmk)
+		}
+	}
+
+	bahanContext := ""
+	if len(req.BahanKajian) > 0 {
+		bahanContext = "Bahan Kajian:\n"
+		bahanContext += strings.Join(req.BahanKajian, "\n")
+	}
+
+	prompt := fmt.Sprintf(`Buatkan 8-10 referensi buku dan jurnal ilmiah untuk mata kuliah "%s" (%s).
+
+Deskripsi Mata Kuliah:
+%s
+
+%s
+
+%s
+
+Format output dalam JSON array dengan struktur:
+[
+  {"title": "judul buku/jurnal", "author": "nama penulis", "year": 2023, "publisher": "penerbit/jurnal", "type": "book"},
+  {"title": "judul jurnal", "author": "nama penulis", "year": 2023, "publisher": "nama jurnal", "type": "journal"}
+]
+
+PENTING:
+- Minimal 5 buku referensi standar di bidang ini
+- Minimal 3 jurnal ilmiah internasional/nasional terakreditasi
+- Prioritaskan referensi terbaru (2020-2024)
+- Pastikan relevan dengan CPMK dan bahan kajian
+- Gunakan referensi yang kredibel dan terkenal di bidangnya
+
+HANYA kembalikan JSON array, tanpa penjelasan tambahan.`, req.CourseTitle, req.CourseCode, req.Description, cpmkContext, bahanContext)
+
+	result, err := ac.callOpenAI(prompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate Referensi: " + err.Error()})
+		return
+	}
+
+	// Parse JSON response
+	var items []map[string]interface{}
+	cleanResult := strings.TrimSpace(result)
+	cleanResult = strings.TrimPrefix(cleanResult, "```json")
+	cleanResult = strings.TrimPrefix(cleanResult, "```")
+	cleanResult = strings.TrimSuffix(cleanResult, "```")
+	cleanResult = strings.TrimSpace(cleanResult)
+
+	if err := json.Unmarshal([]byte(cleanResult), &items); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse AI response: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"items": items,
+		},
+	})
+}
+
+// GenerateTugas - Generate assignment details using Gemini
+func (ac *AIController) GenerateTugas(c *gin.Context) {
+	var req struct {
+		CourseCode     string `json:"course_code"`
+		CourseTitle    string `json:"course_title" binding:"required"`
+		TugasNumber    int    `json:"tugas_number"`
+		CPMKContext    string `json:"cpmk_context"`
+		SubCPMKContext string `json:"sub_cpmk_context"`
+		TopikContext   string `json:"topik_context"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	prompt := fmt.Sprintf(`Buatkan detail untuk Tugas %d mata kuliah "%s" (%s).
+
+Context CPMK:
+%s
+
+Context Sub-CPMK:
+%s
+
+Context Topik Pembelajaran:
+%s
+
+Buatkan dalam format JSON dengan struktur:
+{
+  "sub_cpmk": "pilih 1-2 Sub-CPMK yang relevan",
+  "indikator": "indikator penilaian yang jelas dan terukur",
+  "judul_tugas": "judul tugas yang menarik dan sesuai topik",
+  "batas_waktu": "estimasi waktu pengerjaan (contoh: Minggu ke-5)",
+  "petunjuk_pengerjaan": "petunjuk detail dan jelas untuk mahasiswa",
+  "luaran_tugas": "output yang diharapkan dari tugas ini",
+  "kriteria": "kriteria penilaian yang objektif",
+  "teknik_penilaian": "metode penilaian yang digunakan",
+  "bobot": 20,
+  "daftar_rujukan": ["Referensi 1", "Referensi 2"]
+}
+
+HANYA kembalikan JSON object, tanpa penjelasan tambahan.`, req.TugasNumber, req.CourseTitle, req.CourseCode, req.CPMKContext, req.SubCPMKContext, req.TopikContext)
+
+	result, err := ac.callOpenAI(prompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate Tugas: " + err.Error()})
+		return
+	}
+
+	// Parse JSON response
+	var tugasData map[string]interface{}
+	cleanResult := strings.TrimSpace(result)
+	cleanResult = strings.TrimPrefix(cleanResult, "```json")
+	cleanResult = strings.TrimPrefix(cleanResult, "```")
+	cleanResult = strings.TrimSuffix(cleanResult, "```")
+	cleanResult = strings.TrimSpace(cleanResult)
+
+	if err := json.Unmarshal([]byte(cleanResult), &tugasData); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse AI response: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    tugasData,
+	})
+}
+
+// GenerateTugasBatch - Generate all 14 assignments at once
+func (ac *AIController) GenerateTugasBatch(c *gin.Context) {
+	var req struct {
+		CourseCode  string                   `json:"course_code"`
+		CourseTitle string                   `json:"course_title" binding:"required"`
+		CPMKList    []map[string]interface{} `json:"cpmk_list"`
+		SubCPMKList []map[string]interface{} `json:"sub_cpmk_list"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Build CPMK context
+	cpmkContext := ""
+	for i, cpmk := range req.CPMKList {
+		if desc, ok := cpmk["description"].(string); ok {
+			code := fmt.Sprintf("CPMK-%d", i+1)
+			if c, ok := cpmk["code"].(string); ok {
+				code = c
+			}
+			cpmkContext += fmt.Sprintf("%s: %s\n", code, desc)
+		}
+	}
+
+	// Build Sub-CPMK context
+	subCpmkContext := ""
+	for i, sub := range req.SubCPMKList {
+		if i >= 14 {
+			break // Max 14 sub-cpmk
+		}
+		if desc, ok := sub["description"].(string); ok {
+			code := fmt.Sprintf("Sub-CPMK-%d", i+1)
+			if c, ok := sub["code"].(string); ok {
+				code = c
+			}
+			subCpmkContext += fmt.Sprintf("%s: %s\n", code, desc)
+		}
+	}
+
+	prompt := fmt.Sprintf(`Buatkan detail untuk 14 tugas mata kuliah "%s" (%s).
+
+CPMK yang harus dicapai:
+%s
+
+Sub-CPMK (14 topik pembelajaran):
+%s
+
+Buatkan 14 tugas yang mencakup semua Sub-CPMK, dengan format JSON array:
+[
+  {
+    "tugas_ke": 1,
+    "sub_cpmk": "Sub-CPMK-1",
+    "indikator": "indikator penilaian yang jelas",
+    "judul_tugas": "judul tugas yang menarik",
+    "batas_waktu": "Minggu ke-1",
+    "petunjuk_pengerjaan": "petunjuk detail untuk mahasiswa",
+    "luaran_tugas": "output yang diharapkan",
+    "kriteria_penilaian": "kriteria penilaian objektif",
+    "teknik_penilaian": "Rubrik/Checklist/dll",
+    "bobot_persen": "7"
+  },
+  ... (sampai tugas ke-14)
+]
+
+PENTING:
+- Buat 14 tugas untuk 14 Sub-CPMK (1 tugas per Sub-CPMK)
+- Tugas harus progresif dari sederhana ke kompleks
+- Variasikan jenis tugas (individu, kelompok, presentasi, proyek)
+- Bobot total harus 100%% (sekitar 7%% per tugas)
+- Petunjuk pengerjaan harus detail dan jelas
+
+HANYA kembalikan JSON array, tanpa penjelasan tambahan.`, req.CourseTitle, req.CourseCode, cpmkContext, subCpmkContext)
+
+	result, err := ac.callOpenAI(prompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate Tugas Batch: " + err.Error()})
+		return
+	}
+
+	// Parse JSON response
+	var tugasItems []map[string]interface{}
+	cleanResult := strings.TrimSpace(result)
+	cleanResult = strings.TrimPrefix(cleanResult, "```json")
+	cleanResult = strings.TrimPrefix(cleanResult, "```")
+	cleanResult = strings.TrimSuffix(cleanResult, "```")
+	cleanResult = strings.TrimSpace(cleanResult)
+
+	if err := json.Unmarshal([]byte(cleanResult), &tugasItems); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse AI response: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"items": tugasItems,
+		},
+	})
+}
+
+// callOpenAI - Helper function to call OpenAI API
+func (ac *AIController) callOpenAI(prompt string) (string, error) {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return "", fmt.Errorf("OPENAI_API_KEY not configured")
+	}
+
+	url := "https://api.openai.com/v1/chat/completions"
+
+	requestBody := map[string]interface{}{
+		"model": "gpt-4o-mini",
+		"messages": []map[string]string{
+			{"role": "user", "content": prompt},
+		},
+		"temperature": 0.7,
+		"max_tokens":  2048,
+		"top_p":       0.95,
+	}
+
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		// Parse error response for better error messages
+		var errorResp struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+				Type    string `json:"type"`
+			} `json:"error"`
+		}
+
+		if err := json.Unmarshal(body, &errorResp); err == nil {
+			if errorResp.Error.Code == "insufficient_quota" || errorResp.Error.Type == "insufficient_quota" {
+				return "", fmt.Errorf("quota OpenAI API habis, silakan top up atau gunakan API key baru")
+			}
+			return "", fmt.Errorf("OpenAI API error: %s", errorResp.Error.Message)
+		}
+		return "", fmt.Errorf("OpenAI API error: %s", string(body))
+	}
+
+	// Parse OpenAI response
+	var openaiResp struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+
+	if err := json.Unmarshal(body, &openaiResp); err != nil {
+		return "", err
+	}
+
+	if len(openaiResp.Choices) == 0 {
+		return "", fmt.Errorf("no response from OpenAI")
+	}
+
+	return openaiResp.Choices[0].Message.Content, nil
+}
+
+// MatchCPMKWithCPL - AI matching CPMK dengan CPL yang relevan
+func (ac *AIController) MatchCPMKWithCPL(c *gin.Context) {
+	var req struct {
+		ProdiID         string `json:"prodi_id" binding:"required"`
+		CPMKDescription string `json:"cpmk_description" binding:"required"`
+		CPMKCode        string `json:"cpmk_code"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Load all CPL for this prodi with indikators
+	var cpls []models.CPL
+	if err := ac.db.Where("prodi_id = ?", req.ProdiID).
+		Preload("Indikators", func(db *gorm.DB) *gorm.DB {
+			return db.Order("urutan ASC")
+		}).
+		Order("kode_cpl ASC").
+		Find(&cpls).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load CPL"})
+		return
+	}
+
+	if len(cpls) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":   "No CPL found for this prodi",
+			"matches": []interface{}{},
+		})
+		return
+	}
+
+	// Build prompt for AI
+	cplListStr := ""
+	for _, cpl := range cpls {
+		indikatorStr := ""
+		for i, ind := range cpl.Indikators {
+			indikatorStr += fmt.Sprintf("\n   %d. %s", i+1, ind.IndikatorKerja)
+		}
+		cplListStr += fmt.Sprintf("\n\n%s (%s):\n%s\nIndikator Kerja:%s",
+			cpl.KodeCPL, cpl.Komponen, cpl.CPL, indikatorStr)
+	}
+
+	prompt := fmt.Sprintf(`Anda adalah expert dalam kurikulum perguruan tinggi. Analisis keselarasan antara CPMK dengan CPL berikut.
+
+CPMK yang akan dianalisis:
+%s: %s
+
+Daftar CPL yang tersedia:%s
+
+Tugas Anda:
+1. Analisis deskripsi CPMK dan bandingkan dengan setiap CPL dan indikator kerjanya
+2. Tentukan CPL mana yang paling relevan/selaras dengan CPMK ini (bisa lebih dari 1)
+3. Berikan skor kesesuaian 0-100 untuk setiap CPL
+4. Berikan alasan singkat mengapa CPL tersebut selaras
+
+Output dalam format JSON:
+{
+  "matches": [
+    {
+      "kode_cpl": "CPL-01",
+      "score": 95,
+      "reason": "CPMK ini sangat selaras karena..."
+    }
+  ],
+  "recommendation": "Penjelasan singkat tentang keselarasan CPMK dengan CPL"
+}
+
+Urutkan matches berdasarkan score tertinggi. Hanya tampilkan CPL dengan score >= 60.`, req.CPMKCode, req.CPMKDescription, cplListStr)
+
+	// Call OpenAI
+	response, err := ac.callOpenAI(prompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("AI service error: %v", err)})
+		return
+	}
+
+	// Parse AI response
+	var aiResult struct {
+		Matches []struct {
+			KodeCPL string `json:"kode_cpl"`
+			Score   int    `json:"score"`
+			Reason  string `json:"reason"`
+		} `json:"matches"`
+		Recommendation string `json:"recommendation"`
+	}
+
+	// Clean response (remove markdown code blocks if present)
+	cleanedResponse := strings.TrimSpace(response)
+	cleanedResponse = strings.TrimPrefix(cleanedResponse, "```json")
+	cleanedResponse = strings.TrimPrefix(cleanedResponse, "```")
+	cleanedResponse = strings.TrimSuffix(cleanedResponse, "```")
+	cleanedResponse = strings.TrimSpace(cleanedResponse)
+
+	if err := json.Unmarshal([]byte(cleanedResponse), &aiResult); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":        "Failed to parse AI response",
+			"raw_response": response,
+		})
+		return
+	}
+
+	// Enrich matches with full CPL data
+	enrichedMatches := []map[string]interface{}{}
+	for _, match := range aiResult.Matches {
+		for _, cpl := range cpls {
+			if cpl.KodeCPL == match.KodeCPL {
+				enrichedMatches = append(enrichedMatches, map[string]interface{}{
+					"kode_cpl":    cpl.KodeCPL,
+					"komponen":    cpl.Komponen,
+					"cpl":         cpl.CPL,
+					"score":       match.Score,
+					"reason":      match.Reason,
+					"indikators":  cpl.Indikators,
+					"recommended": match.Score >= 80, // Auto-recommend if score >= 80
+				})
+				break
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":        true,
+		"matches":        enrichedMatches,
+		"recommendation": aiResult.Recommendation,
+		"total_cpl":      len(cpls),
+		"matched_cpl":    len(enrichedMatches),
+	})
+}
