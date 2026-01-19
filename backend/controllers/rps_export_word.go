@@ -65,8 +65,19 @@ func (gc *GeneratedRPSController) ExportWord(c *gin.Context) {
 
 	// Send file
 	filename := fmt.Sprintf("RPS_%s.docx", rps.Course.Title)
+	// Sanitize filename - replace spaces and special characters
+	filename = strings.ReplaceAll(filename, " ", "_")
+
 	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+
+	// Ensure file exists before sending
+	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
+		log.Printf("Error: Output file does not exist: %s", outputPath)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Generated file not found"})
+		return
+	}
+
 	c.File(outputPath)
 }
 
@@ -84,17 +95,29 @@ func processWordTemplate(templatePath, outputPath string, replacements map[strin
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}
-	defer outFile.Close()
 
 	// Create zip writer
 	zipWriter := zip.NewWriter(outFile)
-	defer zipWriter.Close()
 
 	// Process each file in the zip
 	for _, file := range reader.File {
 		if err := processZipFile(file, zipWriter, replacements); err != nil {
+			zipWriter.Close()
+			outFile.Close()
 			return err
 		}
+	}
+
+	// IMPORTANT: Close zipWriter first to finalize the ZIP archive
+	// This writes the central directory and ensures the file is complete
+	if err := zipWriter.Close(); err != nil {
+		outFile.Close()
+		return fmt.Errorf("failed to finalize zip archive: %w", err)
+	}
+
+	// Then close the output file
+	if err := outFile.Close(); err != nil {
+		return fmt.Errorf("failed to close output file: %w", err)
 	}
 
 	return nil
@@ -206,20 +229,28 @@ func executeGoTemplate(content string, replacements map[string]string) string {
 func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, result map[string]interface{}) map[string]string {
 	replacements := make(map[string]string)
 
-	// Basic course info - Support both formats: {{FIELD}} and {{.Field}}
+	// Basic course info - Support multiple formats: {{FIELD}}, {{.Field}}, {{$.Field}}
 	replacements["{{NAMA_MK}}"] = rps.Course.Title
 	replacements["{{.NamaMataKuliah}}"] = rps.Course.Title
 	replacements["{{NamaMataKuliah}}"] = rps.Course.Title
+	replacements["{{$.NamaMataKuliah}}"] = rps.Course.Title
 
 	replacements["{{KODE_MK}}"] = rps.Course.Code
 	replacements["{{.Kode MK}}"] = rps.Course.Code
 	replacements["{{.KodeMK}}"] = rps.Course.Code
 	replacements["{{Kode MK}}"] = rps.Course.Code
+	replacements["{{$.KodeMK}}"] = rps.Course.Code
+	replacements["{{KodeMK}}"] = rps.Course.Code
+	// Broken XML placeholder for KodeMK
+	replacements["{{.Kode </w:t></w:r><w:r><w:rPr><w:spacing w:val=\"-4\"/><w:sz w:val=\"20\"/></w:rPr><w:t>MK}}"] = rps.Course.Code
 
 	replacements["{{RUMPUN_MK}}"] = "Teknik Informatika"
 	replacements["{{.RumpunMK}}"] = "Teknik Informatika"
 	replacements["{{.RumpunM K}}"] = "Teknik Informatika"
 	replacements["{{RumpunMK}}"] = "Teknik Informatika"
+	replacements["{{$.RumpunMK}}"] = "Teknik Informatika"
+	// Broken XML placeholder for RumpunMK
+	replacements["{{.RumpunM </w:t></w:r><w:r><w:rPr><w:spacing w:val=\"-4\"/><w:sz w:val=\"20\"/></w:rPr><w:t>K}}"] = "Teknik Informatika"
 
 	if rps.Course.Credits != nil {
 		sks := strconv.Itoa(*rps.Course.Credits)
@@ -229,6 +260,7 @@ func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, re
 		replacements["{{Bobot(SKS)}}"] = sks
 		replacements["{{BobotSKS}}"] = sks
 		replacements["{{BOBOT}}"] = sks
+		replacements["{{$.BobotSKS}}"] = sks
 	} else {
 		replacements["{{SKS}}"] = "0"
 		replacements["{{.BobotSKS}}"] = "0"
@@ -236,6 +268,7 @@ func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, re
 		replacements["{{Bobot(SKS)}}"] = "0"
 		replacements["{{BobotSKS}}"] = "0"
 		replacements["{{BOBOT}}"] = "0"
+		replacements["{{$.BobotSKS}}"] = "0"
 	}
 
 	if rps.Course.Semester != nil {
@@ -243,10 +276,12 @@ func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, re
 		replacements["{{SEMESTER}}"] = sem
 		replacements["{{.Semester}}"] = sem
 		replacements["{{Semester}}"] = sem
+		replacements["{{$.Semester}}"] = sem
 	} else {
 		replacements["{{SEMESTER}}"] = "-"
 		replacements["{{.Semester}}"] = "-"
 		replacements["{{Semester}}"] = "-"
+		replacements["{{$.Semester}}"] = "-"
 	}
 
 	// TGL Penyusunan (tanggal sekarang)
@@ -254,6 +289,12 @@ func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, re
 	replacements["{{.TglPenyusunan}}"] = currentDate
 	replacements["{{TglPenyusunan}}"] = currentDate
 	replacements["{{TGL_PENYUSUNAN}}"] = currentDate
+	replacements["{{$.TglPenyusunan}}"] = currentDate
+	// Broken variants
+	replacements["{{.Tgl Penyusunan}}"] = currentDate
+	replacements["{{.TglPenyusunan }}"] = currentDate
+	replacements["{{.TglPenyusunan}"] = currentDate
+	replacements["{.TglPenyusunan}}"] = currentDate
 
 	// Program info
 	if rps.Course.Program != nil {
@@ -270,6 +311,9 @@ func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, re
 		dosenNames = append(dosenNames, d.NamaLengkap)
 	}
 	dosenStr := strings.Join(dosenNames, ", ")
+	if dosenStr == "" {
+		dosenStr = "-"
+	}
 	replacements["{{DOSEN}}"] = dosenStr
 	replacements["{{.KaProdi}}"] = dosenStr
 	replacements["{{KaProd}}"] = dosenStr
@@ -278,12 +322,21 @@ func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, re
 	replacements["{{KOORDINATOR RMK}}"] = dosenStr
 	replacements["{{KoordinatorRMK}}"] = dosenStr
 
-	// UPM Fakultas & Penyusun
+	// UPM Fakultas & Penyusun - include all broken variants
 	replacements["{{.UPMFakultas}}"] = dosenStr
-	replacements["{{.Nam aPenyus unRPS}}"] = dosenStr
 	replacements["{{.NamaPenyusunRPS}}"] = dosenStr
 	replacements["{{NAMA_PENYU_SUN_RPS}}"] = dosenStr
 	replacements["{{KOORDINATOR_RMK}}"] = dosenStr
+	// Broken variants for NamaPenyusunRPS
+	replacements["{{.Nam aPenyus unRPS}}"] = dosenStr
+	replacements["{{.NamaPenyusunRPS}}"] = dosenStr
+	replacements["{{.Nam aPenyusunRPS}}"] = dosenStr
+	replacements["{{.NamaPenyus unRPS}}"] = dosenStr
+	replacements["{{.NamaPenyusun RPS}}"] = dosenStr
+	replacements["{{.Na maPenyusunRPS}}"] = dosenStr
+	replacements["{{.NamaPe nyusunRPS}}"] = dosenStr
+	replacements["{{. NamaPenyusunRPS}}"] = dosenStr
+	replacements["{{.N amaPenyusunRPS}}"] = dosenStr
 
 	// CPL (Capaian Pembelajaran Lulusan)
 	if cplData, ok := result["cpl"].([]interface{}); ok {
@@ -337,6 +390,7 @@ func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, re
 		replacements["{{.CPL}}"] = strings.Join(cpmkCodes, ", ")
 		replacements["{{.CPMK}}"] = strings.Join(cpmkCodes, ", ")
 		replacements["{{.SubCPMK}}"] = strings.Join(cpmkCodes, ", ")
+		replacements["{{.CPMKKode}}"] = strings.Join(cpmkCodes, ", ")
 	}
 
 	// Deskripsi Mata Kuliah
@@ -405,6 +459,9 @@ func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, re
 
 	// Rencana Tugas
 	if tugasData, ok := result["rencana_tugas"].([]interface{}); ok && len(tugasData) > 0 {
+		// Set TugasKe as "1" for the first task
+		replacements["{{.TugasKe}}"] = "1"
+
 		if tugas, ok := tugasData[0].(map[string]interface{}); ok {
 			if judul, ok := tugas["judul"].(string); ok {
 				replacements["{{.JudulTugas}}"] = judul
@@ -431,6 +488,9 @@ func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, re
 				replacements["{{.DaftarRujukan}}"] = rujukan
 			}
 		}
+	} else {
+		// Default if no tugas data
+		replacements["{{.TugasKe}}"] = "1"
 	}
 
 	// Analisis Penilaian
@@ -463,12 +523,67 @@ func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, re
 	replacements["{{range-"] = ""
 	replacements["{{if .CPL}}"] = ""
 	replacements["{{if.CPL}}"] = ""
+	replacements["{{if .}}"] = ""
+	replacements["{{if.}}"] = ""
+	replacements["({{.CPL}})"] = ""
+	replacements["S-{{add $index 1}}"] = "S-1"
+	replacements["{{if .}}✓{{end}}"] = "✓"
+
+	// Default values for Rencana Tugas fields
+	if _, exists := replacements["{{.JudulTugas}}"]; !exists {
+		replacements["{{.JudulTugas}}"] = "-"
+	}
+	if _, exists := replacements["{{.BatasWaktu}}"]; !exists {
+		replacements["{{.BatasWaktu}}"] = "-"
+	}
+	if _, exists := replacements["{{.PetunjukPengerjaan}}"]; !exists {
+		replacements["{{.PetunjukPengerjaan}}"] = "-"
+	}
+	if _, exists := replacements["{{.LuaranTugas}}"]; !exists {
+		replacements["{{.LuaranTugas}}"] = "-"
+	}
+	if _, exists := replacements["{{.KriteriaPenilaian}}"]; !exists {
+		replacements["{{.KriteriaPenilaian}}"] = "-"
+	}
+	if _, exists := replacements["{{.TeknikPenilaian}}"]; !exists {
+		replacements["{{.TeknikPenilaian}}"] = "-"
+	}
+	if _, exists := replacements["{{.BobotPersen}}"]; !exists {
+		replacements["{{.BobotPersen}}"] = "-"
+	}
+	if _, exists := replacements["{{.DaftarRujukan}}"]; !exists {
+		replacements["{{.DaftarRujukan}}"] = "-"
+	}
+
+	// Default values for Deskripsi MK
+	if _, exists := replacements["{{.DeskripsiMK}}"]; !exists {
+		replacements["{{.DeskripsiMK}}"] = "-"
+	}
+
+	// Default values for TopikMateri and JenisAssessmen
+	if _, exists := replacements["{{.TopikMateri}}"]; !exists {
+		replacements["{{.TopikMateri}}"] = "-"
+	}
+	if _, exists := replacements["{{.JenisAssessmen}}"]; !exists {
+		replacements["{{.JenisAssessmen}}"] = "-"
+	}
 
 	// Default values for table fields if not set
 	if _, exists := replacements["{{.Minggu}}"]; !exists {
 		replacements["{{.Minggu}}"] = "-"
-		replacements["{{. M in gg u}}"] = "-"
 	}
+	// Broken Minggu variants
+	replacements["{{. M in gg u}}"] = replacements["{{.Minggu}}"]
+	replacements["{{.M inggu}}"] = replacements["{{.Minggu}}"]
+	replacements["{{.Mi nggu}}"] = replacements["{{.Minggu}}"]
+	replacements["{{.Min ggu}}"] = replacements["{{.Minggu}}"]
+	replacements["{{.Ming gu}}"] = replacements["{{.Minggu}}"]
+	replacements["{{.Mingg u}}"] = replacements["{{.Minggu}}"]
+	replacements["{{.- Minggu}}"] = replacements["{{.Minggu}}"]
+	replacements["{{.in gg u}}"] = replacements["{{.Minggu}}"]
+	replacements["{{.- in gg u}}"] = replacements["{{.Minggu}}"]
+	replacements["{{. Minggu}}"] = replacements["{{.Minggu}}"]
+
 	if _, exists := replacements["{{.Indikator}}"]; !exists {
 		replacements["{{.Indikator}}"] = "-"
 	}
@@ -480,15 +595,25 @@ func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, re
 	}
 	if _, exists := replacements["{{.Waktu}}"]; !exists {
 		replacements["{{.Waktu}}"] = "-"
-		replacements["{{.Wa ktu}}"] = "-"
 	}
+	// Broken Waktu variants
+	replacements["{{.Wa ktu}}"] = replacements["{{.Waktu}}"]
+	replacements["{{.W aktu}}"] = replacements["{{.Waktu}}"]
+	replacements["{{.Wak tu}}"] = replacements["{{.Waktu}}"]
+	replacements["{{.Wakt u}}"] = replacements["{{.Waktu}}"]
+	replacements["{{. Waktu}}"] = replacements["{{.Waktu}}"]
+
 	if _, exists := replacements["{{.Penilaian}}"]; !exists {
 		replacements["{{.Penilaian}}"] = "-"
 	}
 	if _, exists := replacements["{{.Bobot}}"]; !exists {
 		replacements["{{.Bobot}}"] = "-"
-		replacements["{{.Bob ot}}"] = "-"
 	}
+	// Broken Bobot variants
+	replacements["{{.Bob ot}}"] = replacements["{{.Bobot}}"]
+	replacements["{{.Bo bot}}"] = replacements["{{.Bobot}}"]
+	replacements["{{.Bobo t}}"] = replacements["{{.Bobot}}"]
+	replacements["{{. Bobot}}"] = replacements["{{.Bobot}}"]
 
 	// Default empty values for missing placeholders
 	for key := range replacements {
@@ -500,92 +625,11 @@ func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, re
 	return replacements
 }
 
-// normalizeWordXML normalizes Word XML to handle broken placeholders across runs
-func normalizeWordXML(content string) string {
-	// Step 1: Merge adjacent text runs to fix broken placeholders
-	// Pattern: </w:t></w:r><w:r><w:t> or similar variations
-	mergePatterns := []string{
-		`</w:t></w:r><w:r><w:t>`,
-		`</w:t></w:r><w:r><w:rPr>.*?</w:rPr><w:t>`,
-		`</w:t></w:r><w:r[^>]*><w:t>`,
-		`</w:t></w:r><w:r[^>]*><w:rPr>.*?</w:rPr><w:t>`,
-	}
-
-	for _, pattern := range mergePatterns {
-		re := regexp.MustCompile(pattern)
-		content = re.ReplaceAllString(content, "")
-	}
-
-	// Step 2: Remove empty text runs
-	content = regexp.MustCompile(`<w:r[^>]*><w:t></w:t></w:r>`).ReplaceAllString(content, "")
-	content = regexp.MustCompile(`<w:r[^>]*><w:rPr>.*?</w:rPr><w:t></w:t></w:r>`).ReplaceAllString(content, "")
-
-	// Step 3: Merge text tags within same run
-	content = strings.ReplaceAll(content, "</w:t><w:t>", "")
-	content = strings.ReplaceAll(content, `</w:t><w:t xml:space="preserve">`, "")
-
-	// Step 4: Remove proofing errors that split text
-	content = regexp.MustCompile(`<w:proofErr[^>]*>`).ReplaceAllString(content, "")
-	content = strings.ReplaceAll(content, "</w:proofErr>", "")
-
-	// Step 5: Remove bookmarks that might split placeholders
-	content = regexp.MustCompile(`<w:bookmarkStart[^>]*>`).ReplaceAllString(content, "")
-	content = regexp.MustCompile(`<w:bookmarkEnd[^>]*>`).ReplaceAllString(content, "")
-
-	return content
-}
-
-// fixBrokenPlaceholders aggressively fixes and replaces broken placeholders in Word XML
+// fixBrokenPlaceholders fixes placeholders that Word split across multiple text runs
+// Uses a safe approach that ONLY removes w:t, w:r tags - never table structure (w:tc, w:tr)
 func fixBrokenPlaceholders(content string, replacements map[string]string) string {
-	// Step 1: Normalize XML to merge broken runs
-	content = normalizeWordXML(content)
-
-	// Step 2: Extract all text runs and rebuild with placeholders intact
-	// This is more aggressive - we'll find text content and merge it
-	paragraphPattern := regexp.MustCompile(`<w:p[^>]*>(.*?)</w:p>`)
-	paragraphs := paragraphPattern.FindAllStringSubmatch(content, -1)
-
-	for _, match := range paragraphs {
-		if len(match) < 2 {
-			continue
-		}
-
-		originalPara := match[0]
-		paraContent := match[1]
-
-		// Extract all text from this paragraph
-		textPattern := regexp.MustCompile(`<w:t[^>]*>(.*?)</w:t>`)
-		texts := textPattern.FindAllStringSubmatch(paraContent, -1)
-
-		// Concatenate all text
-		var fullText string
-		for _, t := range texts {
-			if len(t) >= 2 {
-				fullText += t[1]
-			}
-		}
-
-		// Check if this contains placeholders and replace
-		modifiedText := fullText
-		hasPlaceholder := false
-		for placeholder, value := range replacements {
-			if strings.Contains(modifiedText, placeholder) {
-				escapedValue := escapeXML(value)
-				modifiedText = strings.ReplaceAll(modifiedText, placeholder, escapedValue)
-				hasPlaceholder = true
-			}
-		}
-
-		// If we replaced something, rebuild the paragraph with clean text
-		if hasPlaceholder && modifiedText != fullText {
-			// Create a simple run with the replaced text
-			newPara := regexp.MustCompile(`<w:p[^>]*>`).FindString(originalPara)
-			newPara += `<w:r><w:t>` + modifiedText + `</w:t></w:r></w:p>`
-			content = strings.Replace(content, originalPara, newPara, 1)
-		}
-	}
-
-	// Step 3: Final pass - direct replacement for any remaining intact placeholders
+	// NO REGEX - only direct string replacement to avoid XML corruption
+	// Simply replace all known placeholders with their values
 	for placeholder, value := range replacements {
 		escapedValue := escapeXML(value)
 		content = strings.ReplaceAll(content, placeholder, escapedValue)
@@ -594,7 +638,6 @@ func fixBrokenPlaceholders(content string, replacements map[string]string) strin
 	return content
 }
 
-// normalizeWordXML normalizes Word XML to handle broken placeholders across runs
 func escapeXML(s string) string {
 	s = strings.ReplaceAll(s, "&", "&amp;")
 	s = strings.ReplaceAll(s, "<", "&lt;")
