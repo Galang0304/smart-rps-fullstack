@@ -41,6 +41,25 @@ func (gc *GeneratedRPSController) ExportWord(c *gin.Context) {
 		Where("dosen_courses.course_id = ?", rps.CourseID).
 		Find(&dosens)
 
+	// Get CPMK from database
+	var cpmkListDB []models.CPMK
+	gc.db.Where("course_id = ?", rps.CourseID).
+		Order("cpmk_number ASC").
+		Find(&cpmkListDB)
+
+	// Get Sub-CPMK from database
+	var subCpmkListDB []models.SubCPMK
+	if len(cpmkListDB) > 0 {
+		var cpmkIds []interface{}
+		for _, cpmk := range cpmkListDB {
+			cpmkIds = append(cpmkIds, cpmk.ID)
+		}
+		gc.db.Where("cpmk_id IN ?", cpmkIds).
+			Order("sub_cpmk_number ASC").
+			Preload("CPMK").
+			Find(&subCpmkListDB)
+	}
+
 	// Parse result JSON
 	var result map[string]interface{}
 	if err := json.Unmarshal(rps.Result, &result); err != nil {
@@ -50,7 +69,7 @@ func (gc *GeneratedRPSController) ExportWord(c *gin.Context) {
 	}
 
 	// Prepare replacements map
-	replacements := prepareWordReplacements(&rps, dosens, result)
+	replacements := prepareWordReplacements(&rps, dosens, cpmkListDB, subCpmkListDB, result)
 
 	// Process template
 	templatePath := filepath.Join("templates", "template_rps.docx")
@@ -226,7 +245,7 @@ func executeGoTemplate(content string, replacements map[string]string) string {
 }
 
 // prepareWordReplacements prepares all placeholder replacements for Word template
-func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, result map[string]interface{}) map[string]string {
+func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, cpmkListDB []models.CPMK, subCpmkListDB []models.SubCPMK, result map[string]interface{}) map[string]string {
 	replacements := make(map[string]string)
 
 	// Basic course info - Support multiple formats: {{FIELD}}, {{.Field}}, {{$.Field}}
@@ -361,11 +380,19 @@ func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, re
 		replacements["{{end}}"] = ""
 	}
 
-	// CPMK (Capaian Pembelajaran Mata Kuliah)
-	if cpmkData, ok := result["cpmk"].([]interface{}); ok {
-		var cpmkList []string
-		var cpmkCodes []string
-		var cpmkDesc []string
+	// CPMK (Capaian Pembelajaran Mata Kuliah) - USE DATABASE DATA
+	var cpmkCodes []string
+	var cpmkDescs []string
+	
+	// Prioritize database data over JSON
+	if len(cpmkListDB) > 0 {
+		for _, cpmk := range cpmkListDB {
+			code := fmt.Sprintf("CPMK-%d", cpmk.CPMKNumber)
+			cpmkCodes = append(cpmkCodes, code)
+			cpmkDescs = append(cpmkDescs, cpmk.Description)
+		}
+	} else if cpmkData, ok := result["cpmk"].([]interface{}); ok {
+		// Fallback to JSON data
 		for _, cpmk := range cpmkData {
 			if cpmkMap, ok := cpmk.(map[string]interface{}); ok {
 				code := ""
@@ -377,33 +404,67 @@ func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, re
 				if cpmkDesc, ok := cpmkMap["description"].(string); ok {
 					desc = cpmkDesc
 				}
-				cpmkDesc = append(cpmkDesc, desc)
-				cpmkList = append(cpmkList, fmt.Sprintf("%s: %s", code, desc))
+				cpmkDescs = append(cpmkDescs, desc)
 			}
 		}
-		replacements["{{CPMK}}"] = strings.Join(cpmkList, "\n")
-		replacements["{{.Kode}}"] = strings.Join(cpmkCodes, ", ")
-		replacements["{{Kode}}"] = strings.Join(cpmkCodes, ", ")
-		replacements["{{.Deskripsi}}"] = strings.Join(cpmkDesc, "\n")
-		replacements["{{Deskripsi}}"] = strings.Join(cpmkDesc, "\n")
-		replacements["{{if CPL}}"] = strings.Join(cpmkCodes, ", ")
-		replacements["{{.CPL}}"] = strings.Join(cpmkCodes, ", ")
-		replacements["{{.CPMK}}"] = strings.Join(cpmkCodes, ", ")
-		replacements["{{.SubCPMK}}"] = strings.Join(cpmkCodes, ", ")
-		replacements["{{.CPMKKode}}"] = strings.Join(cpmkCodes, ", ")
 	}
+	
+	// Format per-baris untuk tabel CPMK - format: "KODE: Deskripsi" per line
+	var cpmkFormatted []string
+	for i, code := range cpmkCodes {
+		if i < len(cpmkDescs) {
+			cpmkFormatted = append(cpmkFormatted, fmt.Sprintf("%s: %s", code, cpmkDescs[i]))
+		}
+	}
+	
+	replacements["{{.Kode}}"] = strings.Join(cpmkCodes, ", ")
+	replacements["{{Kode}}"] = strings.Join(cpmkCodes, ", ")
+	replacements["{{.Deskripsi}}"] = strings.Join(cpmkFormatted, "\n")
+	replacements["{{Deskripsi}}"] = strings.Join(cpmkFormatted, "\n")
+	replacements["{{.CPL}}"] = strings.Join(cpmkCodes, ", ")
+	replacements["{{.CPMK}}"] = strings.Join(cpmkCodes, ", ")
+	replacements["{{.CPMKKode}}"] = strings.Join(cpmkCodes, ", ")
+	
+	// Sub-CPMK - USE DATABASE DATA
+	var subCpmkCodes []string
+	var subCpmkDescs []string
+	if len(subCpmkListDB) > 0 {
+		for _, subCpmk := range subCpmkListDB {
+			code := fmt.Sprintf("Sub-CPMK-%d", subCpmk.SubCPMKNumber)
+			subCpmkCodes = append(subCpmkCodes, code)
+			subCpmkDescs = append(subCpmkDescs, subCpmk.Description)
+		}
+	}
+	
+	// Format SubCPMK: "Kode: Deskripsi" per line
+	var subCpmkFormatted []string
+	for i, code := range subCpmkCodes {
+		if i < len(subCpmkDescs) {
+			subCpmkFormatted = append(subCpmkFormatted, fmt.Sprintf("%s: %s", code, subCpmkDescs[i]))
+		}
+	}
+	
+	replacements["{{.SubCPMK}}"] = strings.Join(subCpmkFormatted, "\n")
+	replacements["{{SubCPMK}}"] = strings.Join(subCpmkFormatted, "\n")
 
-	// Deskripsi Mata Kuliah
-	if desc, ok := result["deskripsi_mk"].(string); ok {
+	// Deskripsi Mata Kuliah - use camelCase key
+	if desc, ok := result["deskripsiMK"].(string); ok {
 		replacements["{{DESKRIPSI_MK}}"] = desc
 		replacements["{{.DeskripsiMK}}"] = desc
 		replacements["{{DeskripsiMK}}"] = desc
 	}
 
-	// Bahan Kajian / Topik
-	if bahan, ok := result["bahan_kajian"].(string); ok {
-		replacements["{{.BahanKajian}}"] = bahan
-		replacements["{{BahanKajian}}"] = bahan
+	// Bahan Kajian / Topik - use camelCase key
+	if bahanKajianData, ok := result["bahanKajian"].([]interface{}); ok && len(bahanKajianData) > 0 {
+		var bahanList []string
+		for _, item := range bahanKajianData {
+			if str, ok := item.(string); ok {
+				bahanList = append(bahanList, str)
+			}
+		}
+		bahanStr := strings.Join(bahanList, ", ")
+		replacements["{{.BahanKajian}}"] = bahanStr
+		replacements["{{BahanKajian}}"] = bahanStr
 	} else {
 		replacements["{{.BahanKajian}}"] = "-"
 		replacements["{{BahanKajian}}"] = "-"
@@ -427,8 +488,8 @@ func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, re
 		replacements["{{Referensi}}"] = strings.Join(refList, "\n")
 	}
 
-	// Media Pembelajaran
-	if media, ok := result["media_pembelajaran"].(string); ok {
+	// Media Pembelajaran - use camelCase key
+	if media, ok := result["mediaPembelajaran"].(string); ok {
 		replacements["{{MEDIA}}"] = media
 	}
 
@@ -436,56 +497,61 @@ func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, re
 	replacements["{{.NamaDosen}}"] = dosenStr
 	replacements["{{NamaDosen}}"] = dosenStr
 
-	// Rencana Mingguan - populate actual data if exists
-	if rencanaMingguan, ok := result["rencana_mingguan"].([]interface{}); ok && len(rencanaMingguan) > 0 {
+	// Rencana Mingguan - use camelCase key like HTML export
+	if rencanaMingguan, ok := result["rencanaMingguan"].([]interface{}); ok && len(rencanaMingguan) > 0 {
 		// For first entry, use actual data
 		if minggu, ok := rencanaMingguan[0].(map[string]interface{}); ok {
 			if mg, ok := minggu["minggu"].(float64); ok {
 				replacements["{{.Minggu}}"] = fmt.Sprintf("%.0f", mg)
 				replacements["{{. M in gg u}}"] = fmt.Sprintf("%.0f", mg)
 			}
-			if waktu, ok := minggu["waktu"].(string); ok {
-				replacements["{{.Waktu}}"] = waktu
-				replacements["{{.Wa ktu}}"] = waktu
-			}
-			if materi, ok := minggu["topik_materi"].(string); ok {
+			// Waktu typically defaults to 150 in HTML export
+			replacements["{{.Waktu}}"] = "150"
+			replacements["{{.Wa ktu}}"] = "150"
+			if materi, ok := minggu["materi"].(string); ok {
 				replacements["{{.Materi}}"] = materi
 			}
-			if metode, ok := minggu["metode_pembelajaran"].(string); ok {
+			if metode, ok := minggu["metode"].(string); ok {
 				replacements["{{.Metode}}"] = metode
 			}
 		}
 	}
 
-	// Rencana Tugas
-	if tugasData, ok := result["rencana_tugas"].([]interface{}); ok && len(tugasData) > 0 {
+	// Rencana Tugas - use camelCase keys like HTML export
+	if tugasData, ok := result["rencanaTugas"].([]interface{}); ok && len(tugasData) > 0 {
 		// Set TugasKe as "1" for the first task
 		replacements["{{.TugasKe}}"] = "1"
 
 		if tugas, ok := tugasData[0].(map[string]interface{}); ok {
-			if judul, ok := tugas["judul"].(string); ok {
+			if judul, ok := tugas["judulTugas"].(string); ok {
 				replacements["{{.JudulTugas}}"] = judul
 			}
-			if batas, ok := tugas["batas_waktu"].(string); ok {
+			if batas, ok := tugas["batasWaktu"].(string); ok {
 				replacements["{{.BatasWaktu}}"] = batas
 			}
-			if petunjuk, ok := tugas["petunjuk"].(string); ok {
+			if petunjuk, ok := tugas["petunjukPengerjaan"].(string); ok {
 				replacements["{{.PetunjukPengerjaan}}"] = petunjuk
 			}
-			if luaran, ok := tugas["luaran"].(string); ok {
+			if luaran, ok := tugas["luaranTugas"].(string); ok {
 				replacements["{{.LuaranTugas}}"] = luaran
 			}
-			if kriteria, ok := tugas["kriteria_penilaian"].(string); ok {
+			if kriteria, ok := tugas["kriteriaPenilaian"].(string); ok {
 				replacements["{{.KriteriaPenilaian}}"] = kriteria
 			}
-			if teknik, ok := tugas["teknik_penilaian"].(string); ok {
+			if teknik, ok := tugas["teknikPenilaian"].(string); ok {
 				replacements["{{.TeknikPenilaian}}"] = teknik
 			}
-			if bobot, ok := tugas["bobot_persen"].(float64); ok {
-				replacements["{{.BobotPersen}}"] = fmt.Sprintf("%.0f%%", bobot)
+			if bobot, ok := tugas["bobotPersen"].(string); ok {
+				replacements["{{.BobotPersen}}"] = bobot
 			}
-			if rujukan, ok := tugas["rujukan"].(string); ok {
+			if rujukan, ok := tugas["daftarRujukan"].(string); ok {
 				replacements["{{.DaftarRujukan}}"] = rujukan
+			}
+			if subCpmk, ok := tugas["subCpmk"].(string); ok {
+				replacements["{{.SubCPMK}}"] = subCpmk
+			}
+			if indikator, ok := tugas["indikator"].(string); ok {
+				replacements["{{.Indikator}}"] = indikator
 			}
 		}
 	} else {
@@ -493,23 +559,23 @@ func prepareWordReplacements(rps *models.GeneratedRPS, dosens []models.Dosen, re
 		replacements["{{.TugasKe}}"] = "1"
 	}
 
-	// Analisis Penilaian
-	if analisisPenilaian, ok := result["analisis_penilaian"].([]interface{}); ok && len(analisisPenilaian) > 0 {
-		if penilaian, ok := analisisPenilaian[0].(map[string]interface{}); ok {
-			if minggu, ok := penilaian["minggu"].(float64); ok {
-				replacements["{{.Minggu}}"] = fmt.Sprintf("%.0f", minggu)
-				replacements["{{.Mi nggu}}"] = fmt.Sprintf("%.0f", minggu)
+	// Analisis Penilaian - data is derived from rencanaMingguan + rencanaTugas in HTML export
+	// For Word, we'll use rencanaMingguan data with default assessment info
+	if rencanaMingguan, ok := result["rencanaMingguan"].([]interface{}); ok && len(rencanaMingguan) > 0 {
+		if firstWeek, ok := rencanaMingguan[0].(map[string]interface{}); ok {
+			if mg, ok := firstWeek["minggu"].(float64); ok {
+				replacements["{{.Minggu}}"] = fmt.Sprintf("%.0f", mg)
+				replacements["{{.Mi nggu}}"] = fmt.Sprintf("%.0f", mg)
 			}
-			if topik, ok := penilaian["topik_materi"].(string); ok {
-				replacements["{{.TopikMateri}}"] = topik
+			if materi, ok := firstWeek["materi"].(string); ok {
+				replacements["{{.TopikMateri}}"] = materi
 			}
-			if jenis, ok := penilaian["jenis_assessment"].(string); ok {
-				replacements["{{.JenisAssessmen}}"] = jenis
+			if penilaian, ok := firstWeek["penilaian"].(string); ok {
+				replacements["{{.JenisAssessmen}}"] = penilaian
 			}
-			if bobot, ok := penilaian["bobot"].(float64); ok {
-				replacements["{{.Bobot}}"] = fmt.Sprintf("%.0f", bobot)
-				replacements["{{.Bob ot}}"] = fmt.Sprintf("%.0f", bobot)
-			}
+			// Default bobot
+			replacements["{{.Bobot}}"] = "7"
+			replacements["{{.Bob ot}}"] = "7"
 		}
 	}
 
