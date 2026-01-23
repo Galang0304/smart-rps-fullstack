@@ -20,6 +20,8 @@ type Course struct {
 	UpdatedAt time.Time      `json:"updated_at" gorm:"autoUpdateTime"`
 	DeletedAt gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
 
+	CPMKs []CPMK `json:"cpmks,omitempty" gorm:"foreignKey:CourseID"`
+
 	Program        *Program            `json:"program,omitempty" gorm:"foreignKey:ProgramID"`
 	AssignedProdis []CourseProdiAssign `json:"assigned_prodis,omitempty" gorm:"foreignKey:CourseID"`
 }

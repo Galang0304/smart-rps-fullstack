@@ -23,6 +23,9 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 	cleanupController := controllers.NewCleanupController(db)
 	commonCourseController := controllers.NewCommonCourseController(db)
 
+	//new controller
+	syncController := controllers.NewSyncController(db)
+
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -191,6 +194,11 @@ func SetupRoutes(r *gin.Engine, db *gorm.DB) {
 			commonCourses.DELETE("/:id", commonCourseController.DeleteCommonCourse)
 			commonCourses.POST("/:id/assign", commonCourseController.AssignToProdi)
 			commonCourses.GET("/prodi/:prodi_id", commonCourseController.GetCoursesByProdi)
+		}
+
+		sync := v1.Group("/sync")
+		{
+			sync.GET("/curriculum", syncController.SyncCurriculum)
 		}
 	}
 }
