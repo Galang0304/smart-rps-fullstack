@@ -364,55 +364,20 @@ export default function RPSList() {
               </p>
 
               <div className="space-y-3">
-                {/* HTML Option */}
+                {/* PDF Option (menggunakan HTML export) */}
                 <button
                   onClick={() => handleExportChoice('html')}
-                  className="w-full group relative overflow-hidden bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border-2 border-green-200 hover:border-green-400 rounded-xl p-6 transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
+                  className="w-full group relative overflow-hidden bg-gradient-to-r from-red-50 to-rose-50 hover:from-red-100 hover:to-rose-100 border-2 border-red-200 hover:border-red-400 rounded-xl p-6 transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="bg-green-600 text-white p-3 rounded-lg group-hover:bg-green-700 transition-colors">
+                    <div className="bg-red-600 text-white p-3 rounded-lg group-hover:bg-red-700 transition-colors">
                       <FileText className="w-8 h-8" />
                     </div>
                     <div className="text-left flex-1">
-                      <h4 className="font-bold text-lg text-green-800">PDF</h4>
-                      <p className="text-sm text-green-600">Format PDF, buka di browser</p>
+                      <h4 className="font-bold text-lg text-red-800">PDF</h4>
+                      <p className="text-sm text-red-600">Format dokumen PDF</p>
                     </div>
-                    <Download className="w-6 h-6 text-green-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                </button>
-
-                {/* Word Option - DISABLED/HIDDEN
-                <button
-                  onClick={() => handleExportChoice('word')}
-                  className="w-full group relative overflow-hidden bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border-2 border-blue-200 hover:border-blue-400 rounded-xl p-6 transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="bg-blue-600 text-white p-3 rounded-lg group-hover:bg-blue-700 transition-colors">
-                      <FileText className="w-8 h-8" />
-                    </div>
-                    <div className="text-left flex-1">
-                      <h4 className="font-bold text-lg text-blue-800">Word</h4>
-                      <p className="text-sm text-blue-600">Format Microsoft Word (.docx)</p>
-                    </div>
-                    <Download className="w-6 h-6 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                </button>
-                */}
-
-                {/* Excel Option */}
-                <button
-                  onClick={() => handleExportChoice('excel')}
-                  className="w-full group relative overflow-hidden bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 border-2 border-emerald-200 hover:border-emerald-400 rounded-xl p-6 transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="bg-emerald-600 text-white p-3 rounded-lg group-hover:bg-emerald-700 transition-colors">
-                      <FileText className="w-8 h-8" />
-                    </div>
-                    <div className="text-left flex-1">
-                      <h4 className="font-bold text-lg text-emerald-800">Excel</h4>
-                      <p className="text-sm text-emerald-600">Format Microsoft Excel (.xlsx)</p>
-                    </div>
-                    <Download className="w-6 h-6 text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <Download className="w-6 h-6 text-red-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                 </button>
               </div>

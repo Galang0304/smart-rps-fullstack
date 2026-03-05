@@ -307,7 +307,7 @@ export default function Home() {
                 </svg>
               </div>
               <h3 className="text-lg font-bold text-blue-950 mb-2">Export Professional</h3>
-              <p className="text-slate-600 text-sm">Export RPS ke format Word dengan template yang siap digunakan.</p>
+              <p className="text-slate-600 text-sm">Export RPS ke format PDF dengan template yang siap digunakan.</p>
             </div>
           </div>
         </div>

@@ -48,7 +48,7 @@
  * 
  * OUTPUT:
  * - JSON structure untuk database
- * - Export ke Word (template RPS resmi)
+ * - Export ke PDF (template RPS resmi)
  * ==========================================
  */
 

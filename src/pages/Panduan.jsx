@@ -93,13 +93,13 @@ export default function Panduan() {
     },
     {
       step: '5',
-      title: 'Export ke Format Word',
-      description: 'Setelah RPS selesai, klik tombol "Export" untuk mengunduh RPS dalam format DOCX. File akan otomatis menggunakan template profesional yang telah disediakan.',
+      title: 'Export ke Format PDF',
+      description: 'Setelah RPS selesai, klik tombol "Export" untuk mengunduh RPS dalam format PDF. File akan otomatis menggunakan template profesional yang telah disediakan.',
       icon: <Download className="w-6 h-6" />,
       details: [
         'Pastikan semua bagian RPS sudah lengkap',
-        'Klik tombol "Export ke DOCX" atau "Download"',
-        'File Word akan otomatis terunduh',
+        'Klik tombol "Export" atau "Download"',
+        'File PDF akan otomatis terunduh',
         'Buka file untuk review akhir sebelum disetujui',
         'File siap digunakan atau dicetak'
       ]
@@ -266,8 +266,8 @@ export default function Panduan() {
                 notes: 'Sertakan screen recording dan voice over'
               },
               {
-                title: 'Cara Export RPS ke Word',
-                description: 'Tutorial lengkap cara export RPS ke format DOCX dengan template profesional',
+                title: 'Cara Export RPS ke PDF',
+                description: 'Tutorial lengkap cara export RPS ke format PDF dengan template profesional',
                 duration: '5-6 menit',
                 targetDate: '2025-01-29',
                 notes: 'Highlight keunggulan template yang digunakan'

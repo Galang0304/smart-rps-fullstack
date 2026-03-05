@@ -2271,32 +2271,14 @@ export default function CourseManagement() {
               Pilih format export untuk <strong>{selectedRPSForExport.title}</strong>
             </p>
             
-            <div className="grid grid-cols-3 gap-3 mb-6">
-              <button
-                onClick={handleExportWord}
-                className="flex flex-col items-center gap-2 p-4 border-2 border-blue-200 hover:border-blue-500 hover:bg-blue-50 rounded-lg transition-all"
-              >
-                <FileDown className="w-8 h-8 text-blue-600" />
-                <span className="text-sm font-medium text-blue-700">Word</span>
-                <span className="text-xs text-gray-500">.docx</span>
-              </button>
-              
-              <button
-                onClick={handleExportRPSExcel}
-                className="flex flex-col items-center gap-2 p-4 border-2 border-green-200 hover:border-green-500 hover:bg-green-50 rounded-lg transition-all"
-              >
-                <FileSpreadsheet className="w-8 h-8 text-green-600" />
-                <span className="text-sm font-medium text-green-700">Excel</span>
-                <span className="text-xs text-gray-500">.xlsx</span>
-              </button>
-              
+            <div className="grid grid-cols-1 gap-3 mb-6">
               <button
                 onClick={handleExportHTML}
-                className="flex flex-col items-center gap-2 p-4 border-2 border-orange-200 hover:border-orange-500 hover:bg-orange-50 rounded-lg transition-all"
+                className="flex flex-col items-center gap-2 p-4 border-2 border-red-200 hover:border-red-500 hover:bg-red-50 rounded-lg transition-all"
               >
-                <FileText className="w-8 h-8 text-orange-600" />
-                <span className="text-sm font-medium text-orange-700">HTML</span>
-                <span className="text-xs text-gray-500">.html</span>
+                <FileText className="w-8 h-8 text-red-600" />
+                <span className="text-sm font-medium text-red-700">PDF</span>
+                <span className="text-xs text-gray-500">Download dokumen PDF</span>
               </button>
             </div>
             

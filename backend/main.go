@@ -47,6 +47,15 @@ func main() {
 	// Setup routes
 	routes.SetupRoutes(r, db)
 
+117 x 13
+Oke, saya lihat sekarang! Ada beberapa hal penting:
+
+⚠️ Perhatian!
+IP 103.151.145.172 sudah dipakai oleh "Dhia" (Rule 6) yang forward ke 10.11.11.110
+
+Kalau kamu yakin mau pakai IP ini untuk Smart RPS, kita perlu:
+
+
 	// Get port from environment variable
 	port := os.Getenv("APP_PORT")
 	if port == "" {
