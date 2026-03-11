@@ -1,0 +1,109 @@
+No,Kode MK,Mata Kuliah,SKS,Semester,Tahun
+1, AW60910042101 ,  Pendidikan Pancasila,2,1,20251
+2, AW60910042103 , Bahasa Indonesia,2,1,20251
+3,AW60910042104, Bahasa Inggris,2,1,20251
+4,AW60910042105,Pendidikan Agama,2,1,20251
+5, CW6552023101, Matematika Dasar ,3,1,20251
+6, CW6552022102, Matematika Informatika ,2,1,20251
+7,CW6552022103, Dasar Algoritma & Pemrograman ,2,1,20251
+8,CW6552021104, Praktikum Dasar Algoritma & Pemrograman,1,1,20251
+9,CW6552022105,Pengantar Sains dan Informatika,2,1,20251
+10,CW6552020105,Praktikum Basic Command Line Linux,0,1,20251
+11,AW60910042206,Al Islam Kemuhammadiyahan II,2,2,20252
+12,AW60910042202,Pendidikan Kewarganegaraan,2,2,20252
+13,CW6552022206,Eng for Computer Science,2,2,20252
+14,CW6552022207 ,Kalkulus,2,2,20252
+15,CW6552022208,Aljabar Linear & Matriks,2,2,20252
+16,CW6552022209,Algoritma dan Pemrograman Tingkat Lanjut,2,2,20252
+17,CW6552021210,Praktikum Algoritma dan Pemrograman Tingkat Lanjut,1,2,20252
+18,CW6552022211,Organisasi dan Arsitektur Komputer (OSK),2,2,20252
+19,CW6552022212,Dasar Pemrograman Web,2,2,20252
+20,CW6552021213,Praktikum Dasar Pemrograman Web,1,2,20252
+21,CW6552022214,Konsep Teknologi Informasi,2,2,20252
+22,AW60910042307,Al Islam Kemuhammadiyahan III,2,3,20251
+23,CW6552022315,Pemodelan dan Metode Numerik,2,3,20251
+24,CW6552022316,Aritmatika Komputer ,2,3,20251
+25,CW6552022317,Struktur Data,2,3,20251
+26,CW6552021318,Praktikum Struktur Data,0,3,20251
+27,CW6552022319,Sistem Basis Data Relasional,2,3,20251
+28,CW6552020320,Praktikum Sistem Basis Data Relasional,0,3,20251
+29,CW6552022321,Strategi dan Simulasi Algoritma ,2,3,20251
+30,CW6552021322,Praktikum Strategi dan Simulasi Algoritma ,1,3,20251
+31,CW6552022323,Statistika,2,3,20251
+32,CW6552022324,Rekayasa Perangkat Lunak Skalabilitas,2,3,20251
+33,CW6552022325,Jaringan Komputer,2,3,20251
+34,CW6552020326,Praktikum Jaringan Komputer,1,3,20251
+35,CW6552022327,Sistem Operasi ,2,3,20251
+36, CW6552022328,Pengantar Komputasi Modern,2,3,20251
+37,AW60910042408,Al Islam Kemuhammadiyahan IV,2,4,20252
+38,CW6552022429,Kecerdasan Buatan,2,4,20252
+39,CW6552021430,Praktikum Kecerdasan Buatan,1,4,20252
+40,CW6552022431,Kriptografi ,2,4,20252
+41,CW6552022432,Riset Operasional,2,4,20252
+42,CW6552022433,Sistem Basis Data Modern ,2,4,20252
+43,CW6552022434,Interaksi Manusia & Komputer,2,4,20252
+44,CW6552022435,Sistem Informasi Manajemen,2,4,20252
+45,CW6552022436,Pemrograman WEB,2,4,20252
+46, CW6552021437,Praktikum Pemrograman WEB,1,4,20252
+47,CW6552022438,Rekayasa Komputasional ,2,4,20252
+48,CW6552022439,Pengolahan Citra Digital,2,4,20252
+49,CW6552022440,Sistem Terdistribusi ,2,4,20252
+50,BW6040401,Praktikum Ilmu Falak,0,4,20252
+51,AW60910040411,Komprehensif AIK,0,4,20252
+52,CW6552022541,Desain dan Analisis Algoritma,2,5,20251
+53,CW6552022542,Grafik Komputer ,2,5,20251
+54,CW6552022543,Teori Bahasa dan Otomata,2,5,20251
+55,CP6552022544,Standarisasi Keselamatan Kerja,2,5,20251
+56,BW6042502,Etika Profesi,2,5,20251
+57,BW6042503,Technopreneurship (Kepemimpinan dan kewirausahaan),2,5,20251
+58,BW6042504,Metodologi Penelitian dan Publikasi Ilmiah  ,2,5,20251
+59,CW6552022545,Sistem Pakar ,2,5,20251
+60,CW6552012507,Pemrograman Berbasis Objek ,2,5,20251
+61,AW60910040511,Komprehensif AIK,0,5,20251
+62,CW6552022546,Applied Machine Learning,2,5,20251
+63,CW6552021547,Praktikum Applied Machine Learning,0,5,20251
+64, CW6552022548,Data Engineering and Big Data Systems,2,5,20251
+65,CW6552021549,Praktikum Data Engineering and Big Data Systems,0,5,20251
+66,CW6552022550,Mathematics for AI,2,5,20251
+67,CW6552022551,Cloud-Native Application Development,2,5,20251
+68,CW6552021552,Praktikum Cloud-Native Application Development,0,5,20251
+69,CW6552022553,DevOps and CI/CD Pipelines,2,5,20251
+70,CW6552021554,Praktikum DevOps and CI/CD Pipelines,0,5,20251
+71,CW6552022555,Advanced Software Design and Architecture,2,5,20251
+72,CW6552022556,Advanced Network Security and Protocols,2,5,20251
+73,CW6552021557,Praktikum Advanced Network Security and Protocols,0,5,20251
+74,CW6552022558,Ethical Hacking and Penetration Testing I,2,5,20251
+75,CW6552021559,Praktikum Ethical Hacking and Penetration Testing I,0,5,20251
+76,CW6552022560," Security Governance, Risk, and Compliance (GRC)",2,5,20251
+77,CW6552022666,Deep Learning and Neural Networks,2,6,20252
+78,CW6552021667,Praktikum Deep Learning and Neural Networks,1,6,20252
+79,CW6552022668,Generative AI and Large Language Models,2,6,20252
+80,CW6552021669,Praktikum Generative AI and Large Language Models,1,6,20252
+81,CW6552023670,MLOps (Machine Learning in Production),2,6,20252
+82,CW6552022671,Natural Language Processing (NLP),2,6,20252
+83,CW6552021672,Praktikum Natural Language Processing (NLP),1,6,20252
+84,CW6552023673,Responsible AI: Ethics and Governance,2,6,20252
+85,CW6552022674,Microservices: Design and Implementation,2,6,20252
+86,CW6552021675,Praktikum Microservices: Design and Implementation,1,6,20252
+87,CW6552023676,Secure Software Development Lifecycle (DevSecOps),2,6,20252
+88,CW6552023677,Advanced Software Testing and Quality Assurance,2,6,20252
+89,CW6552022678,Scalable Systems Design,2,6,20252
+90,CW6552021679,Praktikum Scalable Systems Design,1,6,20252
+91,CW6552022680,Mobile and Cross-Platform Development,2,6,20252
+92,CW6552021681,Praktikum Mobile and Cross-Platform Development,1,6,20252
+93,CW6552022682,Cloud Security Architecture,2,6,20252
+94,CW6552021683,Praktikum Cloud Security Architecture,1,6,20252
+95,CW6552022684,Digital Forensics and Incident Response,2,6,20252
+96,CW6552021685,Praktikum Digital Forensics and Incident Response,1,6,20252
+97,CW6552023686,Cryptography and Secure Communications,2,6,20252
+98,CW6552022687,Ethical Hacking and Penetration Testing II,2,6,20252
+99,CW6552021688,Praktikum Ethical Hacking and Penetration Testing II,1,6,20252
+100,CW6552023689,Cyber Threat Intelligence,2,6,20252
+101,BW6044705,Kuliah Kerja Profesi - Plus (KKp-Plus),4,7,20251
+102,CW6552023789,Capstone Project,3,7,20251
+103,BW6042706,Seminar dan Usulan skripsi,2,7,20251
+104,BW6046707,Skripsi,6,7,20251
+105,BW6044805,Kuliah Kerja Profesi - Plus (KKp-Plus),4,8,20252
+106,CW6552023889,Capstone Project,3,8,20252
+107,BW6042806,Seminar dan Usulan skripsi,2,8,20252
+108,BW6046807,Skripsi,6,8,20252
